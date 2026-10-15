@@ -3,6 +3,7 @@ import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import type { ColumnMapping, PortfolioView, SkipReason, TablePreview } from "../types.ts";
+import { browserFetch } from "./browser-fetch.ts";
 import { importPlanView } from "./import-plan.ts";
 
 // A generic table import: a CSV file or text copied from a brokerage page. The
@@ -373,6 +374,7 @@ export function tableImportPanel(ctx: Context): Panel {
       h("label", { class: "field" }, h("span", {}, t("Currency of the values")), currencySelect),
     ),
     h("div", { class: "add-row" }, fileInput),
+    browserFetch({ onTable: (loaded) => showPreview(loaded), info, fail }),
     pasteArea,
     h("div", { class: "add-row" }, pasteButton),
     message,

@@ -270,7 +270,7 @@ export interface TablePreview {
   total_rows: number;
   columns: number;
   encoding: "utf8" | "shift_jis" | null;
-  delimiter: "comma" | "tab";
+  delimiter: "comma" | "tab" | null;
 }
 
 export interface ColumnMapping {
@@ -296,4 +296,25 @@ export interface TableImportPlan {
   plan: ImportPlan;
   skipped: Skipped[];
   rows_read: number;
+}
+
+export type BrowserKind = "chrome" | "edge" | "brave";
+
+export interface BrowserInfo {
+  kind: BrowserKind;
+}
+
+/** An open tab: the host and the title only. */
+export interface BrowserPage {
+  id: string;
+  host: string;
+  title: string;
+}
+
+/** A table found on a page. */
+export interface FetchedTable {
+  index: number;
+  rows: number;
+  columns: number;
+  label: string;
 }

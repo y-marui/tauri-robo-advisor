@@ -17,6 +17,8 @@ _最終更新: 2026-10-15_
 | `src/views/account-tabs.ts` | 右パネル。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（全体のバランスと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
+| `src/views/browser-fetch.ts` | 「ブラウザで取得」。ブラウザの選択・起動、ページと表の選択、閉じる | `src/api.ts` |
+| `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
 | `src/views/table-import.ts` | 表の取り込みのカード（ファイル・貼り付け・列の指定・保存） | `src/views/import-plan.ts` |
 | `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer と表の取り込みで共有 | `src/api.ts` |
 | `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネル、全体のバランス（グラフと提案）のパネル、不備の表示 | `src/panel.ts`, `src/fields.ts` |

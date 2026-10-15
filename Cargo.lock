@@ -4346,6 +4346,7 @@ name = "tauri-robo-advisor"
 version = "0.1.0"
 dependencies = [
  "bitflyer",
+ "browser",
  "export",
  "keyring",
  "portfolio",

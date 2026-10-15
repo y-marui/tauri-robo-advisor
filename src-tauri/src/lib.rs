@@ -1,4 +1,5 @@
 mod app_state;
+mod browser_session;
 mod exporter;
 mod secrets;
 mod store;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 
 use app_state::{AppState, PortfolioView, TableImportPlan, TablePreview};
 use bitflyer::{Client, Holdings, ReqwestTransport};
+use browser_session::{BrowserInfo, BrowserSession, PageInfo, TableSummary};
 use portfolio::{Edit, ImportPlan, ImportRow};
 use rebalance::{Holding, Params, Proposal, Target};
 use suggest::{AccountBalance, Overview, Request as SuggestRequest, Suggestion};
@@ -154,6 +156,75 @@ async fn plan_table_import(
     .map_err(|e| e.to_string())?
 }
 
+// Fetching tables from a page of a browser the user logs in to by hand. The
+// browser to start is picked by kind from the ones found here (never by a path
+// from the frontend); the commands only list pages and read their tables.
+#[tauri::command]
+fn list_browsers() -> Vec<BrowserInfo> {
+    BrowserSession::installed()
+}
+
+#[tauri::command]
+async fn open_browser(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    kind: browser::Kind,
+    profile: Option<String>,
+) -> Result<(), String> {
+    let profile = match profile.filter(|p| !p.trim().is_empty()) {
+        Some(folder) => std::path::PathBuf::from(folder.trim()),
+        None => {
+            browser_session::default_profile(&app.path().app_data_dir().map_err(|e| e.to_string())?)
+        }
+    };
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.browser.open(kind, &profile))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn browser_pages(state: State<'_, Arc<AppState>>) -> Result<Vec<PageInfo>, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.browser.pages())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fetch_browser_tables(
+    state: State<'_, Arc<AppState>>,
+    page: String,
+) -> Result<Vec<TableSummary>, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.browser.fetch_tables(&page))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// Moves one fetched table into the import, where the user picks the columns.
+#[tauri::command]
+async fn use_fetched_table(
+    state: State<'_, Arc<AppState>>,
+    index: usize,
+) -> Result<TablePreview, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let table = state.browser.take_table(index)?;
+        state.keep_table(table)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn close_browser(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.browser.close())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 // A read-only valuation for the balance charts.
 #[tauri::command]
 async fn get_overview(state: State<'_, Arc<AppState>>) -> Result<Overview, String> {
@@ -241,10 +312,24 @@ pub fn run() {
             load_table_text,
             clear_table,
             plan_table_import,
+            list_browsers,
+            open_browser,
+            browser_pages,
+            fetch_browser_tables,
+            use_fetched_table,
+            close_browser,
             get_account_balance,
             suggest_rebalance,
             export_all
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Do not leave the dedicated browser open when the app quits.
+            if let tauri::RunEvent::Exit = event
+                && let Some(state) = app.try_state::<Arc<AppState>>()
+            {
+                let _ = state.browser.close();
+            }
+        });
 }
