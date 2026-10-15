@@ -98,7 +98,7 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 
 ### Tauri Notes
 
-- Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。ポートフォリオは Rust が持ち、フロントエンドは `get_portfolio`（状態と不備の一覧）、`apply_portfolio_edit`（検証・保存は Rust）、`export_all`（全データの書き出し）、`get_overview`（カテゴリごとの評価額と比率。グラフ用の読み取り専用）、`get_account_balance`（口座内の商品バランス。読み取り専用）、`suggest_rebalance`（読み取り専用の提案）を使う。左パネル（`src/views/overview.ts`）、中央パネル（`holdings-table.ts`）、右パネル（`account-tabs.ts`）が表示する。
+- Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。ポートフォリオは Rust が持ち、フロントエンドは `get_portfolio`（状態と不備の一覧）、`apply_portfolio_edit`（検証・保存は Rust）、`export_all`（全データの書き出し）、`get_overview`（カテゴリごとの評価額と比率。グラフ用の読み取り専用）、`get_account_balance`（口座内の商品バランス。読み取り専用）、`suggest_rebalance`（読み取り専用の提案）、`plan_import`（取り込みの対応づけの確認。読み取り専用）と、bitFlyer のキー・残高のコマンドを使う。左パネル（`src/views/overview.ts`）、中央パネル（`holdings-table.ts`）、右パネル（`account-tabs.ts`）が表示する。
 - 金額と比率は、フロントエンドでも十進数の文字列のまま扱い、数値型に変換しない。％と小数の変換は文字列の小数点の移動だけで行う（`src/decimal.ts`）。
 - フロントエンドの単体テストは `src/*.test.ts`（`npm test`）。`@types/node` を入れないため、`tsc` の対象から外している。
 - `src-tauri/tauri.conf.json` に CSP（本番 `csp` と開発用 `devCsp`）を設定してある。外部への接続や外部スクリプトが必要になったら、許可先を最小限で追加し、`docs/architecture.md` に理由を記録する。

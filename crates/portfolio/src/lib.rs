@@ -8,12 +8,14 @@
 
 mod edit;
 mod error;
+mod import;
 mod model;
 mod validate;
 mod valuation;
 
-pub use edit::Edit;
+pub use edit::{Edit, HoldingInput};
 pub use error::{Error, Issue};
+pub use import::{ImportPlan, ImportRow, MatchedRow};
 pub use model::*;
 
 #[cfg(test)]

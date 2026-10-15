@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use app_state::{AppState, PortfolioView};
 use bitflyer::{Client, Holdings, ReqwestTransport};
-use portfolio::Edit;
+use portfolio::{Edit, ImportPlan, ImportRow};
 use rebalance::{Holding, Params, Proposal, Target};
 use suggest::{AccountBalance, Overview, Request as SuggestRequest, Suggestion};
 use tauri::{Manager, State};
@@ -79,6 +79,21 @@ async fn apply_portfolio_edit(
 ) -> Result<PortfolioView, String> {
     let state = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || state.apply(edit))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// A read-only preview of an import: which rows are linked to products by an
+// alias the user confirmed, and which are not. Nothing is changed or saved.
+#[tauri::command]
+async fn plan_import(
+    state: State<'_, Arc<AppState>>,
+    source: String,
+    currency: String,
+    rows: Vec<ImportRow>,
+) -> Result<ImportPlan, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.plan_import(&source, &currency, &rows))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -165,6 +180,7 @@ pub fn run() {
             get_portfolio,
             apply_portfolio_edit,
             get_overview,
+            plan_import,
             get_account_balance,
             suggest_rebalance,
             export_all

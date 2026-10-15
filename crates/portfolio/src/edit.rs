@@ -83,6 +83,12 @@ pub enum Edit {
         account: AccountId,
         product: ProductId,
     },
+    /// Makes the account hold exactly these products, as an import does. The
+    /// values are in each product's own currency.
+    ReplaceHoldings {
+        account: AccountId,
+        holdings: Vec<HoldingInput>,
+    },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
     },
@@ -93,6 +99,13 @@ pub enum Edit {
     SetTargetAccount {
         account: Option<AccountId>,
     },
+}
+
+/// One product's value in a [`Edit::ReplaceHoldings`].
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct HoldingInput {
+    pub product: ProductId,
+    pub value: Decimal,
 }
 
 const MAX_ITEMS: usize = 10_000;
@@ -366,6 +379,35 @@ impl Portfolio {
             Edit::RemoveHolding { account, product } => {
                 self.holdings
                     .retain(|h| !(h.account == account && h.product == product));
+            }
+            Edit::ReplaceHoldings { account, holdings } => {
+                self.account(account)?;
+                let mut seen = std::collections::BTreeSet::new();
+                let mut next = Vec::with_capacity(holdings.len());
+                for input in holdings {
+                    self.product(input.product)?;
+                    if !seen.insert(input.product) {
+                        return Err(Error::Invalid(
+                            "a product appears twice in the import".to_owned(),
+                        ));
+                    }
+                    next.push(Holding {
+                        account,
+                        product: input.product,
+                        value: non_negative(input.value, "holding value")?,
+                        quantity: None,
+                    });
+                }
+                let others = self
+                    .holdings
+                    .iter()
+                    .filter(|h| h.account != account)
+                    .count();
+                if others + next.len() > MAX_ITEMS {
+                    return Err(Error::Invalid("too many items".to_owned()));
+                }
+                self.holdings.retain(|h| h.account != account);
+                self.holdings.extend(next);
             }
             Edit::SetExchangeRate { usd_jpy } => {
                 self.settings.usd_jpy = usd_jpy

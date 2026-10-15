@@ -509,3 +509,168 @@ fn edits_deserialize_from_the_tagged_json_the_frontend_sends() {
     );
     assert!(serde_json::from_str::<Edit>(r#"{"type":"drop_everything"}"#).is_err());
 }
+
+#[test]
+fn replace_holdings_overwrites_only_that_account() {
+    let (mut p, cat, prod, acc) = sample();
+    let other = account(&mut p, "Other", AccountKind::Taxable);
+    let second = product(&mut p, "Second", cat);
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: acc,
+            product: prod,
+            value: dec!(100),
+            quantity: Some(dec!(1)),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: other,
+            product: prod,
+            value: dec!(7),
+            quantity: None,
+        },
+    );
+
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![HoldingInput {
+                product: second,
+                value: dec!(55),
+            }],
+        },
+    );
+
+    let mine: Vec<_> = p.holdings.iter().filter(|h| h.account == acc).collect();
+    assert_eq!(mine.len(), 1);
+    assert_eq!(mine[0].product, second);
+    assert_eq!(mine[0].value, dec!(55));
+    assert_eq!(mine[0].quantity, None);
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account == other && h.value == dec!(7))
+    );
+}
+
+#[test]
+fn replace_holdings_rejects_bad_input_and_changes_nothing() {
+    let (mut p, _, prod, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: acc,
+            product: prod,
+            value: dec!(100),
+            quantity: None,
+        },
+    );
+    let before = p.clone();
+    let input = |value| HoldingInput {
+        product: prod,
+        value,
+    };
+
+    assert!(
+        p.apply(Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![input(dec!(1)), input(dec!(2))],
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![input(dec!(-1))],
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::ReplaceHoldings {
+            account: AccountId(9999),
+            holdings: vec![],
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+}
+
+#[test]
+fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
+    let (mut p, cat, prod, _) = sample();
+    apply(
+        &mut p,
+        Edit::AddAlias {
+            product: prod,
+            source: "bitflyer".to_owned(),
+            name: "BTC".to_owned(),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::AddProduct {
+            name: "Dollar".to_owned(),
+            category: cat,
+            currency: "USD".to_owned(),
+        },
+    );
+    let dollar = p.products.last().unwrap().id;
+    apply(
+        &mut p,
+        Edit::AddAlias {
+            product: dollar,
+            source: "bitflyer".to_owned(),
+            name: "USDT".to_owned(),
+        },
+    );
+    let row = |name: &str| ImportRow {
+        name: name.to_owned(),
+        value: dec!(10),
+    };
+
+    let plan = p.plan_import("bitflyer", "JPY", &[row("BTC"), row("ETH"), row("USDT")]);
+
+    assert_eq!(plan.matched.len(), 1);
+    assert_eq!(plan.matched[0].product, prod);
+    assert_eq!(plan.matched[0].names, vec!["BTC"]);
+    assert_eq!(plan.unmatched, vec![row("ETH")]);
+    assert_eq!(plan.wrong_currency, vec![row("USDT")]);
+    // Another source's alias does not count.
+    assert_eq!(
+        p.plan_import("other", "JPY", &[row("BTC")]).unmatched.len(),
+        1
+    );
+}
+
+#[test]
+fn plan_import_adds_up_names_linked_to_the_same_product() {
+    let (mut p, _, prod, _) = sample();
+    for name in ["BTC", "ETH"] {
+        apply(
+            &mut p,
+            Edit::AddAlias {
+                product: prod,
+                source: "bitflyer".to_owned(),
+                name: name.to_owned(),
+            },
+        );
+    }
+    let row = |name: &str, value| ImportRow {
+        name: name.to_owned(),
+        value,
+    };
+
+    let plan = p.plan_import(
+        "bitflyer",
+        "JPY",
+        &[row("BTC", dec!(10)), row("ETH", dec!(5))],
+    );
+
+    assert_eq!(plan.matched.len(), 1);
+    assert_eq!(plan.matched[0].names, vec!["BTC", "ETH"]);
+    assert_eq!(plan.matched[0].value, dec!(15));
+}

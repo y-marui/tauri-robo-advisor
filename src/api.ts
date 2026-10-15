@@ -2,7 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   AccountBalance,
+  BitflyerHoldings,
   Edit,
+  ImportPlan,
+  ImportRow,
   Overview,
   PortfolioView,
   Suggestion,
@@ -43,4 +46,27 @@ export function suggestRebalance(request: SuggestRequest): Promise<Suggestion> {
 /** Compares one account's products with their weights. */
 export function getAccountBalance(account: number): Promise<AccountBalance> {
   return invoke<AccountBalance>("get_account_balance", { account });
+}
+
+/** Links imported rows to products by alias; nothing is changed. */
+export function planImport(source: string, currency: string, rows: ImportRow[]): Promise<ImportPlan> {
+  return invoke<ImportPlan>("plan_import", { source, currency, rows });
+}
+
+/** Saves the key in the OS keychain. It is never returned to the frontend. */
+export function saveBitflyerCredentials(apiKey: string, apiSecret: string): Promise<void> {
+  return invoke<void>("save_bitflyer_credentials", { apiKey, apiSecret });
+}
+
+export function hasBitflyerCredentials(): Promise<boolean> {
+  return invoke<boolean>("has_bitflyer_credentials");
+}
+
+export function deleteBitflyerCredentials(): Promise<void> {
+  return invoke<void>("delete_bitflyer_credentials");
+}
+
+/** Fetches the balances (read-only) and values them in JPY. */
+export function fetchBitflyerHoldings(): Promise<BitflyerHoldings> {
+  return invoke<BitflyerHoldings>("fetch_bitflyer_holdings");
 }

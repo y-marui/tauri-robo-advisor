@@ -4,6 +4,7 @@ import { detectLanguage, getLanguage, LANGUAGES, setLanguage, t, type Lang } fro
 import type { Context, Panel } from "./panel.ts";
 import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
+import { bitflyerPanel } from "./views/bitflyer.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { holdingsPanel } from "./views/holdings.ts";
 import { accountTabsPanel } from "./views/account-tabs.ts";
@@ -137,6 +138,7 @@ function build(): void {
     overviewPanel(context),
     holdingsTablePanel(context),
     accountTabsPanel(context),
+    bitflyerPanel(context),
     categoriesPanel(context),
     productsPanel(context),
     accountsPanel(context),

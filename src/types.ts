@@ -114,6 +114,9 @@ export type Edit =
       quantity: string | null;
     }
   | { type: "remove_holding"; account: number; product: number }
+  | { type: "replace_holdings"; account: number; holdings: { product: number; value: string }[] }
+  | { type: "add_alias"; product: number; source: string; name: string }
+  | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
   | { type: "set_tolerances"; category: string; product: string }
   | { type: "set_target_account"; account: number | null };
@@ -206,4 +209,28 @@ export interface CategoryBalance {
 export interface AccountBalance {
   account: number;
   categories: CategoryBalance[];
+}
+
+/** A name a source uses and its value. Mirrors `portfolio::ImportRow`. */
+export interface ImportRow {
+  name: string;
+  value: string;
+}
+
+export interface MatchedRow {
+  names: string[];
+  product: number;
+  value: string;
+}
+
+export interface ImportPlan {
+  matched: MatchedRow[];
+  unmatched: ImportRow[];
+  wrong_currency: ImportRow[];
+}
+
+/** What the bitFlyer command returns: balances in JPY, and what could not be valued. */
+export interface BitflyerHoldings {
+  holdings: { symbol: string; value: string }[];
+  unpriced: string[];
 }
