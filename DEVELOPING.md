@@ -20,6 +20,8 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 | `make format` | `cargo fmt` |
 | `make test` | `npm test` (frontend unit tests) and `cargo test` |
 | `make build` | Build the app without bundling |
+| `make deploy` | Build the `.app` and install it into `/Applications/My Tauri` (override with `DEPLOY_DIR`, on the command line or in `.env`; `DEPLOY_DIR=/Applications` installs directly under `/Applications`; `DEPLOY_OPEN=false` skips launching it; it waits for a running copy to quit); macOS only |
+| `make dmg` | Build the DMG and publish it to the iCloud `Build/Tauri` folder as `<app>.dmg` for `install-my-apps` (override with `DMG_DEST`); macOS only |
 | `make all` | `lint` and `test` |
 | `make update-charter` | Update the dev-charter subtree |
 
