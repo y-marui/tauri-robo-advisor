@@ -23,6 +23,8 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 | `make all` | `lint` and `test` |
 | `make update-charter` | Update the dev-charter subtree |
 
+The keychain round-trip test in `src-tauri/src/secrets.rs` touches the real OS keychain (with dummy values only), so it is ignored by default. Run it on a desktop with `cargo test -p tauri-robo-advisor -- --ignored`.
+
 ## Project Layout
 
 | Path | Role |

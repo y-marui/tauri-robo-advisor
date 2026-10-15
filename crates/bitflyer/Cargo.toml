@@ -1,0 +1,20 @@
+[package]
+name = "bitflyer"
+version = "0.1.0"
+description = "Read-only bitFlyer Lightning API client that turns balances into JPY holdings."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+rebalance = { path = "../rebalance" }
+hmac = "0.12"
+sha2 = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+thiserror = "2"
+
+[dev-dependencies]
+rust_decimal = { version = "1", features = ["macros"] }

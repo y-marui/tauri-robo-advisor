@@ -10,6 +10,8 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 - `src-tauri/src/main.rs` — デスクトップのエントリポイント（`lib.rs` の `run` を呼ぶだけ）
 - `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録（`propose_rebalance` は `rebalance` crate への薄い委譲）
 - `crates/rebalance/src/lib.rs` — リバランス計算（`propose`）
+- `crates/bitflyer/src/lib.rs` — bitFlyer クライアント（`Client`、`Credentials`、`Transport`）
+- `src-tauri/src/secrets.rs` — OS のキーチェーンへの API キーの保存（副作用はここに閉じ込める）
 - `src/main.ts` — フロントエンドのエントリポイント
 - `index.html` — フロントエンドの HTML
 
@@ -20,6 +22,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | `src/` | フロントエンド。表示と入力のみで、ドメインロジックを持たない |
 | `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
 | `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
+| `crates/bitflyer/` | bitFlyer の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない |
 | `src-tauri/capabilities/` | Tauri の権限定義 |
 | `docs/` | 仕様書・ナレッジベース |
 
@@ -63,5 +66,9 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 | `tauri` | アプリ基盤 |
 | `serde` / `serde_json` | シリアライズ |
 | `rust_decimal` | 金額の正確な十進演算（`rebalance`）。IPC では文字列として受け渡す |
-| `thiserror` | `rebalance` のエラー型 |
+| `thiserror` | `rebalance`・`bitflyer` のエラー型 |
+| `reqwest`（`rustls`、default features なし） | bitFlyer への HTTPS 通信（`bitflyer`）。Tauri 経由で依存ツリーにも既にある |
+| `hmac` / `sha2` | bitFlyer の API リクエスト署名（HMAC-SHA256） |
+| `keyring` | OS のキーチェーンへの保存（macOS Keychain、Windows Credential Manager、Secret Service） |
+| `serde_json`（`raw_value`） | bitFlyer の数値を丸めずに十進数へ読む |
 | `vite` / `typescript` | フロントエンドのビルド |
