@@ -1,0 +1,13 @@
+[package]
+name = "browser"
+version = "0.1.0"
+description = "Finds a Chromium-based browser (Chrome, Edge, Brave), starts it with its own profile, and reads pages through the DevTools protocol on localhost."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
