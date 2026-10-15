@@ -935,3 +935,118 @@ fn overview_lists_each_holding_with_its_share() {
     assert_eq!(main_stock.value, dec!(700000));
     assert_eq!(main_stock.share, dec!(0.7778));
 }
+
+// ---- account balance ------------------------------------------------------
+
+/// One category with products A (weight 3) and B (weight 1); the account
+/// holds 100,000 of A and 100,000 of B.
+fn weighted_pair() -> (Portfolio, AccountId, ProductId, ProductId, CategoryId) {
+    let mut p = Portfolio::default();
+    let c = category(&mut p, "All", dec!(1));
+    let a = product(&mut p, "A", c, "JPY");
+    let b = product(&mut p, "B", c, "JPY");
+    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    hold(&mut p, acc, a, dec!(100000));
+    hold(&mut p, acc, b, dec!(100000));
+    apply(
+        &mut p,
+        Edit::UpdateCategory {
+            id: c,
+            name: None,
+            target_weight: None,
+            targeting: Some(ProductTargeting::Weighted),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetProductWeight {
+            id: a,
+            weight: Some(dec!(3)),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetProductWeight {
+            id: b,
+            weight: Some(dec!(1)),
+        },
+    );
+    (p, acc, a, b, c)
+}
+
+#[test]
+fn account_balance_compares_products_with_their_weights() {
+    let (p, acc, a, b, c) = weighted_pair();
+
+    let balance = account_balance(&p, acc).unwrap();
+
+    let line = &balance.categories.iter().find(|x| x.category == c).unwrap();
+    assert_eq!(line.total, dec!(200000));
+    let for_product = |id| line.products.iter().find(|x| x.product == id).unwrap();
+    assert_eq!(for_product(a).target, Some(dec!(150000)));
+    assert_eq!(for_product(a).shortfall, Some(dec!(50000)));
+    assert_eq!(for_product(b).target, Some(dec!(50000)));
+    assert_eq!(for_product(b).shortfall, Some(dec!(-50000)));
+}
+
+#[test]
+fn account_balance_has_no_target_when_the_category_does_not_split() {
+    let (mut p, acc, a, _, c) = weighted_pair();
+    apply(
+        &mut p,
+        Edit::UpdateCategory {
+            id: c,
+            name: None,
+            target_weight: None,
+            targeting: Some(ProductTargeting::Free),
+        },
+    );
+
+    let balance = account_balance(&p, acc).unwrap();
+
+    let line = &balance.categories[0];
+    let product = line.products.iter().find(|x| x.product == a).unwrap();
+    assert_eq!(product.current, dec!(100000));
+    assert_eq!(product.target, None);
+    assert_eq!(product.shortfall, None);
+}
+
+#[test]
+fn account_balance_only_spreads_over_products_the_account_holds_or_can_buy() {
+    let (mut p, acc, a, b, c) = weighted_pair();
+    let other = product(&mut p, "C", c, "JPY");
+    apply(
+        &mut p,
+        Edit::SetProductWeight {
+            id: other,
+            weight: Some(dec!(4)),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetTradable {
+            id: acc,
+            products: Some(vec![a]),
+        },
+    );
+
+    let balance = account_balance(&p, acc).unwrap();
+
+    let ids: Vec<_> = balance.categories[0]
+        .products
+        .iter()
+        .map(|x| x.product)
+        .collect();
+    // B is held, A is both, C is neither held nor buyable here.
+    assert_eq!(ids, vec![a, b]);
+}
+
+#[test]
+fn account_balance_rejects_an_unknown_account() {
+    let (p, _, _, _, _) = weighted_pair();
+
+    assert_eq!(
+        account_balance(&p, AccountId(9999)),
+        Err(Error::UnknownAccount)
+    );
+}

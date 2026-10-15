@@ -6,6 +6,7 @@ import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { holdingsPanel } from "./views/holdings.ts";
+import { accountTabsPanel } from "./views/account-tabs.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
 import { issuesList } from "./views/issues.ts";
@@ -132,6 +133,7 @@ function build(): void {
   panels = [
     overviewPanel(context),
     holdingsTablePanel(context),
+    accountTabsPanel(context),
     categoriesPanel(context),
     productsPanel(context),
     accountsPanel(context),

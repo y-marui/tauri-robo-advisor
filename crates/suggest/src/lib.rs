@@ -13,6 +13,7 @@
 //! The crate is pure calculation. It never changes the portfolio and does not
 //! know about Tauri, files, or brokerages.
 
+mod account_balance;
 mod engine;
 mod error;
 mod fill;
@@ -20,6 +21,7 @@ mod overview;
 mod round;
 mod types;
 
+pub use account_balance::{AccountBalance, CategoryBalance, ProductBalance, account_balance};
 pub use engine::suggest;
 pub use error::Error;
 pub use overview::{CategoryOverview, HoldingOverview, Overview, overview};

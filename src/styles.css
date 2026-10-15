@@ -358,3 +358,25 @@ tr.group td {
   background: var(--field);
   border-top: 1px solid var(--line);
 }
+
+/* The account tabs of the right panel. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+.tab[aria-selected="true"] {
+  font-weight: 600;
+  border-color: var(--strong);
+  border-bottom-color: var(--bg);
+  background: var(--bg);
+}
