@@ -1,0 +1,20 @@
+# File Map
+
+_最終更新: 2026-10-15_
+
+## Frontend
+
+| ファイル | 役割 | 主な依存先 |
+|---|---|---|
+| `index.html` | HTML のエントリ | `src/main.ts`, `src/styles.css` |
+| `src/main.ts` | 雛形のデモ（`greet` コマンドの呼び出し） | `@tauri-apps/api/core` |
+| `src/styles.css` | スタイル | — |
+
+## Backend
+
+| ファイル | 役割 | 主な依存先 |
+|---|---|---|
+| `src-tauri/src/main.rs` | デスクトップのエントリ | `src-tauri/src/lib.rs` |
+| `src-tauri/src/lib.rs` | Tauri のセットアップ、`greet` コマンド（雛形） | `tauri` |
+| `src-tauri/tauri.conf.json` | アプリ設定 | — |
+| `src-tauri/capabilities/default.json` | 権限定義 | — |
