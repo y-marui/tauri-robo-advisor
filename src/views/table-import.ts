@@ -61,16 +61,43 @@ export function tableImportPanel(ctx: Context): Panel {
     class: "number",
     "aria-label": t("Heading rows"),
   });
+  const modeSelect = h(
+    "select",
+    { "aria-label": t("The value is") },
+    h("option", { value: "column" }, t("A column")),
+    h("option", { value: "product" }, t("Quantity × price")),
+  );
+  const priceSelect = h("select", { "aria-label": t("Price column") });
+  const unitSelect = h(
+    "select",
+    { "aria-label": t("Price is quoted per") },
+    h("option", { value: "1" }, t("1 unit")),
+    h("option", { value: "10000" }, t("10,000 units")),
+  );
+  const perRecordSelect = h(
+    "select",
+    { "aria-label": t("Rows per record") },
+    ...[1, 2, 3, 4].map((n) => h("option", { value: String(n) }, String(n))),
+  );
+  const nameRowSelect = h("select", { "aria-label": t("Row with the name") });
+  const valueRowSelect = h("select", { "aria-label": t("Row with the numbers") });
   const saveMapping = h("button", { type: "button" }, t("Save columns"));
   const planButton = h("button", { type: "button" }, t("Preview import"));
   const accountSelect = h("select", { "aria-label": t("Account to update") });
+  const valueLabel = h("span", {}, "");
   const mappingBox = h(
     "div",
     { class: "mapping", hidden: true },
     h("div", { class: "fields" },
       h("label", { class: "field" }, h("span", {}, t("Name column")), nameSelect),
-      h("label", { class: "field" }, h("span", {}, t("Value column")), valueSelect),
+      h("label", { class: "field" }, h("span", {}, t("The value is")), modeSelect),
+      h("label", { class: "field" }, valueLabel, valueSelect),
+      h("label", { class: "field price-only" }, h("span", {}, t("Price column")), priceSelect),
+      h("label", { class: "field price-only" }, h("span", {}, t("Price is quoted per")), unitSelect),
       h("label", { class: "field" }, h("span", {}, t("Heading rows")), headerInput),
+      h("label", { class: "field" }, h("span", {}, t("Rows per record")), perRecordSelect),
+      h("label", { class: "field" }, h("span", {}, t("Row with the name")), nameRowSelect),
+      h("label", { class: "field" }, h("span", {}, t("Row with the numbers")), valueRowSelect),
       h("label", { class: "field" }, h("span", {}, t("Account to update")), accountSelect),
     ),
     h("div", { class: "add-row" }, saveMapping, planButton),
@@ -96,22 +123,66 @@ export function tableImportPanel(ctx: Context): Panel {
   const source = (): string => sourceInput.value.trim();
   const mapping = (): ColumnMapping | null => {
     const header = Number(headerInput.value);
-    if (nameSelect.value === "" || valueSelect.value === "" || !Number.isInteger(header) || header < 0) {
+    const product = modeSelect.value === "product";
+    if (
+      nameSelect.value === "" ||
+      valueSelect.value === "" ||
+      (product && priceSelect.value === "") ||
+      !Number.isInteger(header) ||
+      header < 0
+    ) {
       return null;
     }
-    return { name: Number(nameSelect.value), value: Number(valueSelect.value), header_rows: header };
+    return {
+      name: Number(nameSelect.value),
+      value: Number(valueSelect.value),
+      price: product ? Number(priceSelect.value) : null,
+      price_unit: product ? Number(unitSelect.value) : 1,
+      header_rows: header,
+      rows_per_record: Number(perRecordSelect.value),
+      name_row: Number(nameRowSelect.value),
+      value_row: Number(valueRowSelect.value),
+    };
   };
+
+  /** Shows the controls that fit the mode, and the rows a record can have. */
+  function syncControls(): void {
+    const product = modeSelect.value === "product";
+    valueLabel.textContent = product ? t("Quantity column") : t("Value column");
+    for (const field of mappingBox.querySelectorAll<HTMLElement>(".price-only")) {
+      field.hidden = !product;
+    }
+    const perRecord = Number(perRecordSelect.value);
+    for (const select of [nameRowSelect, valueRowSelect]) {
+      const previous = select.value;
+      select.replaceChildren(
+        ...Array.from({ length: perRecord }, (_, i) => h("option", { value: String(i) }, String(i + 1))),
+      );
+      select.value = Number(previous) < perRecord && previous !== "" ? previous : "0";
+    }
+  }
+  modeSelect.addEventListener("change", syncControls);
+  perRecordSelect.addEventListener("change", syncControls);
 
   /** Fills the column selects from the preview and the saved mapping of the source. */
   function useSavedMapping(): void {
     const saved = current?.portfolio.import_mappings.find((m) => m.source === source());
-    if (!saved || !preview) {
+    const loaded = preview;
+    if (!saved || !loaded) {
       return;
     }
-    if (saved.name_column < preview.columns && saved.value_column < preview.columns) {
+    const columns = [saved.name_column, saved.value_column, saved.price_column ?? 0];
+    if (columns.every((c) => c < loaded.columns)) {
       nameSelect.value = String(saved.name_column);
       valueSelect.value = String(saved.value_column);
+      modeSelect.value = saved.price_column === null ? "column" : "product";
+      priceSelect.value = String(saved.price_column ?? Math.min(2, loaded.columns - 1));
+      unitSelect.value = String(saved.price_unit);
       headerInput.value = String(saved.header_rows);
+      perRecordSelect.value = String(saved.rows_per_record);
+      syncControls();
+      nameRowSelect.value = String(saved.name_row);
+      valueRowSelect.value = String(saved.value_row);
     }
   }
 
@@ -126,12 +197,17 @@ export function tableImportPanel(ctx: Context): Panel {
       const first = loaded.rows[0]?.[i] ?? "";
       return first === "" ? `${t("Column")} ${i + 1}` : `${t("Column")} ${i + 1}: ${first}`;
     };
-    for (const select of [nameSelect, valueSelect]) {
+    for (const select of [nameSelect, valueSelect, priceSelect]) {
       select.replaceChildren(...columns.map((i) => h("option", { value: String(i) }, label(i))));
     }
     nameSelect.value = "0";
     valueSelect.value = String(Math.min(1, Math.max(loaded.columns - 1, 0)));
+    priceSelect.value = String(Math.min(2, Math.max(loaded.columns - 1, 0)));
+    modeSelect.value = "column";
+    unitSelect.value = "1";
     headerInput.value = "1";
+    perRecordSelect.value = "1";
+    syncControls();
     useSavedMapping();
 
     previewBox.replaceChildren(
@@ -218,7 +294,12 @@ export function tableImportPanel(ctx: Context): Panel {
       source: source(),
       name_column: chosen.name,
       value_column: chosen.value,
+      price_column: chosen.price,
+      price_unit: chosen.price_unit,
       header_rows: chosen.header_rows,
+      rows_per_record: chosen.rows_per_record,
+      name_row: chosen.name_row,
+      value_row: chosen.value_row,
     });
   });
 

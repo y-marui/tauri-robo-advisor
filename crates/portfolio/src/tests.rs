@@ -682,7 +682,12 @@ fn import_mappings_are_saved_per_source_and_replaced() {
         source: source.to_owned(),
         name_column,
         value_column,
+        price_column: None,
+        price_unit: 1,
         header_rows: 1,
+        rows_per_record: 1,
+        name_row: 0,
+        value_row: 0,
     };
 
     apply(&mut p, set(" SBI ", 0, 5));
@@ -706,28 +711,77 @@ fn import_mappings_are_saved_per_source_and_replaced() {
 fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
     let mut p = Portfolio::default();
     let before = p.clone();
+    #[allow(clippy::too_many_arguments)]
+    let bad = |source: &str,
+               name_column,
+               value_column,
+               price_column,
+               price_unit,
+               rows_per_record,
+               name_row,
+               value_row| Edit::SetImportMapping {
+        source: source.to_owned(),
+        name_column,
+        value_column,
+        price_column,
+        price_unit,
+        header_rows: 0,
+        rows_per_record,
+        name_row,
+        value_row,
+    };
 
     for edit in [
-        Edit::SetImportMapping {
-            source: "SBI".to_owned(),
-            name_column: 3,
-            value_column: 3,
-            header_rows: 0,
-        },
-        Edit::SetImportMapping {
-            source: "SBI".to_owned(),
-            name_column: 0,
-            value_column: 5000,
-            header_rows: 0,
-        },
-        Edit::SetImportMapping {
-            source: "  ".to_owned(),
-            name_column: 0,
-            value_column: 1,
-            header_rows: 0,
-        },
+        bad("SBI", 3, 3, None, 1, 1, 0, 0),
+        bad("SBI", 0, 5000, None, 1, 1, 0, 0),
+        bad("  ", 0, 1, None, 1, 1, 0, 0),
+        // a record of zero or too many rows, or a row outside the record
+        bad("SBI", 0, 1, None, 1, 0, 0, 0),
+        bad("SBI", 0, 1, None, 1, 11, 0, 0),
+        bad("SBI", 0, 1, None, 1, 2, 2, 0),
+        bad("SBI", 0, 1, None, 1, 2, 0, 5),
+        // the quantity and the price in one column; a zero or huge unit
+        bad("SBI", 0, 1, Some(1), 1, 1, 0, 0),
+        bad("SBI", 0, 1, Some(2), 0, 1, 0, 0),
+        bad("SBI", 0, 1, Some(2), 2_000_000_000, 1, 0, 0),
     ] {
         assert!(p.apply(edit).is_err());
     }
     assert_eq!(p, before);
+}
+
+#[test]
+fn a_two_row_record_may_keep_the_name_and_the_value_in_one_column() {
+    let mut p = Portfolio::default();
+
+    apply(
+        &mut p,
+        Edit::SetImportMapping {
+            source: "SBI".to_owned(),
+            name_column: 0,
+            value_column: 0,
+            price_column: Some(2),
+            price_unit: 10_000,
+            header_rows: 2,
+            rows_per_record: 2,
+            name_row: 0,
+            value_row: 1,
+        },
+    );
+
+    let saved = &p.import_mappings[0];
+    assert_eq!(saved.price_column, Some(2));
+    assert_eq!(saved.price_unit, 10_000);
+    assert_eq!(saved.rows_per_record, 2);
+}
+
+#[test]
+fn a_portfolio_file_with_an_old_mapping_still_loads() {
+    let json = r#"{"source":"SBI","name_column":0,"value_column":1,"header_rows":1}"#;
+
+    let mapping: ImportMapping = serde_json::from_str(json).unwrap();
+
+    assert_eq!(mapping.rows_per_record, 1);
+    assert_eq!(mapping.price_unit, 1);
+    assert_eq!(mapping.price_column, None);
 }

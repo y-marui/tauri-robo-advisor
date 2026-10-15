@@ -345,7 +345,12 @@ mod tests {
         let mapping = ColumnMapping {
             name: 0,
             value: 1,
+            price: None,
+            price_unit: 1,
             header_rows: 1,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
         };
         let result = state.plan_table_import("Test", "JPY", &mapping).unwrap();
 

@@ -8,8 +8,30 @@ fn mapping(name: usize, value: usize, header_rows: usize) -> ColumnMapping {
     ColumnMapping {
         name,
         value,
+        price: None,
+        price_unit: 1,
         header_rows,
+        rows_per_record: 1,
+        name_row: 0,
+        value_row: 0,
     }
+}
+
+/// A holding over two rows: a name row, then a row of quantity, cost, price.
+fn two_rows(header_rows: usize) -> ColumnMapping {
+    ColumnMapping {
+        price: Some(2),
+        header_rows,
+        rows_per_record: 2,
+        value_row: 1,
+        ..mapping(0, 0, header_rows)
+    }
+}
+
+fn grid(rows: &[&[&str]]) -> Vec<Vec<String>> {
+    rows.iter()
+        .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
+        .collect()
 }
 
 // ---- encodings ------------------------------------------------------------
@@ -197,5 +219,135 @@ fn a_single_leading_sign_is_accepted_even_after_a_currency_sign() {
         ("▲1,000", dec!(-1000)),
     ] {
         assert_eq!(crate::mapping::parse_amount(text), Some(expected), "{text}");
+    }
+}
+
+// ---- records over several rows and quantity x price ------------------------
+
+#[test]
+fn old_mappings_without_the_new_fields_still_load() {
+    let json = r#"{"name":0,"value":1,"header_rows":1}"#;
+    let loaded: ColumnMapping = serde_json::from_str(json).unwrap();
+
+    assert_eq!(loaded, mapping(0, 1, 1));
+}
+
+#[test]
+fn a_holding_over_two_rows_is_one_record() {
+    // Section title, column labels, then name row / numbers row per holding.
+    let table = grid(&[
+        &["Section", "", ""],
+        &["Quantity", "Cost", "Price"],
+        &["Fund A", "", ""],
+        &["10", "900", "1,250.5"],
+        &["Fund B", "", ""],
+        &["3", "100", "200"],
+    ]);
+
+    let result = extract(&table, &two_rows(2));
+
+    let read: Vec<_> = result
+        .rows
+        .iter()
+        .map(|r| (r.name.as_str(), r.value))
+        .collect();
+    assert_eq!(read, vec![("Fund A", dec!(12505)), ("Fund B", dec!(600))]);
+    assert!(result.skipped.is_empty());
+}
+
+#[test]
+fn the_price_unit_divides_the_product() {
+    let table = grid(&[&["Fund", "", ""], &["20,000", "0", "12,345"]]);
+    let mapping = ColumnMapping {
+        price_unit: 10_000,
+        ..two_rows(0)
+    };
+
+    let result = extract(&table, &mapping);
+
+    assert_eq!(result.rows[0].value, dec!(24690));
+}
+
+#[test]
+fn an_incomplete_last_record_is_reported() {
+    let table = grid(&[&["Fund A", "", ""], &["1", "1", "1"], &["Fund B", "", ""]]);
+
+    let result = extract(&table, &two_rows(0));
+
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(
+        result.skipped,
+        vec![Skipped {
+            row: 3,
+            reason: SkipReason::MissingColumn
+        }]
+    );
+}
+
+#[test]
+fn a_product_that_overflows_is_out_of_range_not_a_panic() {
+    let big = "7".repeat(20);
+    let table = grid(&[&["Fund", "", ""], &[big.as_str(), "0", big.as_str()]]);
+
+    let result = extract(&table, &two_rows(0));
+
+    assert!(result.rows.is_empty());
+    assert_eq!(result.skipped[0].reason, SkipReason::OutOfRange);
+}
+
+#[test]
+fn a_non_numeric_quantity_or_price_is_not_a_number() {
+    let table = grid(&[
+        &["Fund", "", ""],
+        &["abc", "0", "5"],
+        &["Fund", "", ""],
+        &["5", "0", "x"],
+    ]);
+
+    let result = extract(&table, &two_rows(0));
+
+    assert!(result.rows.is_empty());
+    assert!(
+        result
+            .skipped
+            .iter()
+            .all(|s| s.reason == SkipReason::NotANumber)
+    );
+    assert_eq!(result.skipped.len(), 2);
+}
+
+#[test]
+fn rows_outside_the_record_are_never_read() {
+    // The number row offset is not inside a one-row record.
+    let table = grid(&[&["A", "5"]]);
+    let mapping = ColumnMapping {
+        value_row: 1,
+        ..mapping(0, 1, 0)
+    };
+
+    let result = extract(&table, &mapping);
+
+    assert!(result.rows.is_empty());
+    assert_eq!(result.skipped[0].reason, SkipReason::MissingColumn);
+}
+
+#[test]
+fn absurd_mappings_neither_overflow_nor_hang() {
+    let table = grid(&[&["A", "1"], &["B", "2"], &["C", "3"]]);
+
+    for (header_rows, rows_per_record, name_row, value_row) in [
+        (0, usize::MAX, 0, 0),
+        (usize::MAX, 1, 0, 0),
+        (usize::MAX - 1, usize::MAX, usize::MAX, usize::MAX),
+        (0, 1, usize::MAX, usize::MAX),
+    ] {
+        let mapping = ColumnMapping {
+            header_rows,
+            rows_per_record,
+            name_row,
+            value_row,
+            ..mapping(0, 1, 0)
+        };
+        let _ = extract(&table, &mapping);
     }
 }

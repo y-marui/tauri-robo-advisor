@@ -94,7 +94,17 @@ pub enum Edit {
         source: String,
         name_column: usize,
         value_column: usize,
+        #[serde(default)]
+        price_column: Option<usize>,
+        #[serde(default = "one_unit")]
+        price_unit: u64,
         header_rows: usize,
+        #[serde(default = "one_row")]
+        rows_per_record: usize,
+        #[serde(default)]
+        name_row: usize,
+        #[serde(default)]
+        value_row: usize,
     },
     RemoveImportMapping {
         source: String,
@@ -118,11 +128,21 @@ pub struct HoldingInput {
     pub value: Decimal,
 }
 
+fn one_unit() -> u64 {
+    1
+}
+
+fn one_row() -> usize {
+    1
+}
+
 const MAX_ITEMS: usize = 10_000;
 /// The widest table an import reads (see the `tabular` crate), and the most
 /// heading rows a mapping may skip.
 const MAX_COLUMN: usize = 200;
 const MAX_HEADER_ROWS: usize = 1_000;
+const MAX_ROWS_PER_RECORD: usize = 10;
+const MAX_PRICE_UNIT: u64 = 1_000_000_000;
 const MAX_ALIASES_PER_PRODUCT: usize = 50;
 
 impl Portfolio {
@@ -427,27 +447,55 @@ impl Portfolio {
                 source,
                 name_column,
                 value_column,
+                price_column,
+                price_unit,
                 header_rows,
+                rows_per_record,
+                name_row,
+                value_row,
             } => {
                 let source = name(&source, "import source")?;
+                let invalid = |what: &str| Error::Invalid(format!("{what} is out of range"));
                 if name_column >= MAX_COLUMN
                     || value_column >= MAX_COLUMN
-                    || header_rows > MAX_HEADER_ROWS
+                    || price_column.is_some_and(|c| c >= MAX_COLUMN)
                 {
+                    return Err(invalid("a column"));
+                }
+                if header_rows > MAX_HEADER_ROWS {
+                    return Err(invalid("the heading count"));
+                }
+                if !(1..=MAX_ROWS_PER_RECORD).contains(&rows_per_record)
+                    || name_row >= rows_per_record
+                    || value_row >= rows_per_record
+                {
+                    return Err(invalid("the rows per record"));
+                }
+                if !(1..=MAX_PRICE_UNIT).contains(&price_unit) {
+                    return Err(invalid("the price unit"));
+                }
+                // The name and the value may share a column number only when
+                // they are in different rows of the record.
+                if name_column == value_column && name_row == value_row {
                     return Err(Error::Invalid(
-                        "a column or heading count is out of range".to_owned(),
+                        "the name and the value must be in different cells".to_owned(),
                     ));
                 }
-                if name_column == value_column {
+                if price_column == Some(value_column) {
                     return Err(Error::Invalid(
-                        "the name and the value must be in different columns".to_owned(),
+                        "the quantity and the price must be in different columns".to_owned(),
                     ));
                 }
                 let mapping = ImportMapping {
                     source,
                     name_column,
                     value_column,
+                    price_column,
+                    price_unit,
                     header_rows,
+                    rows_per_record,
+                    name_row,
+                    value_row,
                 };
                 match self
                     .import_mappings
