@@ -1,0 +1,17 @@
+[package]
+name = "suggest"
+version = "0.1.0"
+description = "Rebalancing suggestions (fixed add, buy-only to target, full rebalance, fixed sell) over a portfolio."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+portfolio = { path = "../portfolio" }
+rust_decimal = { version = "1", default-features = false, features = ["std", "serde-str"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+rust_decimal = { version = "1", features = ["macros"] }
+serde_json = "1"

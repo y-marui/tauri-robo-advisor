@@ -4008,6 +4008,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "suggest"
+version = "0.1.0"
+dependencies = [
+ "portfolio",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "swift-rs"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4266,6 +4277,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
+ "suggest",
  "tauri",
  "tauri-build",
 ]

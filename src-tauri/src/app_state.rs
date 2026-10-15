@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 use portfolio::{Edit, Issue, Portfolio};
 use serde::Serialize;
+use suggest::{Request, Suggestion};
 
 use crate::store;
 
@@ -54,6 +55,14 @@ impl AppState {
         let view = PortfolioView::new(&next);
         *guard = Ok(next);
         Ok(view)
+    }
+
+    /// Computes a suggestion from the current portfolio. Nothing is changed or
+    /// saved.
+    pub fn suggest(&self, request: &Request) -> Result<Suggestion, String> {
+        let guard = self.lock()?;
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        suggest::suggest(portfolio, request).map_err(|e| e.to_string())
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Result<Portfolio, String>>, String> {
@@ -116,6 +125,22 @@ mod tests {
             view.issues.as_slice(),
             [Issue::CategoryWeightsDoNotSumToOne { .. }]
         ));
+    }
+
+    #[test]
+    fn suggest_reports_why_there_is_nothing_to_suggest() {
+        let state = AppState::load(temp_path("suggest"));
+        state.apply(add_account("Account 1")).unwrap();
+        let account = state.view().unwrap().portfolio.accounts[0].id;
+
+        let error = state
+            .suggest(&Request {
+                account,
+                mode: suggest::Mode::BuyOnlyToTarget,
+            })
+            .unwrap_err();
+
+        assert!(error.contains("nothing in the portfolio"));
     }
 
     #[test]
