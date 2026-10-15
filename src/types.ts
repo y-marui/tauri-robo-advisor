@@ -117,3 +117,60 @@ export type Edit =
   | { type: "set_exchange_rate"; usd_jpy: string | null }
   | { type: "set_tolerances"; category: string; product: string }
   | { type: "set_target_account"; account: number | null };
+
+/** One category's value and share, next to its target. Mirrors `suggest::Overview`. */
+export interface CategoryOverview {
+  category: number;
+  /** JPY. */
+  current: string;
+  /** Fractions, e.g. "0.7778". */
+  current_share: string;
+  target_share: string;
+}
+
+export interface Overview {
+  total: string;
+  categories: CategoryOverview[];
+}
+
+export type SuggestMode =
+  | { type: "fixed_add"; amount: string }
+  | { type: "buy_only_to_target" }
+  | { type: "full_rebalance" }
+  | { type: "fixed_sell"; amount: string };
+
+export interface SuggestRequest {
+  account: number;
+  mode: SuggestMode;
+}
+
+export interface CategoryLine {
+  category: number;
+  current: string;
+  /** Positive to buy, negative to sell. */
+  delta: string;
+  after: string;
+  target_after: string;
+}
+
+export interface ProductLine {
+  product: number;
+  delta: string;
+}
+
+export type Note =
+  | { type: "amount_rounded"; requested: string; applied: string }
+  | { type: "category_not_filled"; category: number; shortfall: string }
+  | { type: "already_balanced" };
+
+export interface Suggestion {
+  mode: SuggestMode["type"];
+  account: number;
+  requested: string | null;
+  applied: string;
+  required_total: string | null;
+  total_after: string;
+  categories: CategoryLine[];
+  products: ProductLine[];
+  notes: Note[];
+}

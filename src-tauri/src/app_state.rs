@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use portfolio::{Edit, Issue, Portfolio};
 use serde::Serialize;
-use suggest::{Request, Suggestion};
+use suggest::{Overview, Request, Suggestion};
 
 use crate::store;
 
@@ -70,6 +70,13 @@ impl AppState {
         let guard = self.lock()?;
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
         suggest::suggest(portfolio, request).map_err(|e| e.to_string())
+    }
+
+    /// Values every category for the balance charts. Nothing is changed or saved.
+    pub fn overview(&self) -> Result<Overview, String> {
+        let guard = self.lock()?;
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        suggest::overview(portfolio).map_err(|e| e.to_string())
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Result<Portfolio, String>>, String> {

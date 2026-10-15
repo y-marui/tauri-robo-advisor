@@ -6,6 +6,7 @@ import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { holdingsPanel } from "./views/holdings.ts";
+import { overviewPanel } from "./views/overview.ts";
 import { issuesList } from "./views/issues.ts";
 import { productsPanel } from "./views/products.ts";
 import { settingsPanel } from "./views/settings.ts";
@@ -113,6 +114,7 @@ function build(): void {
   status = h("p", { class: "status", role: "status" });
   issues = h("div");
   panels = [
+    overviewPanel(context),
     categoriesPanel(context),
     productsPanel(context),
     accountsPanel(context),

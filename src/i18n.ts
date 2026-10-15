@@ -91,6 +91,40 @@ export const MESSAGES = {
   "Amounts are in each product’s currency.": {
     ja: "金額は、各商品の通貨で入力します。",
   },
+  "Overall balance": { ja: "全体のバランス" },
+  "Target vs current": { ja: "目標と現在" },
+  "Composition": { ja: "構成" },
+  "Target": { ja: "目標" },
+  "Current": { ja: "現在" },
+  "No holdings yet.": { ja: "保有がまだありません。" },
+  "Suggestion": { ja: "提案" },
+  "Suggestion mode": { ja: "提案の種類" },
+  "Add a fixed amount": { ja: "定額追加" },
+  "Amount needed to reach the target without selling": { ja: "売らずに達成する追加額" },
+  "Full rebalance": { ja: "フル・リバランス" },
+  "Sell a fixed amount": { ja: "定額売却" },
+  "Amount (JPY)": { ja: "金額 (円)" },
+  "Suggest": { ja: "提案する" },
+  "Calculating…": { ja: "計算中…" },
+  "Could not calculate: {reason}": { ja: "計算できませんでした: {reason}" },
+  "Enter a positive amount.": { ja: "正の金額を入力してください。" },
+  "Choose the rebalancing account first.": { ja: "先に全体リバランスの対象口座を選んでください。" },
+  "Total": { ja: "合計" },
+  "Change": { ja: "増減" },
+  "After": { ja: "実行後" },
+  "Product": { ja: "商品" },
+  "Applied: {amount} JPY": { ja: "実行額: {amount} 円" },
+  "Needed to reach the target: {amount} JPY": { ja: "目標に届くまでに必要な額: {amount} 円" },
+  "Trades in {account}": { ja: "{account} での売買" },
+  "The amount was lowered from {requested} to {applied} JPY to fit the rounding unit.": {
+    ja: "丸め単位に合わせて、{requested} 円から {applied} 円に下げました。",
+  },
+  "“{category}” is {shortfall} JPY short of its target.": {
+    ja: "「{category}」は、目標に {shortfall} 円届きません。",
+  },
+  "Every category is already within tolerance.": {
+    ja: "すべてのカテゴリが許容乖離の範囲内です。",
+  },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

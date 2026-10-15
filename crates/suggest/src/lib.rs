@@ -16,11 +16,13 @@
 mod engine;
 mod error;
 mod fill;
+mod overview;
 mod round;
 mod types;
 
 pub use engine::suggest;
 pub use error::Error;
+pub use overview::{CategoryOverview, Overview, overview};
 pub use types::{CategoryLine, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 
 #[cfg(test)]

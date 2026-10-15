@@ -646,7 +646,11 @@ impl<'a> Book<'a> {
 
 /// Converts a holding's value to JPY and refuses amounts that could overflow
 /// the arithmetic below.
-fn to_jpy(portfolio: &Portfolio, currency: &str, value: Decimal) -> Result<Decimal, Error> {
+pub(crate) fn to_jpy(
+    portfolio: &Portfolio,
+    currency: &str,
+    value: Decimal,
+) -> Result<Decimal, Error> {
     let jpy = portfolio
         .value_in_jpy(currency, value)
         .map_err(|error| match error {
