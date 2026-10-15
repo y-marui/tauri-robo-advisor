@@ -26,7 +26,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 ## Layering Policy
 
 ```
-Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Storage / Broker access
+Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Storage / Broker data (file import, API)
 ```
 
 - フロントエンドは `invoke` で Rust のコマンドを呼ぶだけにする。計算・変換・検証はフロントエンドに書かない。
