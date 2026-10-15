@@ -1154,6 +1154,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "export"
+version = "0.1.0"
+dependencies = [
+ "portfolio",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4271,6 +4282,7 @@ name = "tauri-robo-advisor"
 version = "0.1.0"
 dependencies = [
  "bitflyer",
+ "export",
  "keyring",
  "portfolio",
  "rebalance",

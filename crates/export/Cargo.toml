@@ -1,0 +1,17 @@
+[package]
+name = "export"
+version = "0.1.0"
+description = "Full-record export of a portfolio as CSV files and JSON, for use in other analysis software."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+portfolio = { path = "../portfolio" }
+rust_decimal = { version = "1", default-features = false, features = ["std", "serde-str"] }
+serde = "1"
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+rust_decimal = { version = "1", features = ["macros"] }

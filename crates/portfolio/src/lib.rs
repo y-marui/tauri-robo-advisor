@@ -10,6 +10,7 @@ mod edit;
 mod error;
 mod model;
 mod validate;
+mod valuation;
 
 pub use edit::Edit;
 pub use error::{Error, Issue};

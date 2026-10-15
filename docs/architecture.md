@@ -11,6 +11,8 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 - `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録（`propose_rebalance` は `rebalance` crate への薄い委譲）
 - `crates/rebalance/src/lib.rs` — リバランス計算（`propose`）
 - `crates/bitflyer/src/lib.rs` — bitFlyer クライアント（`Client`、`Credentials`、`Transport`）
+- `crates/export/src/lib.rs` — `build(portfolio, info)`。各ファイルの内容をバイト列で返す
+- `src-tauri/src/exporter.rs` — エクスポートのフォルダとファイルの書き込み（所有者のみの権限、上書きしない）
 - `crates/suggest/src/lib.rs` — `suggest(portfolio, request)`、`Mode`、`Suggestion`
 - `crates/portfolio/src/lib.rs` — `Portfolio`、`Edit`、`Portfolio::apply`、`validate_integrity`、`issues`
 - `src-tauri/src/secrets.rs` — OS のキーチェーンへの API キーの保存（副作用はここに閉じ込める）
@@ -28,6 +30,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
 | `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
 | `crates/bitflyer/` | bitFlyer の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない |
+| `crates/export/` | フルレコードのエクスポート（CSV・JSON・README の内容を作る）。Tauri に依存しない |
 | `crates/suggest/` | 4 つの提案モードの計算（水位配分、丸め、口座の制約）。`portfolio` に依存し、Tauri には依存しない |
 | `crates/portfolio/` | ポートフォリオのモデル（カテゴリ・商品・口座・保有・目標）と、検証つきの編集（`Edit`）。Tauri に依存しない |
 | `src-tauri/capabilities/` | Tauri の権限定義 |

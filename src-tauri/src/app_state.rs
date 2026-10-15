@@ -57,6 +57,13 @@ impl AppState {
         Ok(view)
     }
 
+    /// Builds the full-record export from the current portfolio.
+    pub fn export_files(&self, info: &export::Info) -> Result<Vec<export::ExportFile>, String> {
+        let guard = self.lock()?;
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        export::build(portfolio, info).map_err(|e| e.to_string())
+    }
+
     /// Computes a suggestion from the current portfolio. Nothing is changed or
     /// saved.
     pub fn suggest(&self, request: &Request) -> Result<Suggestion, String> {

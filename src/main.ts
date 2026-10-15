@@ -1,4 +1,4 @@
-import { applyEdit, getPortfolio } from "./api.ts";
+import { applyEdit, exportAll, getPortfolio } from "./api.ts";
 import { h } from "./dom.ts";
 import { detectLanguage, getLanguage, LANGUAGES, setLanguage, t, type Lang } from "./i18n.ts";
 import type { Context, Panel } from "./panel.ts";
@@ -91,6 +91,25 @@ function build(): void {
     renderAll();
   });
 
+  const exportButton = h("button", { type: "button" }, t("Export"));
+  exportButton.addEventListener("click", () => {
+    exportButton.disabled = true;
+    showStatus(t("Exporting…"), false);
+    exportAll()
+      .then((folder) =>
+        showStatus(
+          t("Exported to {folder}. The files contain your holdings; keep them private.", {
+            folder,
+          }),
+          false,
+        ),
+      )
+      .catch((error) => showStatus(t("Could not export: {reason}", { reason: String(error) }), true))
+      .finally(() => {
+        exportButton.disabled = false;
+      });
+  });
+
   status = h("p", { class: "status", role: "status" });
   issues = h("div");
   panels = [
@@ -101,7 +120,7 @@ function build(): void {
     settingsPanel(context),
   ];
   app.replaceChildren(
-    h("header", { class: "top" }, h("h1", {}, t("Portfolio")), language),
+    h("header", { class: "top" }, h("h1", {}, t("Portfolio")), h("div", { class: "tools" }, exportButton, language)),
     status,
     issues,
     h("main", { class: "grid" }, ...panels.map((p) => p.el)),
