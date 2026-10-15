@@ -134,6 +134,13 @@ export const MESSAGES = {
   "Value (JPY)": { ja: "評価額 (円)" },
   "Share": { ja: "構成比" },
   "Difference (points)": { ja: "目標との差 (ポイント)" },
+  "By account": { ja: "口座ごと" },
+  "Balance inside the account": { ja: "口座内の商品バランス" },
+  "Add to this account": { ja: "この口座への追加" },
+  "Short (+) / over (-)": { ja: "不足 (+) / 超過 (-)" },
+  "No accounts yet.": { ja: "口座がまだありません。" },
+  "Nothing held or buyable in this account.": { ja: "この口座には、保有も買える商品もありません。" },
+  "Choose an account first.": { ja: "先に口座を選んでください。" },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

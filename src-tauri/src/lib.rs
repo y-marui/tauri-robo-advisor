@@ -9,7 +9,7 @@ use app_state::{AppState, PortfolioView};
 use bitflyer::{Client, Holdings, ReqwestTransport};
 use portfolio::Edit;
 use rebalance::{Holding, Params, Proposal, Target};
-use suggest::{Overview, Request as SuggestRequest, Suggestion};
+use suggest::{AccountBalance, Overview, Request as SuggestRequest, Suggestion};
 use tauri::{Manager, State};
 
 // Thin boundary only: the calculation lives in the `rebalance` crate. Amounts
@@ -92,6 +92,18 @@ async fn get_overview(state: State<'_, Arc<AppState>>) -> Result<Overview, Strin
         .map_err(|e| e.to_string())?
 }
 
+// A read-only comparison of one account's products with their weights.
+#[tauri::command]
+async fn get_account_balance(
+    state: State<'_, Arc<AppState>>,
+    account: portfolio::AccountId,
+) -> Result<AccountBalance, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.account_balance(account))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 // A read-only calculation: nothing is changed or saved.
 #[tauri::command]
 async fn suggest_rebalance(
@@ -153,6 +165,7 @@ pub fn run() {
             get_portfolio,
             apply_portfolio_edit,
             get_overview,
+            get_account_balance,
             suggest_rebalance,
             export_all
         ])

@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use portfolio::{Edit, Issue, Portfolio};
 use serde::Serialize;
-use suggest::{Overview, Request, Suggestion};
+use suggest::{AccountBalance, Overview, Request, Suggestion};
 
 use crate::store;
 
@@ -77,6 +77,14 @@ impl AppState {
         let guard = self.lock()?;
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
         suggest::overview(portfolio).map_err(|e| e.to_string())
+    }
+
+    /// Compares the products inside one account with their weights. Nothing is
+    /// changed or saved.
+    pub fn account_balance(&self, account: portfolio::AccountId) -> Result<AccountBalance, String> {
+        let guard = self.lock()?;
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        suggest::account_balance(portfolio, account).map_err(|e| e.to_string())
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Result<Portfolio, String>>, String> {

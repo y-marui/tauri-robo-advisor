@@ -4,6 +4,7 @@
 
 ### Added
 
+- Account tabs panel: one tab per account with the products inside the account compared with their weights (short or over, in yen) and a suggestion for adding to that account. The new read-only `get_account_balance` command supplies the figures from Rust; the suggestion box is now shared with the overall balance panel.
 - Holdings panel: holding records grouped by category with subtotal rows (value, share of the total, target, and difference in points), edited in place. `get_overview` now also returns each holding's JPY value and share, and one valuation is fetched per refresh for all panels.
 - Overall balance panel: target-vs-current bars and a composition pie in hand-written SVG, the rebalancing-account selector, and the four suggestion modes shown in the app. The new read-only `get_overview` command supplies the values and shares from Rust.
 - Full-record export: an Export button writes CSV files (holdings, categories, products, aliases, accounts, settings), the complete data as JSON, and a README into a new owner-only folder in Downloads, for use in other analysis software. Names that could run as spreadsheet formulas are written as text.

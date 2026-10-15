@@ -185,3 +185,25 @@ export interface Suggestion {
   products: ProductLine[];
   notes: Note[];
 }
+
+/** One product in one account against its weight. Mirrors `suggest::AccountBalance`. */
+export interface ProductBalance {
+  product: number;
+  /** JPY held in the account. */
+  current: string;
+  /** Whole yen the weights ask for; `null` when the category asks for no split. */
+  target: string | null;
+  /** `target` minus `current`: positive when short, negative when over. */
+  shortfall: string | null;
+}
+
+export interface CategoryBalance {
+  category: number;
+  total: string;
+  products: ProductBalance[];
+}
+
+export interface AccountBalance {
+  account: number;
+  categories: CategoryBalance[];
+}
