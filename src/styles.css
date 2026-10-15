@@ -42,7 +42,7 @@ body {
 }
 
 #app {
-  max-width: 1100px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 16px;
 }
@@ -379,4 +379,30 @@ tr.group td {
   border-color: var(--strong);
   border-bottom-color: var(--bg);
   background: var(--bg);
+}
+
+/* Left 30%, center 40%, right 30%. A narrower window moves the right panel
+   below the other two; a narrow one stacks all three. */
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 4fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1100px) {
+  .dashboard {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
+  }
+
+  .dashboard > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

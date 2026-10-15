@@ -1050,3 +1050,32 @@ fn account_balance_rejects_an_unknown_account() {
         Err(Error::UnknownAccount)
     );
 }
+
+#[test]
+fn account_balance_targets_add_up_to_the_category_total() {
+    let mut p = Portfolio::default();
+    let c = category(&mut p, "All", dec!(1));
+    let ids: Vec<_> = ["A", "B", "C"]
+        .into_iter()
+        .map(|n| product(&mut p, n, c, "JPY"))
+        .collect();
+    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    hold(&mut p, acc, ids[0], dec!(100));
+    apply(
+        &mut p,
+        Edit::UpdateCategory {
+            id: c,
+            name: None,
+            target_weight: None,
+            targeting: Some(ProductTargeting::Equal),
+        },
+    );
+
+    let balance = account_balance(&p, acc).unwrap();
+
+    let line = &balance.categories[0];
+    let sum: Decimal = line.products.iter().filter_map(|x| x.target).sum();
+    assert_eq!(sum, dec!(100));
+    let shortfalls: Decimal = line.products.iter().filter_map(|x| x.shortfall).sum();
+    assert_eq!(shortfalls, Decimal::ZERO);
+}

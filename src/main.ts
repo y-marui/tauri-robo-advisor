@@ -27,6 +27,7 @@ let panels: Panel[] = [];
 let status = h("p", { class: "status", role: "status" });
 let issues = h("div");
 let overviewRequest = 0;
+const DASHBOARD_PANELS = 3;
 
 function readLanguage(): string | null {
   try {
@@ -130,6 +131,8 @@ function build(): void {
 
   status = h("p", { class: "status", role: "status" });
   issues = h("div");
+  // The three dashboard panels come first (left, center, right), then the
+  // manual entry cards.
   panels = [
     overviewPanel(context),
     holdingsTablePanel(context),
@@ -144,7 +147,8 @@ function build(): void {
     h("header", { class: "top" }, h("h1", {}, t("Portfolio")), h("div", { class: "tools" }, exportButton, language)),
     status,
     issues,
-    h("main", { class: "grid" }, ...panels.map((p) => p.el)),
+    h("main", { class: "dashboard" }, ...panels.slice(0, DASHBOARD_PANELS).map((p) => p.el)),
+    h("main", { class: "grid" }, ...panels.slice(DASHBOARD_PANELS).map((p) => p.el)),
   );
 }
 

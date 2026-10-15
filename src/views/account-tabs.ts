@@ -24,6 +24,7 @@ export function accountTabsPanel(_ctx: Context): Panel {
   let selected: number | null = null;
   let tabSignature: string | null = null;
   let sequence = 0;
+  let shownAccount: number | null = null;
 
   const box = suggestionBox({
     modes: ["fixed_add", "buy_only_to_target"],
@@ -99,18 +100,25 @@ export function accountTabsPanel(_ctx: Context): Panel {
   function refreshBalance(view: PortfolioView): void {
     const account = selected;
     if (account === null) {
+      shownAccount = null;
       balance.replaceChildren();
       return;
     }
     const mine = ++sequence;
+    if (shownAccount !== account) {
+      // Never show one account's figures under another account's tab.
+      balance.replaceChildren(h("p", { class: "note" }, t("Loading…")));
+    }
     getAccountBalance(account)
       .then((data) => {
         if (mine === sequence) {
+          shownAccount = account;
           balance.replaceChildren(balanceView(view, data));
         }
       })
       .catch((error) => {
         if (mine === sequence) {
+          shownAccount = null;
           balance.replaceChildren(
             h("p", { class: "note error" }, t("Could not load: {reason}", { reason: String(error) })),
           );

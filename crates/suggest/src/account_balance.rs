@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::Error;
 use crate::engine::{MAX_AMOUNT, MAX_WEIGHT, to_jpy};
+use crate::round::round_to_units;
 
 /// One product's value in the account against the share of the account's
 /// holdings in its category that the product weights ask for.
@@ -106,18 +107,32 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 })
                 .collect();
             let weight_sum: Decimal = weights.iter().flatten().copied().sum();
+            // Whole yen that add up to the category's total, so the shortfalls
+            // never suggest money is missing or left over.
+            let targets: Vec<Option<Decimal>> =
+                if weight_sum > Decimal::ZERO && weights.iter().all(Option::is_some) {
+                    let exact: Vec<Decimal> = weights
+                        .iter()
+                        .flatten()
+                        .map(|w| total * *w / weight_sum)
+                        .collect();
+                    let caps = vec![None; exact.len()];
+                    match round_to_units(&exact, Decimal::ONE, total.round_dp(0), &caps) {
+                        Some(whole) => whole.into_iter().map(Some).collect(),
+                        None => vec![None; exact.len()],
+                    }
+                } else {
+                    vec![None; members.len()]
+                };
             let products = members
                 .iter()
-                .zip(&weights)
-                .map(|(product, weight)| {
+                .zip(&targets)
+                .map(|(product, target)| {
                     let current = held.get(&product.id).copied().unwrap_or_default();
-                    let target = weight
-                        .filter(|_| weight_sum > Decimal::ZERO)
-                        .map(|w| (total * w / weight_sum).round_dp(0));
                     ProductBalance {
                         product: product.id,
                         current,
-                        target,
+                        target: *target,
                         shortfall: target.map(|t| (t - current).round_dp(0)),
                     }
                 })
