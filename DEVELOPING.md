@@ -18,12 +18,14 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 | `make dev` | Run the app in development mode |
 | `make lint` | `tsc --noEmit`, `cargo fmt --all --check`, `cargo clippy --workspace -D warnings` |
 | `make format` | `cargo fmt` |
-| `make test` | `cargo test` |
+| `make test` | `npm test` (frontend unit tests) and `cargo test` |
 | `make build` | Build the app without bundling |
 | `make all` | `lint` and `test` |
 | `make update-charter` | Update the dev-charter subtree |
 
 The keychain round-trip test in `src-tauri/src/secrets.rs` touches the real OS keychain (with dummy values only), so it is ignored by default. Run it on a desktop with `cargo test -p tauri-robo-advisor -- --ignored`.
+
+Frontend tests are `src/*.test.ts`, run by Node's built-in test runner (no extra dependency). They are excluded from `tsc --noEmit` because that would need `@types/node`.
 
 ## Project Layout
 

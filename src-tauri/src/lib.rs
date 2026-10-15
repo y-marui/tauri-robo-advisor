@@ -10,12 +10,6 @@ use portfolio::Edit;
 use rebalance::{Holding, Params, Proposal, Target};
 use tauri::{Manager, State};
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 // Thin boundary only: the calculation lives in the `rebalance` crate. Amounts
 // cross the IPC boundary as decimal strings so JavaScript never rounds them.
 #[tauri::command]
@@ -97,7 +91,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             propose_rebalance,
             save_bitflyer_credentials,
             has_bitflyer_credentials,

@@ -7,7 +7,14 @@ _最終更新: 2026-10-15_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `index.html` | HTML のエントリ | `src/main.ts`, `src/styles.css` |
-| `src/main.ts` | 雛形のデモ（`greet` コマンドの呼び出し） | `@tauri-apps/api/core` |
+| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、パネルの組み立て | `src/api.ts`, `src/views/*` |
+| `src/api.ts` | Rust のコマンド（`get_portfolio`、`apply_portfolio_edit`）の呼び出し | `@tauri-apps/api/core` |
+| `src/types.ts` | Rust の JSON に対応する型（金額は十進数の文字列） | — |
+| `src/decimal.ts` | 十進数の文字列の変換（％ ↔ 小数、桁区切り表示）。浮動小数点を使わない | — |
+| `src/i18n.ts` | 画面の文言（英語がキー、日本語は翻訳） | — |
+| `src/panel.ts`, `src/fields.ts`, `src/dom.ts` | パネルの描画、入力部品、DOM の補助 | `src/i18n.ts` |
+| `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネルと、不備の表示 | `src/panel.ts`, `src/fields.ts` |
+| `src/*.test.ts` | Node の組み込みテストランナーによる単体テスト（`npm test`） | — |
 | `src/styles.css` | スタイル | — |
 
 ## Backend
@@ -15,7 +22,7 @@ _最終更新: 2026-10-15_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `src-tauri/src/main.rs` | デスクトップのエントリ | `src-tauri/src/lib.rs` |
-| `src-tauri/src/lib.rs` | Tauri のセットアップ、`greet`（雛形）、`propose_rebalance`、bitFlyer 関連のコマンド | `tauri`, `crates/rebalance`, `crates/bitflyer`, `src-tauri/src/secrets.rs` |
+| `src-tauri/src/lib.rs` | Tauri のセットアップ、`propose_rebalance`、ポートフォリオと bitFlyer 関連のコマンド | `tauri`, `crates/rebalance`, `crates/bitflyer`, `src-tauri/src/secrets.rs` |
 | `src-tauri/src/store.rs` | ポートフォリオ JSON の読み書き（一時ファイル → 同期 → 置き換え、権限 0600、サイズ上限） | `crates/portfolio` |
 | `src-tauri/src/app_state.rs` | メモリ上のポートフォリオ。編集を検証・保存してから反映する | `store.rs`, `crates/portfolio` |
 | `src-tauri/src/secrets.rs` | OS キーチェーンへの API キーの保存・読み出し・削除と入力検証 | `keyring`, `crates/bitflyer` |

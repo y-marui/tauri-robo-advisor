@@ -15,6 +15,7 @@ format:
 	cargo fmt --all
 
 test:
+	npm test
 	cargo test --workspace --locked
 
 build:

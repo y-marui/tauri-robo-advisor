@@ -45,7 +45,7 @@ The app is a scaffold, so there is nothing to operate yet. Development commands:
 |---|---|
 | `make dev` | Run the app in development mode |
 | `make lint` | Type check, `cargo fmt --check`, and `cargo clippy` |
-| `make test` | Run Rust tests |
+| `make test` | Run frontend and Rust tests |
 | `make build` | Build the app without bundling |
 | `make all` | Lint and test |
 
