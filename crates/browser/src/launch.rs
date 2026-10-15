@@ -77,10 +77,6 @@ pub fn start(browser: &Path, profile: &Path, wait: Duration) -> Result<Endpoint,
         .stderr(Stdio::null())
         .spawn()
         .map_err(|e| Error::Launch(e.kind().to_string()))?;
-    // Collect the process when it ends, so it does not linger as a zombie.
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
 
     let deadline = Instant::now() + wait;
     while Instant::now() < deadline {
@@ -89,9 +85,18 @@ pub fn start(browser: &Path, profile: &Path, wait: Duration) -> Result<Endpoint,
             .and_then(|text| parse_active_port(&text))
             && endpoint.reachable()
         {
+            // Collect the process when it ends, so it does not linger as a zombie.
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
             return Ok(endpoint);
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+    // Do not leave a browser behind that nobody holds a connection to. If the
+    // start was handed over to a running browser, the child already exited and
+    // there is nothing to stop.
+    let _ = child.kill();
+    let _ = child.wait();
     Err(Error::NotReady)
 }

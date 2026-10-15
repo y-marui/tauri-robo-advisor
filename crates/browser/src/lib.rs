@@ -18,3 +18,8 @@ pub use launch::{Endpoint, parse_active_port, start};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+fn cdp_script_for_tests() -> &'static str {
+    cdp::READ_TABLES
+}

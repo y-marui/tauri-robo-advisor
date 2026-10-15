@@ -12,6 +12,65 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_ERROR_CHARS: usize = 200;
 
+/// The limits on what a page may hand back; the script cuts at the same numbers.
+const MAX_TABLES: usize = 200;
+const MAX_ROWS: usize = 5_000;
+const MAX_COLUMNS: usize = 200;
+const MAX_CELL_CHARS: usize = 1_000;
+
+/// The one script that is ever run in a page. Tables that contain other tables
+/// are layout, not data, and are left out.
+pub(crate) const READ_TABLES: &str = r#"(() => {
+  const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 1000);
+  return [...document.querySelectorAll('table')]
+    .filter((table) => !table.querySelector('table'))
+    .slice(0, 200)
+    .map((table) =>
+      [...table.rows].slice(0, 5000).map((row) => {
+        const cells = [];
+        for (const cell of [...row.cells].slice(0, 200)) {
+          cells.push(clean(cell.innerText ?? cell.textContent));
+          for (let i = 1; i < Math.min(cell.colSpan || 1, 200); i++) cells.push('');
+        }
+        return cells.slice(0, 200);
+      }));
+})()"#;
+
+/// Checks the shape of what the page returned instead of trusting it.
+fn parse_tables(value: &Value) -> Result<Vec<Vec<Vec<String>>>, Error> {
+    let tables = value.as_array().ok_or(Error::Script)?;
+    if tables.len() > MAX_TABLES {
+        return Err(Error::Script);
+    }
+    tables
+        .iter()
+        .map(|table| {
+            let rows = table.as_array().ok_or(Error::Script)?;
+            if rows.len() > MAX_ROWS {
+                return Err(Error::Script);
+            }
+            rows.iter()
+                .map(|row| {
+                    let cells = row.as_array().ok_or(Error::Script)?;
+                    if cells.len() > MAX_COLUMNS {
+                        return Err(Error::Script);
+                    }
+                    cells
+                        .iter()
+                        .map(|cell| {
+                            let text = cell.as_str().ok_or(Error::Script)?;
+                            if text.chars().count() > MAX_CELL_CHARS {
+                                return Err(Error::Script);
+                            }
+                            Ok(text.to_owned())
+                        })
+                        .collect()
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// A page the browser has open.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Page {
@@ -128,9 +187,15 @@ impl Cdp {
             .ok_or(Error::NoPage)
     }
 
-    /// Runs a fixed script in the page and returns its value. The script only
-    /// reads; nothing the page contains is ever run as code.
-    pub fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
+    /// Reads every table of the page as rows of text (with spans filled in so
+    /// that columns line up). The script is fixed and only reads the page; no
+    /// caller-provided code is ever run in it, and nothing is clicked or typed.
+    pub fn read_tables(&mut self, session: &str) -> Result<Vec<Vec<Vec<String>>>, Error> {
+        let value = self.evaluate(session, READ_TABLES)?;
+        parse_tables(&value)
+    }
+
+    fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
         let result = self.call(
             Some(session),
             "Runtime.evaluate",

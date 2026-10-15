@@ -112,6 +112,10 @@ fn a_damaged_or_foreign_port_file_is_refused() {
 /// Serves one connection like a browser would: it answers the few requests the
 /// client makes, and sends an unrelated event before the first answer.
 fn fake_browser(script_value: Value) -> Endpoint {
+    fake_browser_with(script_value, false)
+}
+
+fn fake_browser_with(script_value: Value, fail_script: bool) -> Endpoint {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     thread::spawn(move || {
@@ -137,7 +141,7 @@ fn fake_browser(script_value: Value) -> Endpoint {
                 }
                 "Runtime.evaluate" => {
                     assert_eq!(request["sessionId"], "s1");
-                    if request["params"]["expression"] == "throw" {
+                    if fail_script {
                         json!({"exceptionDetails": {"text": "secret page text"}})
                     } else {
                         json!({"result": {"type": "object", "value": script_value}})
@@ -163,7 +167,7 @@ fn fake_browser(script_value: Value) -> Endpoint {
 
 #[test]
 fn pages_are_listed_attached_read_and_closed() {
-    let endpoint = fake_browser(json!([["a", "1"], ["b", "2"]]));
+    let endpoint = fake_browser(json!([[["a", "1"], ["b", "2"]]]));
     let mut cdp = Cdp::connect(&endpoint).unwrap();
 
     let pages = cdp.pages().unwrap();
@@ -171,20 +175,20 @@ fn pages_are_listed_attached_read_and_closed() {
     assert_eq!(pages[0].url, "https://example.test/holdings");
 
     let session = cdp.attach(&pages[0]).unwrap();
-    let value = cdp.evaluate(&session, "read()").unwrap();
-    assert_eq!(value, json!([["a", "1"], ["b", "2"]]));
+    let tables = cdp.read_tables(&session).unwrap();
+    assert_eq!(tables, vec![vec![vec!["a", "1"], vec!["b", "2"]]]);
 
     cdp.close().unwrap();
 }
 
 #[test]
 fn a_script_error_does_not_repeat_the_page_text() {
-    let endpoint = fake_browser(Value::Null);
+    let endpoint = fake_browser_with(Value::Null, true);
     let mut cdp = Cdp::connect(&endpoint).unwrap();
     let pages = cdp.pages().unwrap();
     let session = cdp.attach(&pages[0]).unwrap();
 
-    let error = cdp.evaluate(&session, "throw").unwrap_err();
+    let error = cdp.read_tables(&session).unwrap_err();
 
     assert_eq!(error, Error::Script);
     assert!(!error.to_string().contains("secret"));
@@ -212,4 +216,40 @@ fn connecting_to_a_closed_port_fails_cleanly() {
     };
 
     assert!(matches!(Cdp::connect(&endpoint), Err(Error::Connection(_))));
+}
+
+#[test]
+fn a_page_answer_of_the_wrong_shape_is_refused() {
+    for wrong in [
+        json!("text"),
+        json!([["a"]]),
+        json!([[[1, 2]]]),
+        json!([[["x".repeat(2000)]]]),
+        Value::Null,
+    ] {
+        let endpoint = fake_browser(wrong.clone());
+        let mut cdp = Cdp::connect(&endpoint).unwrap();
+        let pages = cdp.pages().unwrap();
+        let session = cdp.attach(&pages[0]).unwrap();
+
+        assert_eq!(cdp.read_tables(&session), Err(Error::Script), "{wrong}");
+    }
+}
+
+#[test]
+fn the_fixed_script_only_reads_the_page() {
+    // A guard against someone adding an action to the one script that runs.
+    let script = crate::cdp_script_for_tests();
+
+    for action in [
+        "click(",
+        "submit(",
+        ".value =",
+        "fetch(",
+        "XMLHttpRequest",
+        "eval(",
+        "location",
+    ] {
+        assert!(!script.contains(action), "{action}");
+    }
 }
