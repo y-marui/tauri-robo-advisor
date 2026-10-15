@@ -4,6 +4,7 @@
 
 ### Added
 
+- `suggest` crate with the four suggestion modes (fixed add, buy-only to target, full rebalance, fixed sell): water-filling over categories and products, account rules (sellable, tradable products, rounding unit), exact sums after rounding, and the read-only `suggest_rebalance` command.
 - Manual entry screen (vanilla TypeScript, English and Japanese): categories, products, accounts, a holdings table, and settings, with every edit validated and saved by Rust. Frontend unit tests run with `npm test`.
 - `portfolio` crate with the portfolio model (categories, products, accounts, holdings, targets), validated edits, and integrity checks, plus JSON storage with atomic writes and the `get_portfolio` / `apply_portfolio_edit` commands.
 - `bitflyer` crate: read-only bitFlyer API client that signs requests, fetches balances, and values them in JPY from the public ticker; API credentials are stored in the OS keychain and never returned to the frontend.

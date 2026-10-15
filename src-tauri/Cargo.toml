@@ -25,6 +25,7 @@ serde_json = "1"
 rebalance = { path = "../crates/rebalance" }
 bitflyer = { path = "../crates/bitflyer" }
 portfolio = { path = "../crates/portfolio" }
+suggest = { path = "../crates/suggest" }
 keyring = "4"
 
 [dev-dependencies]
