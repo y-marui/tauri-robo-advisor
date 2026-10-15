@@ -1,5 +1,9 @@
 .PHONY: install dev lint format test build all deploy dmg update-charter
 
+# Local settings (not committed): for example DEPLOY_DIR=/Applications in .env installs the app
+# directly under /Applications instead of /Applications/My Tauri.
+-include .env
+
 # Where a self-made Tauri app is installed (kept apart from /Applications itself so
 # it never collides with an App Store version), and where the DMG for
 # `install-my-apps` is published.
@@ -36,7 +40,10 @@ all: lint test
 deploy:
 	@test "$$(uname)" = "Darwin" || { echo "deploy is for macOS only."; exit 1; }
 	npm run tauri build -- --bundles app
-	@if pgrep -x "$(APP_NAME)" >/dev/null; then osascript -e 'tell application "$(APP_NAME)" to quit'; fi
+	@if pgrep -x "$(APP_NAME)" >/dev/null; then \
+	  osascript -e 'tell application "$(APP_NAME)" to quit'; \
+	  i=0; while pgrep -x "$(APP_NAME)" >/dev/null && [ $$i -lt 20 ]; do sleep 0.5; i=$$((i+1)); done; \
+	fi
 	mkdir -p "$(DEPLOY_DIR)"
 	rm -rf "$(DEPLOY_DIR)/$(APP_NAME).app"
 	ditto "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(DEPLOY_DIR)/$(APP_NAME).app"
