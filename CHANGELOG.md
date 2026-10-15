@@ -4,6 +4,7 @@
 
 ### Added
 
+- `make deploy` builds the `.app` and installs it into `/Applications/My Tauri` (kept apart from `/Applications` itself, so it never collides with an App Store version), and `make dmg` publishes the DMG to the iCloud `Build/Tauri` folder for `install-my-apps`. Both are macOS only, and the folders can be overridden with `DEPLOY_DIR` and `DMG_DEST`.
 - `browser` crate (first step of the optional browser fetch, #28): finds Chrome, Edge, or Brave, starts it with a profile of its own, and reads pages over the DevTools protocol on localhost. The user logs in by hand; nothing is typed, clicked, or stored. Not wired to the UI yet. New dependencies: `tungstenite` (WebSocket client, without TLS) with `sha1` and `data-encoding`.
 - Table import: a record may span several rows (a name row and a row of numbers, as brokerage holdings pages show them), and the value can be quantity x price / price unit (1 or 10,000, for fund prices) computed with exact decimals. Saved mappings from before keep working.
 - Generic table import (#9): load a CSV file (UTF-8 or Shift-JIS, detected automatically) or pasted text, choose the name and value columns (saved per source and reused), link names to products through aliases the user confirms, and replace an account's holdings. New `tabular` crate (no brokerage-specific code) and a new dependency, `encoding_rs`; the import result view is shared with the bitFlyer card.
