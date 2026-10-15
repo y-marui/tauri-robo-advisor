@@ -4,6 +4,7 @@
 
 ### Added
 
+- `portfolio` crate with the portfolio model (categories, products, accounts, holdings, targets), validated edits, and integrity checks, plus JSON storage with atomic writes and the `get_portfolio` / `apply_portfolio_edit` commands.
 - `bitflyer` crate: read-only bitFlyer API client that signs requests, fetches balances, and values them in JPY from the public ticker; API credentials are stored in the OS keychain and never returned to the frontend.
 - `rebalance` crate: portfolio rebalancing calculation with exact decimal arithmetic, and the `propose_rebalance` Tauri command.
 - Cargo workspace and a committed `Cargo.lock`; CI and `make` now run cargo with `--locked`.

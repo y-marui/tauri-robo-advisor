@@ -1,0 +1,19 @@
+//! The portfolio the user builds: categories with target weights, products,
+//! accounts, and holdings.
+//!
+//! The crate is pure data and rules. It knows nothing about Tauri, files, or
+//! brokerages: the app persists it (see `src-tauri/src/store.rs`), and every
+//! change goes through [`Portfolio::apply`], which validates the edit first.
+//! Amounts are exact decimals, never floating point.
+
+mod edit;
+mod error;
+mod model;
+mod validate;
+
+pub use edit::Edit;
+pub use error::{Error, Issue};
+pub use model::*;
+
+#[cfg(test)]
+mod tests;
