@@ -3,7 +3,7 @@
 > **このファイルは正本（日本語版）です。**
 > 英語版（参照）は [README.md](README.md) を参照してください。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![CI](https://github.com/y-marui/tauri-robo-advisor/actions/workflows/ci.yml/badge.svg)](https://github.com/y-marui/tauri-robo-advisor/actions/workflows/ci.yml)
 [![Charter Check](https://github.com/y-marui/tauri-robo-advisor/actions/workflows/dev-charter-check.yml/badge.svg)](https://github.com/y-marui/tauri-robo-advisor/actions/workflows/dev-charter-check.yml)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/y-marui?style=social)](https://github.com/sponsors/y-marui)
@@ -72,7 +72,7 @@ scripts/     # dev-charter 配布のチェックスクリプト
 
 ## License
 
-[MIT](LICENSE)
+[AGPL v3](LICENSE)。将来、商用ライセンスを提供する可能性があります。コントリビューションは [CONTRIBUTING.md](CONTRIBUTING.md) の条件で受け付けます。
 
 ---
 

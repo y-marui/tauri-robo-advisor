@@ -29,6 +29,13 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) format (e.g. `f
 
 See `.github/pull_request_template.md` for the current checklist.
 
+## Contribution Terms
+
+By contributing, you agree that your contributions are licensed under
+AGPL v3 and that you grant the project maintainer
+a non-exclusive, perpetual, worldwide, royalty-free right to use, reproduce,
+modify, distribute, sublicense, and relicense your contributions under any license.
+
 ## Pre-commit Hooks
 
 Security and quality checks run via `.pre-commit-config.yaml` and again in CI. Never commit secrets, `.env` files, or real account data.
