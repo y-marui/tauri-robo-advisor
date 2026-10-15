@@ -8,6 +8,8 @@
   --field: #f6f4f5;
   --error: #b3261e;
   --warn: #8a5a00;
+  --buy: #1b6e43;
+  --sell: #a1340f;
 
   color-scheme: light dark;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -26,6 +28,8 @@
     --field: #141214;
     --error: #f2b8b5;
     --warn: #e8c274;
+    --buy: #6cc596;
+    --sell: #f0a07c;
   }
 }
 
@@ -331,7 +335,26 @@ td.num {
   font-weight: 600;
 }
 
+.delta-buy,
+td.num.delta-buy {
+  color: var(--buy);
+}
+
+.delta-sell,
+td.num.delta-sell {
+  color: var(--sell);
+}
+
 .note.error {
   color: var(--error);
   font-weight: 600;
+}
+
+/* The subtotal row that opens each category group in the holdings table. */
+tr.group th,
+tr.group td {
+  font-weight: 600;
+  color: var(--strong);
+  background: var(--field);
+  border-top: 1px solid var(--line);
 }

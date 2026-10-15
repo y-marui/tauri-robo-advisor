@@ -1,4 +1,4 @@
-import { applyEdit, exportAll, getPortfolio } from "./api.ts";
+import { applyEdit, exportAll, getOverview, getPortfolio } from "./api.ts";
 import { h } from "./dom.ts";
 import { detectLanguage, getLanguage, LANGUAGES, setLanguage, t, type Lang } from "./i18n.ts";
 import type { Context, Panel } from "./panel.ts";
@@ -6,6 +6,7 @@ import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { holdingsPanel } from "./views/holdings.ts";
+import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
 import { issuesList } from "./views/issues.ts";
 import { productsPanel } from "./views/products.ts";
@@ -24,6 +25,7 @@ let view: PortfolioView | null = null;
 let panels: Panel[] = [];
 let status = h("p", { class: "status", role: "status" });
 let issues = h("div");
+let overviewRequest = 0;
 
 function readLanguage(): string | null {
   try {
@@ -55,6 +57,20 @@ function renderAll(): void {
   for (const panel of panels) {
     panel.render(view);
   }
+  // One valuation serves every panel; a newer refresh makes this one obsolete.
+  const shown = view;
+  const mine = ++overviewRequest;
+  getOverview()
+    .then((overview) => {
+      if (mine === overviewRequest) {
+        panels.forEach((panel) => panel.showOverview?.(shown, overview));
+      }
+    })
+    .catch((error) => {
+      if (mine === overviewRequest) {
+        panels.forEach((panel) => panel.overviewFailed?.(error));
+      }
+    });
 }
 
 const context: Context = {
@@ -115,6 +131,7 @@ function build(): void {
   issues = h("div");
   panels = [
     overviewPanel(context),
+    holdingsTablePanel(context),
     categoriesPanel(context),
     productsPanel(context),
     accountsPanel(context),

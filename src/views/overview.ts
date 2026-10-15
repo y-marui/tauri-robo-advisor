@@ -1,4 +1,4 @@
-import { getOverview, suggestRebalance } from "../api.ts";
+import { suggestRebalance } from "../api.ts";
 import { cleanDecimal, formatAmount, fractionToPercent } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { getLanguage, t } from "../i18n.ts";
@@ -292,7 +292,6 @@ export function overviewPanel(ctx: Context): Panel {
   let current: PortfolioView | null = null;
   let accountSignature: string | null = null;
   let sequence = 0; // suggestions
-  let chartSequence = 0;
 
   const showError = (error: unknown): void => {
     result.replaceChildren();
@@ -386,40 +385,32 @@ export function overviewPanel(ctx: Context): Panel {
       if (document.activeElement !== targetSelect) {
         targetSelect.value = target;
       }
-
-      const mine = ++chartSequence;
-      getOverview()
-        .then((overview) => {
-          if (mine !== chartSequence) {
-            return;
-          }
-          if (overview.categories.length === 0 || Number(overview.total) === 0) {
-            charts.replaceChildren(h("p", { class: "note" }, t("No holdings yet.")));
-            return;
-          }
-          charts.replaceChildren(
-            h("h3", {}, t("Target vs current")),
-            h(
-              "p",
-              { class: "muted key" },
-              h("span", { class: "dot bar-target", "aria-hidden": "true" }),
-              t("Target"),
-              h("span", { class: "dot bar-current swatch-0", "aria-hidden": "true" }),
-              t("Current"),
-            ),
-            barChart(view, overview),
-            h("h3", {}, t("Composition")),
-            h("div", { class: "pie-row" }, pieChart(overview), legend(view, overview)),
-            h("p", { class: "muted" }, `${t("Total")}: ${yen(overview.total)}`),
-          );
-        })
-        .catch((error) => {
-          if (mine === chartSequence) {
-            charts.replaceChildren(
-              h("p", { class: "note error" }, t("Could not load: {reason}", { reason: String(error) })),
-            );
-          }
-        });
+    },
+    showOverview(view, overview) {
+      if (overview.categories.length === 0 || Number(overview.total) === 0) {
+        charts.replaceChildren(h("p", { class: "note" }, t("No holdings yet.")));
+        return;
+      }
+      charts.replaceChildren(
+        h("h3", {}, t("Target vs current")),
+        h(
+          "p",
+          { class: "muted key" },
+          h("span", { class: "dot bar-target", "aria-hidden": "true" }),
+          t("Target"),
+          h("span", { class: "dot bar-current swatch-0", "aria-hidden": "true" }),
+          t("Current"),
+        ),
+        barChart(view, overview),
+        h("h3", {}, t("Composition")),
+        h("div", { class: "pie-row" }, pieChart(overview), legend(view, overview)),
+        h("p", { class: "muted" }, `${t("Total")}: ${yen(overview.total)}`),
+      );
+    },
+    overviewFailed(error) {
+      charts.replaceChildren(
+        h("p", { class: "note error" }, t("Could not load: {reason}", { reason: String(error) })),
+      );
     },
   };
 }
