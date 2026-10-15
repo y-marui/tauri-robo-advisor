@@ -11,7 +11,10 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 - `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録（`propose_rebalance` は `rebalance` crate への薄い委譲）
 - `crates/rebalance/src/lib.rs` — リバランス計算（`propose`）
 - `crates/bitflyer/src/lib.rs` — bitFlyer クライアント（`Client`、`Credentials`、`Transport`）
+- `crates/portfolio/src/lib.rs` — `Portfolio`、`Edit`、`Portfolio::apply`、`validate_integrity`、`issues`
 - `src-tauri/src/secrets.rs` — OS のキーチェーンへの API キーの保存（副作用はここに閉じ込める）
+- `src-tauri/src/store.rs` — ポートフォリオの JSON ファイルの読み書き（アトミックな書き込み）
+- `src-tauri/src/app_state.rs` — メモリ上のポートフォリオと保存先。コマンドから呼ばれ、Tauri なしでテストできる
 - 保存（JSON ファイル）も同様に、ファイルの読み書きという副作用を `src-tauri` の 1 モジュールに閉じ込め、モデルと提案の計算は Tauri に依存しない crate に置く（[specification.md](specification.md) の Storage 参照）
 - `src/main.ts` — フロントエンドのエントリポイント
 - `index.html` — フロントエンドの HTML
@@ -24,6 +27,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
 | `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
 | `crates/bitflyer/` | bitFlyer の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない |
+| `crates/portfolio/` | ポートフォリオのモデル（カテゴリ・商品・口座・保有・目標）と、検証つきの編集（`Edit`）。Tauri に依存しない |
 | `src-tauri/capabilities/` | Tauri の権限定義 |
 | `docs/` | 仕様書・ナレッジベース |
 

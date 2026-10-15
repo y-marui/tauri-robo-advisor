@@ -2971,6 +2971,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "portfolio"
+version = "0.1.0"
+dependencies = [
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4251,7 +4261,9 @@ version = "0.1.0"
 dependencies = [
  "bitflyer",
  "keyring",
+ "portfolio",
  "rebalance",
+ "rust_decimal",
  "serde",
  "serde_json",
  "tauri",

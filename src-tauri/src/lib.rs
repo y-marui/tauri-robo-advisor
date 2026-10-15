@@ -1,7 +1,14 @@
+mod app_state;
 mod secrets;
+mod store;
 
+use std::sync::Arc;
+
+use app_state::{AppState, PortfolioView};
 use bitflyer::{Client, Holdings, ReqwestTransport};
+use portfolio::Edit;
 use rebalance::{Holding, Params, Proposal, Target};
+use tauri::{Manager, State};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -58,16 +65,46 @@ async fn fetch_bitflyer_holdings() -> Result<Holdings, String> {
         .map_err(|e| e.to_string())
 }
 
+// The portfolio lives in Rust. The frontend asks for a snapshot and sends
+// edits; every rule is enforced here, and each accepted edit is saved to disk
+// before the new state is returned. File access runs off the async workers.
+#[tauri::command]
+async fn get_portfolio(state: State<'_, Arc<AppState>>) -> Result<PortfolioView, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.view())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn apply_portfolio_edit(
+    state: State<'_, Arc<AppState>>,
+    edit: Edit,
+) -> Result<PortfolioView, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.apply(edit))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let directory = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&directory)?;
+            app.manage(Arc::new(AppState::load(directory.join("portfolio.json"))));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             propose_rebalance,
             save_bitflyer_credentials,
             has_bitflyer_credentials,
             delete_bitflyer_credentials,
-            fetch_bitflyer_holdings
+            fetch_bitflyer_holdings,
+            get_portfolio,
+            apply_portfolio_edit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
