@@ -2,9 +2,9 @@
 name = "tauri-robo-advisor"
 version = "0.1.0"
 description = "Cross-platform desktop app to aggregate brokerage assets and propose portfolio rebalancing."
-authors = ["Yukihiro Marui"]
-license = "AGPL-3.0-only"
-edition = "2024"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,12 +23,4 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-
-# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = 3
-panic = "abort"
-strip = true
+rebalance = { path = "../crates/rebalance" }

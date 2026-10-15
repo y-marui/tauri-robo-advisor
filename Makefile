@@ -8,14 +8,14 @@ dev:
 
 lint:
 	npx tsc --noEmit
-	cargo fmt --manifest-path src-tauri/Cargo.toml --check
-	cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets --locked -- -D warnings
 
 format:
-	cargo fmt --manifest-path src-tauri/Cargo.toml
+	cargo fmt --all
 
 test:
-	cargo test --manifest-path src-tauri/Cargo.toml
+	cargo test --workspace --locked
 
 build:
 	npm run tauri build -- --no-bundle

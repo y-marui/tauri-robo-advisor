@@ -15,6 +15,13 @@ _最終更新: 2026-10-15_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `src-tauri/src/main.rs` | デスクトップのエントリ | `src-tauri/src/lib.rs` |
-| `src-tauri/src/lib.rs` | Tauri のセットアップ、`greet` コマンド（雛形） | `tauri` |
+| `src-tauri/src/lib.rs` | Tauri のセットアップ、`greet`（雛形）と `propose_rebalance` コマンド | `tauri`, `crates/rebalance` |
 | `src-tauri/tauri.conf.json` | アプリ設定 | — |
 | `src-tauri/capabilities/default.json` | 権限定義 | — |
+
+## Domain
+
+| ファイル | 役割 | 主な依存先 |
+|---|---|---|
+| `Cargo.toml` | Cargo ワークスペース定義と共通のパッケージ情報 | — |
+| `crates/rebalance/src/lib.rs` | リバランス計算 `propose`、入力検証、テスト | `rust_decimal`, `serde`, `thiserror` |

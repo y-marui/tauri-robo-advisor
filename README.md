@@ -31,7 +31,8 @@ make build     # build the app (no installer bundle)
 
 ~~~text
 src/         # frontend (TypeScript, CSS): display and input only
-src-tauri/   # Rust: Tauri commands and domain logic
+src-tauri/   # Rust: Tauri setup and thin command layer
+crates/      # Rust: domain logic crates (no Tauri dependency)
 docs/        # specification and knowledge base
 scripts/     # check scripts distributed by dev-charter
 ~~~

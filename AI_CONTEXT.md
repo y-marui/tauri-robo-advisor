@@ -43,7 +43,8 @@ AI はタスク開始時に以下の順で参照する:
 
 ```
 src/              # フロントエンド（TypeScript / CSS）
-src-tauri/        # Rust 側（Tauri コマンド・ドメインロジック）
+src-tauri/        # Rust 側（Tauri のセットアップとコマンド。薄い境界層）
+crates/           # ドメインロジックの crate（Cargo ワークスペースのメンバー。Tauri 非依存）
 docs/             # 仕様書・ナレッジベース（人間・AI 共用。仕様変更は依頼・承認を経て記述）
 docs/dev-charter/ # 開発憲章（git subtree で取り込み。直接編集禁止）
 scripts/          # dev-charter 配布の pre-commit 用チェックスクリプト
@@ -96,7 +97,8 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 ### Tauri Notes
 
 - Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。
-- `src-tauri/tauri.conf.json` の CSP は雛形のまま未設定（`null`）。機能を追加する前に厳格化すること。
+- `src-tauri/tauri.conf.json` に CSP（本番 `csp` と開発用 `devCsp`）を設定してある。外部への接続や外部スクリプトが必要になったら、許可先を最小限で追加し、`docs/architecture.md` に理由を記録する。
+- Cargo のルートは `Cargo.toml`（ワークスペース）。`Cargo.lock` はルートでコミットし、CI は `--locked` で実行する。
 - `withGlobalTauri` は無効にしてある。フロントエンドは `@tauri-apps/api` を import して使い、`window.__TAURI__` に頼らない。
 
 ### CI / Local Development Commands
@@ -104,7 +106,7 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 ```sh
 make install        # npm ci
 make dev            # npm run tauri dev
-make lint           # tsc --noEmit + cargo fmt --check + cargo clippy
+make lint           # tsc --noEmit + cargo fmt --all --check + cargo clippy --workspace
 make format         # cargo fmt
 make test           # cargo test
 make build          # npm run tauri build -- --no-bundle
