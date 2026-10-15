@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["src-tauri", "crates/rebalance"]
+
+[workspace.package]
+edition = "2024"
+license = "AGPL-3.0-only"
+authors = ["Yukihiro Marui"]
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

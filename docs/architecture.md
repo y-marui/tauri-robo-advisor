@@ -8,7 +8,8 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 ## Entry Points
 
 - `src-tauri/src/main.rs` — デスクトップのエントリポイント（`lib.rs` の `run` を呼ぶだけ）
-- `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録
+- `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録（`propose_rebalance` は `rebalance` crate への薄い委譲）
+- `crates/rebalance/src/lib.rs` — リバランス計算（`propose`）
 - `src/main.ts` — フロントエンドのエントリポイント
 - `index.html` — フロントエンドの HTML
 
@@ -17,7 +18,8 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | ディレクトリ | 役割 |
 |---|---|
 | `src/` | フロントエンド。表示と入力のみで、ドメインロジックを持たない |
-| `src-tauri/src/` | Rust 側。Tauri コマンド（薄い境界層）とドメインロジック |
+| `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
+| `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
 | `src-tauri/capabilities/` | Tauri の権限定義 |
 | `docs/` | 仕様書・ナレッジベース |
 
@@ -32,6 +34,11 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 - ドメインロジックは Tauri に依存しない純粋な Rust として書き、`cargo test` で単体テストできるようにする。
 - 逆依存禁止。循環依存禁止。
 
+## Workspace
+
+ルートの `Cargo.toml` は Cargo ワークスペースで、メンバーは `src-tauri` と `crates/*`。`Cargo.lock` と `target/` はルートに置く。
+ドメインロジックは `crates/` の crate に置き、Tauri への依存を持たせない。コンパイル境界で Tauri 非依存を保証でき、`cargo test -p <crate>` で単独にテストできる。
+
 ## Extraction Policy
 
 まとまったロジックは、次のいずれかを満たした時点で個別の Rust リポジトリ（crate）への切り出しを検討する。条件を満たす前に分けない（YAGNI）。
@@ -42,7 +49,7 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 
 切り出すときの手順:
 
-1. まず同一リポジトリ内で Cargo workspace のメンバー crate として分離し、境界を確かめる。
+1. まず同一リポジトリ内で Cargo workspace のメンバー crate（`crates/`）として分離し、境界を確かめる。`rebalance` はこの段階にある。
 2. 境界が安定したら個別リポジトリへ移す。リポジトリ名は `rust-` を先頭に付ける（例: `rust-rebalance`）。
 3. アプリ側は crate の依存として参照する。バージョンはタグで固定する。
 4. 切り出しの判断と経緯はこのファイルに記録し、作業の進捗は Issue で管理する。
@@ -56,4 +63,6 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 | `tauri` | アプリ基盤 |
 | `tauri-plugin-opener` | 既定ブラウザでリンクを開く（雛形由来） |
 | `serde` / `serde_json` | シリアライズ |
+| `rust_decimal` | 金額の正確な十進演算（`rebalance`）。IPC では文字列として受け渡す |
+| `thiserror` | `rebalance` のエラー型 |
 | `vite` / `typescript` | フロントエンドのビルド |

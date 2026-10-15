@@ -16,7 +16,7 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 |---|---|
 | `make install` | Install frontend dependencies (`npm ci`) |
 | `make dev` | Run the app in development mode |
-| `make lint` | `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -D warnings` |
+| `make lint` | `tsc --noEmit`, `cargo fmt --all --check`, `cargo clippy --workspace -D warnings` |
 | `make format` | `cargo fmt` |
 | `make test` | `cargo test` |
 | `make build` | Build the app without bundling |
@@ -28,7 +28,8 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 | Path | Role |
 |---|---|
 | `src/` | Frontend (TypeScript, CSS) |
-| `src-tauri/` | Rust backend and Tauri configuration |
+| `src-tauri/` | Tauri setup and thin command layer (Rust) |
+| `crates/` | Domain logic crates in the Cargo workspace (no Tauri dependency) |
 | `docs/` | Specification and knowledge base |
 | `docs/dev-charter/` | Development charter (git subtree; never edit directly) |
 | `scripts/` | Check scripts distributed by dev-charter |

@@ -31,7 +31,8 @@ make build     # アプリをビルド（インストーラのバンドルなし
 
 ~~~text
 src/         # フロントエンド（TypeScript、CSS）: 表示と入力のみ
-src-tauri/   # Rust: Tauri コマンドとドメインロジック
+src-tauri/   # Rust: Tauri のセットアップと薄いコマンド層
+crates/      # Rust: ドメインロジックの crate（Tauri 非依存）
 docs/        # 仕様書・ナレッジベース
 scripts/     # dev-charter 配布のチェックスクリプト
 ~~~
