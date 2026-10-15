@@ -13,6 +13,7 @@
 ### Changed
 
 - Changed the planned acquisition method for SBI Securities and Monex from in-app WebView login to importing files downloaded from the user's own browser session, because both brokerages require passkeys that embedded WebViews do not reliably support.
+- Removed the unused `tauri-plugin-opener` plugin and its `opener:default` permission to reduce the permission surface and dependencies.
 - Set a strict Content Security Policy (production `csp` and development `devCsp`) instead of the scaffold default `null`.
 - Relicensed from MIT to AGPL v3 (`AGPL-3.0-only`), with contribution terms that allow future commercial licensing.
 
