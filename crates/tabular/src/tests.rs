@@ -179,9 +179,23 @@ fn names_are_trimmed_of_ordinary_and_full_width_spaces() {
 
 #[test]
 fn text_that_only_looks_like_a_number_is_not_one() {
-    for bad in ["1-2", "1e5", "0x10", "--1", "1.2.3", "abc", ""] {
+    for bad in [
+        "1-2", "1e5", "0x10", "--1", "1.2.3", "abc", "", "1+2", "12+", "+-5", "5-", "-+5",
+    ] {
         let table = vec![vec!["A".to_owned(), bad.to_owned()]];
         let result = extract(&table, &mapping(0, 1, 0));
         assert!(result.rows.is_empty(), "{bad}");
+    }
+}
+
+#[test]
+fn a_single_leading_sign_is_accepted_even_after_a_currency_sign() {
+    for (text, expected) in [
+        ("+5", dec!(5)),
+        ("-5", dec!(-5)),
+        ("¥-5", dec!(-5)),
+        ("▲1,000", dec!(-1000)),
+    ] {
+        assert_eq!(crate::mapping::parse_amount(text), Some(expected), "{text}");
     }
 }

@@ -82,15 +82,17 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
   }
 
   if (plan.unmatched.length > 0) {
-    const options = view.portfolio.products
-      .filter((p) => p.currency === currency)
-      .map((p) => h("option", { value: String(p.id) }, p.name));
+    const candidates = view.portfolio.products.filter((p) => p.currency === currency);
+    // Every row needs its own option elements: appending one element to a second
+    // select would move it out of the first.
+    const optionsFor = (): HTMLOptionElement[] =>
+      candidates.map((p) => h("option", { value: String(p.id) }, p.name));
     parts.push(
       h("p", { class: "note" }, t("Link each name to a product. The choice is remembered.")),
       ...plan.unmatched.map((row) => {
-        const select = h("select", { "aria-label": `${row.name} → ${t("Product")}` }, ...options);
+        const select = h("select", { "aria-label": `${row.name} → ${t("Product")}` }, ...optionsFor());
         const link = h("button", { type: "button" }, t("Link"));
-        link.disabled = options.length === 0;
+        link.disabled = candidates.length === 0;
         link.addEventListener("click", () => {
           void ctx.apply({
             type: "add_alias",
@@ -107,7 +109,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
           link,
         );
       }),
-      options.length === 0 ? h("p", { class: "note" }, t("Add a {currency} product first.", { currency })) : null,
+      candidates.length === 0 ? h("p", { class: "note" }, t("Add a {currency} product first.", { currency })) : null,
     );
   }
 

@@ -118,6 +118,8 @@ export function tableImportPanel(ctx: Context): Panel {
   function showPreview(loaded: TablePreview): void {
     preview = loaded;
     planned = false;
+    // A preview still in flight belongs to the table that is being replaced.
+    sequence += 1;
     result.replaceChildren();
     const columns = Array.from({ length: loaded.columns }, (_, i) => i);
     const label = (i: number): string => {
@@ -168,6 +170,8 @@ export function tableImportPanel(ctx: Context): Panel {
       showPreview(await read());
     } catch (error) {
       preview = null;
+      planned = false;
+      sequence += 1;
       mappingBox.hidden = true;
       previewBox.replaceChildren();
       result.replaceChildren();
@@ -199,6 +203,7 @@ export function tableImportPanel(ctx: Context): Panel {
   sourceInput.addEventListener("change", () => {
     useSavedMapping();
     planned = false;
+    sequence += 1;
     result.replaceChildren();
   });
 

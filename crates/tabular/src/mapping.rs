@@ -97,20 +97,36 @@ fn clean(text: &str) -> String {
 /// (including ▲ and △). Anything else is not a number, so `None`.
 pub(crate) fn parse_amount(text: &str) -> Option<Decimal> {
     let mut cleaned = String::new();
+    let mut sign_seen = false;
+    let mut digits_seen = false;
     for c in clean(text).chars() {
         match c {
-            '0'..='9' | '.' => cleaned.push(c),
-            '０'..='９' => cleaned.push(char::from_u32(c as u32 - '０' as u32 + '0' as u32)?),
-            '．' => cleaned.push('.'),
-            '-' | '−' | '－' | '▲' | '△' => cleaned.push('-'),
-            '+' | '＋' => {}
+            '0'..='9' | '.' => {
+                digits_seen = true;
+                cleaned.push(c);
+            }
+            '０'..='９' => {
+                digits_seen = true;
+                cleaned.push(char::from_u32(c as u32 - '０' as u32 + '0' as u32)?);
+            }
+            '．' => {
+                digits_seen = true;
+                cleaned.push('.');
+            }
+            // One sign at most, and only before the digits: "1+2", "12+", "5-"
+            // and "+-5" are not amounts.
+            '-' | '−' | '－' | '▲' | '△' | '+' | '＋' => {
+                if sign_seen || digits_seen {
+                    return None;
+                }
+                sign_seen = true;
+                if !matches!(c, '+' | '＋') {
+                    cleaned.push('-');
+                }
+            }
             ',' | '，' | ' ' | '\u{a0}' | '\u{3000}' | '¥' | '￥' | '$' | '＄' | '円' => {}
             _ => return None,
         }
-    }
-    // A minus is only allowed at the start.
-    if cleaned.rfind('-').is_some_and(|i| i > 0) {
-        return None;
     }
     Decimal::from_str(&cleaned).ok()
 }
