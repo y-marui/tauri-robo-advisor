@@ -27,6 +27,7 @@ bitflyer = { path = "../crates/bitflyer" }
 portfolio = { path = "../crates/portfolio" }
 suggest = { path = "../crates/suggest" }
 export = { path = "../crates/export" }
+tabular = { path = "../crates/tabular" }
 keyring = "4"
 
 [dev-dependencies]

@@ -30,6 +30,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
 | `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
 | `crates/bitflyer/` | bitFlyer の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない |
+| `crates/tabular/` | CSV・貼り付けテキストの読み取り（UTF-8 / Shift-JIS）と、名前・評価額の列の選択。証券会社ごとのコードは持たない。Tauri に依存しない |
 | `crates/export/` | フルレコードのエクスポート（CSV・JSON・README の内容を作る）。Tauri に依存しない |
 | `crates/suggest/` | 4 つの提案モードの計算（水位配分、丸め、口座の制約）。`portfolio` に依存し、Tauri には依存しない |
 | `crates/portfolio/` | ポートフォリオのモデル（カテゴリ・商品・口座・保有・目標）と、検証つきの編集（`Edit`）。Tauri に依存しない |

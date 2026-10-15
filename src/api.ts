@@ -7,7 +7,10 @@ import type {
   ImportPlan,
   ImportRow,
   Overview,
+  ColumnMapping,
   PortfolioView,
+  TableImportPlan,
+  TablePreview,
   Suggestion,
   SuggestRequest,
 } from "./types.ts";
@@ -69,4 +72,27 @@ export function deleteBitflyerCredentials(): Promise<void> {
 /** Fetches the balances (read-only) and values them in JPY. */
 export function fetchBitflyerHoldings(): Promise<BitflyerHoldings> {
   return invoke<BitflyerHoldings>("fetch_bitflyer_holdings");
+}
+
+/** Sends a CSV or text file's bytes to Rust, which decodes (UTF-8 or Shift-JIS) and parses them. */
+export function loadTableFile(bytes: number[]): Promise<TablePreview> {
+  return invoke<TablePreview>("load_table_file", { bytes });
+}
+
+/** Parses text pasted from a brokerage's table. */
+export function loadTableText(text: string): Promise<TablePreview> {
+  return invoke<TablePreview>("load_table_text", { text });
+}
+
+export function clearTable(): Promise<void> {
+  return invoke<void>("clear_table");
+}
+
+/** Picks the chosen columns of the loaded table and links the rows to products; nothing is changed. */
+export function planTableImport(
+  source: string,
+  currency: string,
+  mapping: ColumnMapping,
+): Promise<TableImportPlan> {
+  return invoke<TableImportPlan>("plan_table_import", { source, currency, mapping });
 }

@@ -1,0 +1,16 @@
+[package]
+name = "tabular"
+version = "0.1.0"
+description = "Reads CSV files and pasted tables (UTF-8 or Shift-JIS) and picks name and value columns, without any brokerage-specific code."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+encoding_rs = "0.8"
+rust_decimal = { version = "1", default-features = false, features = ["std", "serde-str"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+rust_decimal = { version = "1", features = ["macros"] }

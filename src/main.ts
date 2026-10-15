@@ -12,6 +12,7 @@ import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
 import { issuesList } from "./views/issues.ts";
 import { productsPanel } from "./views/products.ts";
+import { tableImportPanel } from "./views/table-import.ts";
 import { settingsPanel } from "./views/settings.ts";
 
 // The frontend only shows data and sends the user's edits. Every rule, every
@@ -138,6 +139,7 @@ function build(): void {
     overviewPanel(context),
     holdingsTablePanel(context),
     accountTabsPanel(context),
+    tableImportPanel(context),
     bitflyerPanel(context),
     categoriesPanel(context),
     productsPanel(context),

@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, Funding, Holding,
-    Portfolio, Product, ProductId, ProductTargeting,
+    ImportMapping, Portfolio, Product, ProductId, ProductTargeting,
 };
 
 /// One user action. The frontend sends the intent and Rust validates it, assigns
@@ -89,6 +89,16 @@ pub enum Edit {
         account: AccountId,
         holdings: Vec<HoldingInput>,
     },
+    /// Saves (or replaces) the column mapping of an import source.
+    SetImportMapping {
+        source: String,
+        name_column: usize,
+        value_column: usize,
+        header_rows: usize,
+    },
+    RemoveImportMapping {
+        source: String,
+    },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
     },
@@ -109,6 +119,10 @@ pub struct HoldingInput {
 }
 
 const MAX_ITEMS: usize = 10_000;
+/// The widest table an import reads (see the `tabular` crate), and the most
+/// heading rows a mapping may skip.
+const MAX_COLUMN: usize = 200;
+const MAX_HEADER_ROWS: usize = 1_000;
 const MAX_ALIASES_PER_PRODUCT: usize = 50;
 
 impl Portfolio {
@@ -408,6 +422,48 @@ impl Portfolio {
                 }
                 self.holdings.retain(|h| h.account != account);
                 self.holdings.extend(next);
+            }
+            Edit::SetImportMapping {
+                source,
+                name_column,
+                value_column,
+                header_rows,
+            } => {
+                let source = name(&source, "import source")?;
+                if name_column >= MAX_COLUMN
+                    || value_column >= MAX_COLUMN
+                    || header_rows > MAX_HEADER_ROWS
+                {
+                    return Err(Error::Invalid(
+                        "a column or heading count is out of range".to_owned(),
+                    ));
+                }
+                if name_column == value_column {
+                    return Err(Error::Invalid(
+                        "the name and the value must be in different columns".to_owned(),
+                    ));
+                }
+                let mapping = ImportMapping {
+                    source,
+                    name_column,
+                    value_column,
+                    header_rows,
+                };
+                match self
+                    .import_mappings
+                    .iter_mut()
+                    .find(|m| m.source == mapping.source)
+                {
+                    Some(existing) => *existing = mapping,
+                    None => {
+                        self.check_capacity(self.import_mappings.len())?;
+                        self.import_mappings.push(mapping);
+                    }
+                }
+            }
+            Edit::RemoveImportMapping { source } => {
+                let source = source.trim();
+                self.import_mappings.retain(|m| m.source != source);
             }
             Edit::SetExchangeRate { usd_jpy } => {
                 self.settings.usd_jpy = usd_jpy

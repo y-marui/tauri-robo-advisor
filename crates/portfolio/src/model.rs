@@ -134,6 +134,17 @@ impl Default for Settings {
     }
 }
 
+/// Which columns of a source's table hold the name and the value, saved so the
+/// next import from the same source needs no setup. Columns count from 0.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportMapping {
+    pub source: String,
+    pub name_column: usize,
+    pub value_column: usize,
+    #[serde(default)]
+    pub header_rows: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Portfolio {
     pub schema_version: u32,
@@ -150,6 +161,8 @@ pub struct Portfolio {
     pub holdings: Vec<Holding>,
     #[serde(default)]
     pub settings: Settings,
+    #[serde(default)]
+    pub import_mappings: Vec<ImportMapping>,
 }
 
 impl Default for Portfolio {
@@ -162,6 +175,7 @@ impl Default for Portfolio {
             accounts: Vec::new(),
             holdings: Vec::new(),
             settings: Settings::default(),
+            import_mappings: Vec::new(),
         }
     }
 }
