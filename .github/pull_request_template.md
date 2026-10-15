@@ -13,3 +13,4 @@
 - [ ] User-facing changes are documented
 - [ ] Added entry to CHANGELOG.md [Unreleased] section (if applicable)
 - [ ] Manually verified (if applicable)
+- [ ] I have read and agree to the terms in CONTRIBUTING.md.

@@ -63,7 +63,7 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 | CI | `gate` job が必須チェック（`CI` / `Dev Charter`）・Draft PR は CI スキップ | `docs/dev-charter/topics/CI_POLICY.md` |
 | セキュリティ | シークレット非コミット・pre-commit 二層構成 | `docs/dev-charter/SECURITY_POLICY.md` |
 | 言語 | OSS のため公開面は英語、`README-jp.md` が日本語正本 | `docs/dev-charter/LANGUAGE_POLICY.md` |
-| ライセンス | 配布する OSS は MIT。著作権者名はフルネーム | `docs/dev-charter/LEGAL_POLICY.md` |
+| ライセンス | AGPL v3。将来の商用ライセンス提供のため準 CLA で運用する。著作権者名はフルネーム | `docs/dev-charter/LEGAL_POLICY.md`、`docs/dev-charter/topics/GITHUB_CONTRIBUTING.md` |
 | UI | ライト/ダーク/システム対応・Unicode 絵文字禁止・Material Symbols 等を使用 | `docs/dev-charter/UI_GUIDELINES.md` |
 | ローカライズ | 開発言語は英語、フォールバックも英語 | `docs/dev-charter/LOCALIZATION_POLICY.md` |
 | TODO 管理 | TODO・ロードマップはリポジトリに書かず GitHub Issues で管理 | `docs/dev-charter/topics/GITHUB_PROJECT_MANAGEMENT.md` |
@@ -124,6 +124,13 @@ CI（GitHub Actions）は push / PR のたびに `security` → `lint` → `test
 |---|---|---|
 | `docs/` | 人間・AI 共用の詳細仕様書 | 更新可。ただし仕様・設計判断の変更は、ユーザーの依頼または提案への承認を経て記述する |
 | `docs/dev-charter/` | 開発憲章（git subtree） | **禁止**（変更は dev-charter 本体に Issue を立て、`git subtree pull` で取り込む） |
+
+### Licensing
+
+- コードは AGPL v3（SPDX: `AGPL-3.0-only`）。将来、商用ライセンスの提供と、自前サーバーアプリへの派生を想定している。
+- 再ライセンスの余地を保つため、外部コントリビューションは `CONTRIBUTING.md` の Contribution Terms（準 CLA）に同意した PR のみ受け入れる。同意のチェックがない PR はマージしない。
+- 追加する依存は AGPL v3 と両立するライセンスか確認する。商用ライセンスで配布できなくなるコピーレフト依存（GPL 系など）を入れない。
+- 他者のコードを取り込む場合は、ライセンスと再ライセンス可否を確認してから入れる。
 
 ### Monetization
 
