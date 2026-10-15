@@ -61,6 +61,10 @@ pub enum Note {
     },
     /// This category could not be brought all the way to its target, for
     /// example because the account cannot buy or sell products in it.
+    ///
+    /// `shortfall` is positive when buying was needed and negative when a sale
+    /// that would have been needed could not be made (the category stays over
+    /// its target).
     CategoryNotFilled {
         category: CategoryId,
         shortfall: Decimal,

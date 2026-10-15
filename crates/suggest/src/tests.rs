@@ -877,3 +877,44 @@ fn requests_and_suggestions_use_exact_decimal_strings_in_json() {
     assert!(json.contains(r#""applied":"100000""#));
     assert!(json.contains(r#""mode":"fixed_add""#));
 }
+
+// ---- overview -------------------------------------------------------------
+
+#[test]
+fn overview_reports_value_and_share_per_category() {
+    let f = fixture();
+
+    let o = overview(&f.portfolio).unwrap();
+
+    assert_eq!(o.total, dec!(900000));
+    let stocks = o
+        .categories
+        .iter()
+        .find(|c| c.category == f.stocks)
+        .unwrap();
+    assert_eq!(stocks.current, dec!(700000));
+    assert_eq!(stocks.current_share, dec!(0.7778));
+    assert_eq!(stocks.target_share, dec!(0.6));
+    let bonds = o.categories.iter().find(|c| c.category == f.bonds).unwrap();
+    assert_eq!(bonds.current, dec!(200000));
+}
+
+#[test]
+fn overview_of_an_empty_portfolio_has_zero_shares() {
+    let mut p = Portfolio::default();
+    let c = category(&mut p, "A", dec!(1));
+
+    let o = overview(&p).unwrap();
+
+    assert_eq!(o.total, Decimal::ZERO);
+    assert_eq!(o.categories[0].category, c);
+    assert_eq!(o.categories[0].current_share, Decimal::ZERO);
+}
+
+#[test]
+fn overview_works_while_the_targets_are_incomplete() {
+    let mut p = Portfolio::default();
+    category(&mut p, "A", dec!(0.5));
+
+    assert!(overview(&p).is_ok());
+}

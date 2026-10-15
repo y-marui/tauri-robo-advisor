@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { Edit, PortfolioView } from "./types.ts";
+import type { Edit, Overview, PortfolioView, Suggestion, SuggestRequest } from "./types.ts";
 
 /** The current portfolio and the problems that block suggestions. */
 export function getPortfolio(): Promise<PortfolioView> {
@@ -21,4 +21,14 @@ export function exportAll(): Promise<string> {
  */
 export function applyEdit(edit: Edit): Promise<PortfolioView> {
   return invoke<PortfolioView>("apply_portfolio_edit", { edit });
+}
+
+/** Values every category in JPY for the balance charts. */
+export function getOverview(): Promise<Overview> {
+  return invoke<Overview>("get_overview");
+}
+
+/** A read-only suggestion; nothing is changed or saved. */
+export function suggestRebalance(request: SuggestRequest): Promise<Suggestion> {
+  return invoke<Suggestion>("suggest_rebalance", { request });
 }
