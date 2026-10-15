@@ -94,7 +94,7 @@ fn quoted_fields_may_contain_separators_quotes_and_line_breaks() {
 fn pasted_tab_separated_text_is_detected() {
     let table = read_text("名前\t評価額\nA\t1,000\r\nB\t2,000\r\n").unwrap();
 
-    assert_eq!(table.delimiter, Delimiter::Tab);
+    assert_eq!(table.delimiter, Some(Delimiter::Tab));
     assert_eq!(table.rows.len(), 3);
     assert_eq!(table.rows[2], vec!["B", "2,000"]);
 }
@@ -383,4 +383,27 @@ fn records_line_up_again_after_a_heading_or_subtotal_row() {
     );
     // The rows that were not holdings are reported, not hidden.
     assert_eq!(result.skipped.len(), 2);
+}
+
+#[test]
+fn rows_from_a_page_follow_the_same_limits() {
+    let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
+
+    let table = from_rows(vec![row(&["a", "1"]), row(&["", " "]), row(&["b", "2"])]).unwrap();
+
+    assert_eq!(table.rows.len(), 2, "blank rows are dropped");
+    assert_eq!(table.delimiter, None);
+    assert_eq!(from_rows(vec![]), Err(Error::Empty));
+    assert_eq!(
+        from_rows(vec![vec!["x".repeat(MAX_CELL_CHARS + 1)]]),
+        Err(Error::TooLarge)
+    );
+    assert_eq!(
+        from_rows(vec![vec![String::new(); MAX_COLUMNS + 1]; 1]),
+        Err(Error::Empty)
+    );
+    assert_eq!(
+        from_rows(vec![vec!["a".to_owned(); MAX_COLUMNS + 1]]),
+        Err(Error::TooLarge)
+    );
 }

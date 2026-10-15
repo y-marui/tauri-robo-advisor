@@ -28,6 +28,7 @@ portfolio = { path = "../crates/portfolio" }
 suggest = { path = "../crates/suggest" }
 export = { path = "../crates/export" }
 tabular = { path = "../crates/tabular" }
+browser = { path = "../crates/browser" }
 keyring = "4"
 
 [dev-dependencies]

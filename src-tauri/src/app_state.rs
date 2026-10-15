@@ -37,6 +37,8 @@ pub struct AppState {
     /// send a large table back and forth. It holds holdings, so it is dropped
     /// as soon as it is replaced or cleared.
     table: Mutex<Option<Table>>,
+    /// The browser opened for a fetch, and the tables read from it.
+    pub browser: crate::browser_session::BrowserSession,
 }
 
 /// How many rows and how many characters per cell the preview shows.
@@ -50,7 +52,7 @@ pub struct TablePreview {
     pub total_rows: usize,
     pub columns: usize,
     pub encoding: Option<tabular::Encoding>,
-    pub delimiter: tabular::Delimiter,
+    pub delimiter: Option<tabular::Delimiter>,
 }
 
 /// What importing the loaded table would do.
@@ -69,6 +71,7 @@ impl AppState {
             path,
             portfolio,
             table: Mutex::new(None),
+            browser: crate::browser_session::BrowserSession::default(),
         }
     }
 

@@ -2,6 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   AccountBalance,
+  BrowserInfo,
+  BrowserKind,
+  BrowserPage,
+  FetchedTable,
   BitflyerHoldings,
   Edit,
   ImportPlan,
@@ -95,4 +99,32 @@ export function planTableImport(
   mapping: ColumnMapping,
 ): Promise<TableImportPlan> {
   return invoke<TableImportPlan>("plan_table_import", { source, currency, mapping });
+}
+
+/** The Chrome, Edge, and Brave found on this computer. */
+export function listBrowsers(): Promise<BrowserInfo[]> {
+  return invoke<BrowserInfo[]>("list_browsers");
+}
+
+/** Starts the browser with a profile of its own (or reuses one that is running). */
+export function openBrowser(kind: BrowserKind, profile: string | null): Promise<void> {
+  return invoke<void>("open_browser", { kind, profile });
+}
+
+export function browserPages(): Promise<BrowserPage[]> {
+  return invoke<BrowserPage[]>("browser_pages");
+}
+
+/** Reads the tables of a page the user has logged in to and opened. */
+export function fetchBrowserTables(page: string): Promise<FetchedTable[]> {
+  return invoke<FetchedTable[]>("fetch_browser_tables", { page });
+}
+
+/** Moves a fetched table into the import, where the columns are chosen. */
+export function useFetchedTable(index: number): Promise<TablePreview> {
+  return invoke<TablePreview>("use_fetched_table", { index });
+}
+
+export function closeBrowser(): Promise<void> {
+  return invoke<void>("close_browser");
 }

@@ -217,6 +217,37 @@ export const MESSAGES = {
   "Rows per record": { ja: "1件あたりの行数" },
   "Row with the name": { ja: "名前がある行" },
   "Row with the numbers": { ja: "数値がある行" },
+  "Fetch with the browser (optional)": { ja: "ブラウザで取得（任意）" },
+  "Opens Chrome, Edge, or Brave with a profile of its own. You log in yourself; the app only reads the tables on the page you open.": {
+    ja: "Chrome・Edge・Brave を、専用のプロファイルで開きます。ログインはご自分で行い、アプリは開いたページの表を読むだけです。",
+  },
+  "No Chrome, Edge, or Brave was found on this computer.": {
+    ja: "Chrome・Edge・Brave が、このコンピューターで見つかりませんでした。",
+  },
+  "Browser": { ja: "ブラウザ" },
+  "Profile folder": { ja: "プロファイルのフォルダ" },
+  "Profile folder (empty: inside the app's data folder)": {
+    ja: "プロファイルのフォルダ（空: アプリのデータフォルダの中）",
+  },
+  "Open browser": { ja: "ブラウザを開く" },
+  "Page": { ja: "ページ" },
+  "Refresh pages": { ja: "ページを更新" },
+  "Fetch tables": { ja: "表を取得" },
+  "Table": { ja: "表" },
+  "Use this table": { ja: "この表を使う" },
+  "Close browser": { ja: "ブラウザを閉じる" },
+  "(no title)": { ja: "（タイトルなし）" },
+  "Opening the browser…": { ja: "ブラウザを開いています…" },
+  "Log in to your brokerage in that browser, open the holdings page, then fetch the tables.": {
+    ja: "そのブラウザで証券会社にログインし、保有一覧のページを開いてから、表を取得してください。",
+  },
+  "No web page is open in the browser yet.": { ja: "ブラウザには、まだウェブページが開かれていません。" },
+  "Open the holdings page in the browser first.": { ja: "先に、ブラウザで保有一覧のページを開いてください。" },
+  "Reading the page…": { ja: "ページを読み取り中…" },
+  "{rows} rows × {columns} columns: {label}": { ja: "{rows} 行 × {columns} 列: {label}" },
+  "No table was found on that page.": { ja: "そのページには、表が見つかりませんでした。" },
+  "Choose the table with the holdings, then use it.": { ja: "保有が載っている表を選んで、使ってください。" },
+  "The browser was closed.": { ja: "ブラウザを閉じました。" },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

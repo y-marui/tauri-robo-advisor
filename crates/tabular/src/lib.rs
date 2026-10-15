@@ -38,7 +38,8 @@ pub struct Table {
     pub rows: Vec<Vec<String>>,
     /// `None` for pasted text, which is already text.
     pub encoding: Option<Encoding>,
-    pub delimiter: Delimiter,
+    /// `None` for rows that were read from a page and never were text.
+    pub delimiter: Option<Delimiter>,
 }
 
 impl Table {
@@ -48,6 +49,30 @@ impl Table {
     }
 }
 
+/// Wraps rows that already are cells (read from a page). The same limits apply
+/// as for text, and blank rows are dropped.
+pub fn from_rows(rows: Vec<Vec<String>>) -> Result<Table, Error> {
+    let rows: Vec<Vec<String>> = rows
+        .into_iter()
+        .filter(|row| row.iter().any(|cell| !cell.trim().is_empty()))
+        .collect();
+    if rows.is_empty() {
+        return Err(Error::Empty);
+    }
+    if rows.len() > MAX_ROWS
+        || rows.iter().any(|row| {
+            row.len() > MAX_COLUMNS || row.iter().any(|c| c.chars().count() > MAX_CELL_CHARS)
+        })
+    {
+        return Err(Error::TooLarge);
+    }
+    Ok(Table {
+        rows,
+        encoding: None,
+        delimiter: None,
+    })
+}
+
 /// Reads the bytes of a CSV (or tab-separated) file.
 pub fn read_file(bytes: &[u8]) -> Result<Table, Error> {
     let (text, encoding) = decode(bytes)?;
@@ -55,7 +80,7 @@ pub fn read_file(bytes: &[u8]) -> Result<Table, Error> {
     Ok(Table {
         rows,
         encoding: Some(encoding),
-        delimiter,
+        delimiter: Some(delimiter),
     })
 }
 
@@ -69,7 +94,7 @@ pub fn read_text(text: &str) -> Result<Table, Error> {
     Ok(Table {
         rows,
         encoding: None,
-        delimiter,
+        delimiter: Some(delimiter),
     })
 }
 
