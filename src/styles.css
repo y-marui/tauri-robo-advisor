@@ -335,3 +335,12 @@ td.num {
   color: var(--error);
   font-weight: 600;
 }
+
+/* The subtotal row that opens each category group in the holdings table. */
+tr.group th,
+tr.group td {
+  font-weight: 600;
+  color: var(--strong);
+  background: var(--field);
+  border-top: 1px solid var(--line);
+}

@@ -126,11 +126,22 @@ export interface CategoryOverview {
   /** Fractions, e.g. "0.7778". */
   current_share: string;
   target_share: string;
+  /** Current share minus target share; positive when over target. */
+  difference: string;
+}
+
+/** One holding record valued in JPY. */
+export interface HoldingOverview {
+  account: number;
+  product: number;
+  value: string;
+  share: string;
 }
 
 export interface Overview {
   total: string;
   categories: CategoryOverview[];
+  holdings: HoldingOverview[];
 }
 
 export type SuggestMode =

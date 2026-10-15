@@ -4,6 +4,7 @@
 
 ### Added
 
+- Holdings panel: holding records grouped by category with subtotal rows (value, share of the total, target, and difference in points), edited in place. `get_overview` now also returns each holding's JPY value and share, and one valuation is fetched per refresh for all panels.
 - Overall balance panel: target-vs-current bars and a composition pie in hand-written SVG, the rebalancing-account selector, and the four suggestion modes shown in the app. The new read-only `get_overview` command supplies the values and shares from Rust.
 - Full-record export: an Export button writes CSV files (holdings, categories, products, aliases, accounts, settings), the complete data as JSON, and a README into a new owner-only folder in Downloads, for use in other analysis software. Names that could run as spreadsheet formulas are written as text.
 - `suggest` crate with the four suggestion modes (fixed add, buy-only to target, full rebalance, fixed sell): water-filling over categories and products, account rules (sellable, tradable products, rounding unit), exact sums after rounding, and the read-only `suggest_rebalance` command.

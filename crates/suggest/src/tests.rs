@@ -895,6 +895,7 @@ fn overview_reports_value_and_share_per_category() {
     assert_eq!(stocks.current, dec!(700000));
     assert_eq!(stocks.current_share, dec!(0.7778));
     assert_eq!(stocks.target_share, dec!(0.6));
+    assert_eq!(stocks.difference, dec!(0.1778));
     let bonds = o.categories.iter().find(|c| c.category == f.bonds).unwrap();
     assert_eq!(bonds.current, dec!(200000));
 }
@@ -917,4 +918,20 @@ fn overview_works_while_the_targets_are_incomplete() {
     category(&mut p, "A", dec!(0.5));
 
     assert!(overview(&p).is_ok());
+}
+
+#[test]
+fn overview_lists_each_holding_with_its_share() {
+    let f = fixture();
+
+    let o = overview(&f.portfolio).unwrap();
+
+    assert_eq!(o.holdings.len(), 3);
+    let main_stock = o
+        .holdings
+        .iter()
+        .find(|h| h.account == f.main && h.product == f.s1)
+        .unwrap();
+    assert_eq!(main_stock.value, dec!(700000));
+    assert_eq!(main_stock.share, dec!(0.7778));
 }

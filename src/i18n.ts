@@ -128,6 +128,12 @@ export const MESSAGES = {
   "Every category is already within tolerance.": {
     ja: "すべてのカテゴリが許容乖離の範囲内です。",
   },
+  "Holdings by category": { ja: "カテゴリ別の保有" },
+  "Account": { ja: "口座" },
+  "Amount": { ja: "金額" },
+  "Value (JPY)": { ja: "評価額 (円)" },
+  "Share": { ja: "構成比" },
+  "Difference (points)": { ja: "目標との差 (ポイント)" },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

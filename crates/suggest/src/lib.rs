@@ -22,7 +22,7 @@ mod types;
 
 pub use engine::suggest;
 pub use error::Error;
-pub use overview::{CategoryOverview, Overview, overview};
+pub use overview::{CategoryOverview, HoldingOverview, Overview, overview};
 pub use types::{CategoryLine, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 
 #[cfg(test)]

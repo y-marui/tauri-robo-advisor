@@ -1,6 +1,6 @@
 import { h } from "./dom.ts";
 import { t, type MessageKey } from "./i18n.ts";
-import type { Edit, PortfolioView } from "./types.ts";
+import type { Edit, Overview, PortfolioView } from "./types.ts";
 
 /** What the views need from the app. */
 export interface Context {
@@ -16,6 +16,10 @@ export type Bind = (view: PortfolioView) => void;
 export interface Panel {
   el: HTMLElement;
   render(view: PortfolioView): void;
+  /** The JPY valuation for `view`, fetched once per refresh; arrives after `render`. */
+  showOverview?(view: PortfolioView, overview: Overview): void;
+  /** The valuation could not be computed. */
+  overviewFailed?(error: unknown): void;
 }
 
 /**
