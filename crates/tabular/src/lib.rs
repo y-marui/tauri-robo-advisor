@@ -27,6 +27,8 @@ pub const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_ROWS: usize = 20_000;
 pub const MAX_COLUMNS: usize = 200;
 pub const MAX_CELL_CHARS: usize = 1_000;
+/// The most table rows one record may span.
+pub const MAX_ROWS_PER_RECORD: usize = 10;
 /// Values above one quadrillion yen are refused, as everywhere else.
 pub const MAX_VALUE: Decimal = Decimal::from_parts(2_764_472_320, 232_830, 0, false, 0);
 

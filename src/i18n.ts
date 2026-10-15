@@ -206,6 +206,17 @@ export const MESSAGES = {
   "no name": { ja: "名前がない" },
   "not a number": { ja: "数値でない" },
   "negative or too large": { ja: "負の値、または大きすぎる" },
+  "The value is": { ja: "評価額の取り方" },
+  "A column": { ja: "1つの列" },
+  "Quantity × price": { ja: "数量 × 価格" },
+  "Quantity column": { ja: "数量の列" },
+  "Price column": { ja: "価格の列" },
+  "Price is quoted per": { ja: "価格の単位" },
+  "1 unit": { ja: "1 単位" },
+  "10,000 units": { ja: "1 万単位（投信の基準価額など）" },
+  "Rows per record": { ja: "1件あたりの行数" },
+  "Row with the name": { ja: "名前がある行" },
+  "Row with the numbers": { ja: "数値がある行" },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

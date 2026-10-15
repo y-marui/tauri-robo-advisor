@@ -50,8 +50,15 @@ export interface Holding {
 export interface ImportMapping {
   source: string;
   name_column: number;
+  /** The value column, or the quantity column when `price_column` is set. */
   value_column: number;
+  /** When set, the value is quantity x price / `price_unit`. */
+  price_column: number | null;
+  price_unit: number;
   header_rows: number;
+  rows_per_record: number;
+  name_row: number;
+  value_row: number;
 }
 
 export interface Settings {
@@ -129,7 +136,12 @@ export type Edit =
       source: string;
       name_column: number;
       value_column: number;
+      price_column: number | null;
+      price_unit: number;
       header_rows: number;
+      rows_per_record: number;
+      name_row: number;
+      value_row: number;
     }
   | { type: "remove_import_mapping"; source: string }
   | { type: "add_alias"; product: number; source: string; name: string }
@@ -264,7 +276,12 @@ export interface TablePreview {
 export interface ColumnMapping {
   name: number;
   value: number;
+  price: number | null;
+  price_unit: number;
   header_rows: number;
+  rows_per_record: number;
+  name_row: number;
+  value_row: number;
 }
 
 export type SkipReason = "missing_column" | "no_name" | "not_a_number" | "out_of_range";

@@ -140,9 +140,31 @@ impl Default for Settings {
 pub struct ImportMapping {
     pub source: String,
     pub name_column: usize,
+    /// The value column, or the quantity column when `price_column` is set.
     pub value_column: usize,
+    /// When set, the value is quantity x price / `price_unit`.
+    #[serde(default)]
+    pub price_column: Option<usize>,
+    #[serde(default = "one")]
+    pub price_unit: u64,
     #[serde(default)]
     pub header_rows: usize,
+    /// How many table rows make one record, and which of them holds the name
+    /// and which the numbers (counted from 0).
+    #[serde(default = "one_row")]
+    pub rows_per_record: usize,
+    #[serde(default)]
+    pub name_row: usize,
+    #[serde(default)]
+    pub value_row: usize,
+}
+
+fn one() -> u64 {
+    1
+}
+
+fn one_row() -> usize {
+    1
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
