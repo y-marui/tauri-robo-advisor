@@ -161,6 +161,7 @@ export const MESSAGES = {
     ja: "名前ごとに商品を選んでください。選んだ対応は記憶されます。",
   },
   "Link": { ja: "対応づける" },
+  "Unlink": { ja: "対応づけを外す" },
   "Add a JPY product first.": { ja: "先に、円建ての商品を追加してください。" },
   "Linked to a product that is not in JPY, so they are left out: {names}": {
     ja: "円建てでない商品に対応づけられているため、除外します: {names}",

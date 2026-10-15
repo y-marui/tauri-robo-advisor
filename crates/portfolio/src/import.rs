@@ -10,10 +10,12 @@ pub struct ImportRow {
     pub value: Decimal,
 }
 
-/// A row linked to a product through an alias the user confirmed.
+/// A product with the imported rows linked to it through aliases the user
+/// confirmed. When several names are linked to one product, their values are
+/// added up, so the product appears once.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MatchedRow {
-    pub name: String,
+    pub names: Vec<String>,
     pub product: ProductId,
     pub value: Decimal,
 }
@@ -49,11 +51,17 @@ impl Portfolio {
             match product {
                 None => plan.unmatched.push(row.clone()),
                 Some(p) if p.currency != currency => plan.wrong_currency.push(row.clone()),
-                Some(p) => plan.matched.push(MatchedRow {
-                    name: name.to_owned(),
-                    product: p.id,
-                    value: row.value,
-                }),
+                Some(p) => match plan.matched.iter_mut().find(|m| m.product == p.id) {
+                    Some(existing) => {
+                        existing.names.push(name.to_owned());
+                        existing.value += row.value;
+                    }
+                    None => plan.matched.push(MatchedRow {
+                        names: vec![name.to_owned()],
+                        product: p.id,
+                        value: row.value,
+                    }),
+                },
             }
         }
         plan

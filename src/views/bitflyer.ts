@@ -137,6 +137,17 @@ export function bitflyerPanel(ctx: Context): Panel {
     const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
     const parts: (HTMLElement | null)[] = [];
 
+    // A wrong link is undone here: removing the alias puts the name back among
+    // the unmatched ones, where it can be linked again.
+    const unlink = (productId: number, name: string): HTMLButtonElement => {
+      const button = h("button", { type: "button" }, t("Unlink"));
+      button.setAttribute("aria-label", `${t("Unlink")} ${name}`);
+      button.addEventListener("click", () => {
+        void ctx.apply({ type: "remove_alias", product: productId, source: SOURCE, name });
+      });
+      return button;
+    };
+
     if (plan.matched.length > 0) {
       parts.push(
         h(
@@ -148,7 +159,14 @@ export function bitflyerPanel(ctx: Context): Panel {
             h(
               "thead",
               {},
-              h("tr", {}, h("th", {}, t("Currency")), h("th", {}, t("Product")), h("th", {}, t("Value (JPY)"))),
+              h(
+                "tr",
+                {},
+                h("th", {}, t("Currency")),
+                h("th", {}, t("Product")),
+                h("th", {}, t("Value (JPY)")),
+                h("th", {}, ""),
+              ),
             ),
             h(
               "tbody",
@@ -157,9 +175,10 @@ export function bitflyerPanel(ctx: Context): Panel {
                 h(
                   "tr",
                   {},
-                  h("th", { scope: "row" }, row.name),
+                  h("th", { scope: "row" }, row.names.join(", ")),
                   h("td", {}, productName(row.product)),
                   h("td", { class: "num" }, yen(row.value)),
+                  h("td", {}, ...row.names.map((name) => unlink(row.product, name))),
                 ),
               ),
             ),
@@ -207,6 +226,12 @@ export function bitflyerPanel(ctx: Context): Panel {
             names: plan.wrong_currency.map((r) => r.name).join(", "),
           }),
         ),
+        ...plan.wrong_currency.map((row) => {
+          const owner = view.portfolio.products.find((p) =>
+            p.aliases.some((a) => a.source === SOURCE && a.name === row.name),
+          );
+          return owner ? h("div", { class: "add-row" }, h("span", {}, row.name), unlink(owner.id, row.name)) : null;
+        }),
       );
     }
     if (unpriced.length > 0) {

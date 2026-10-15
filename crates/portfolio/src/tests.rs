@@ -636,6 +636,7 @@ fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
 
     assert_eq!(plan.matched.len(), 1);
     assert_eq!(plan.matched[0].product, prod);
+    assert_eq!(plan.matched[0].names, vec!["BTC"]);
     assert_eq!(plan.unmatched, vec![row("ETH")]);
     assert_eq!(plan.wrong_currency, vec![row("USDT")]);
     // Another source's alias does not count.
@@ -643,4 +644,33 @@ fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
         p.plan_import("other", "JPY", &[row("BTC")]).unmatched.len(),
         1
     );
+}
+
+#[test]
+fn plan_import_adds_up_names_linked_to_the_same_product() {
+    let (mut p, _, prod, _) = sample();
+    for name in ["BTC", "ETH"] {
+        apply(
+            &mut p,
+            Edit::AddAlias {
+                product: prod,
+                source: "bitflyer".to_owned(),
+                name: name.to_owned(),
+            },
+        );
+    }
+    let row = |name: &str, value| ImportRow {
+        name: name.to_owned(),
+        value,
+    };
+
+    let plan = p.plan_import(
+        "bitflyer",
+        "JPY",
+        &[row("BTC", dec!(10)), row("ETH", dec!(5))],
+    );
+
+    assert_eq!(plan.matched.len(), 1);
+    assert_eq!(plan.matched[0].names, vec!["BTC", "ETH"]);
+    assert_eq!(plan.matched[0].value, dec!(15));
 }

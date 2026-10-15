@@ -116,6 +116,7 @@ export type Edit =
   | { type: "remove_holding"; account: number; product: number }
   | { type: "replace_holdings"; account: number; holdings: { product: number; value: string }[] }
   | { type: "add_alias"; product: number; source: string; name: string }
+  | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
   | { type: "set_tolerances"; category: string; product: string }
   | { type: "set_target_account"; account: number | null };
@@ -217,7 +218,7 @@ export interface ImportRow {
 }
 
 export interface MatchedRow {
-  name: string;
+  names: string[];
   product: number;
   value: string;
 }
