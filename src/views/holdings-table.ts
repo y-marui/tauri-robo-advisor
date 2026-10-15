@@ -18,8 +18,9 @@ function points(difference: string): string {
   return text.startsWith("-") || text === "0" ? text : `+${text}`;
 }
 
+/** Below target would be corrected by buying, above target by selling. */
 function differenceClass(difference: string): string {
-  return difference.startsWith("-") ? "delta-sell" : difference === "0" ? "" : "delta-buy";
+  return difference.startsWith("-") ? "delta-buy" : difference === "0" ? "" : "delta-sell";
 }
 
 export function holdingsTablePanel(ctx: Context): Panel {
