@@ -170,8 +170,8 @@ export const MESSAGES = {
   },
   "Replace holdings": { ja: "保有を置き換える" },
   "Confirm replace": { ja: "置き換える" },
-  "This replaces every holding of the chosen account with the linked balances above.": {
-    ja: "選んだ口座の保有を、上の対応づけ済みの残高ですべて置き換えます。",
+  "This replaces every holding of “{account}” with the linked balances above.": {
+    ja: "「{account}」の保有を、上の対応づけ済みの残高ですべて置き換えます。",
   },
 } as const satisfies Record<string, { ja: string }>;
 

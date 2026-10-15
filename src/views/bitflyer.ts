@@ -93,6 +93,13 @@ export function bitflyerPanel(ctx: Context): Panel {
   let sequence = 0;
   let accountSignature: string | null = null;
 
+  // The confirmation and the note name the selected account, so redraw them.
+  accountSelect.addEventListener("change", () => {
+    void showPlan().catch((error) =>
+      result.replaceChildren(h("p", { class: "note error" }, String(error))),
+    );
+  });
+
   fetchButton.addEventListener("click", () => {
     fetchButton.disabled = true;
     result.replaceChildren(h("p", { class: "note" }, t("Fetching…")));
@@ -128,7 +135,6 @@ export function bitflyerPanel(ctx: Context): Panel {
 
   function planView(view: PortfolioView, plan: ImportPlan): HTMLElement {
     const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
-    const accountId = Number(accountSelect.value);
     const parts: (HTMLElement | null)[] = [];
 
     if (plan.matched.length > 0) {
@@ -216,7 +222,7 @@ export function bitflyerPanel(ctx: Context): Panel {
     }
 
     const apply = h("button", { type: "button" }, t("Replace holdings"));
-    apply.disabled = !Number.isFinite(accountId) || accountSelect.value === "";
+    apply.disabled = accountSelect.value === "";
     let armed: number | undefined;
     apply.addEventListener("click", () => {
       if (armed === undefined) {
@@ -231,6 +237,13 @@ export function bitflyerPanel(ctx: Context): Panel {
       }
       window.clearTimeout(armed);
       armed = undefined;
+      // Read the account now, not when the plan was drawn: the user may have
+      // changed the selection in between.
+      const accountId = Number(accountSelect.value);
+      if (accountSelect.value === "" || !Number.isFinite(accountId)) {
+        ctx.fail(t("Choose an account first."));
+        return;
+      }
       void ctx.apply({
         type: "replace_holdings",
         account: accountId,
@@ -241,7 +254,10 @@ export function bitflyerPanel(ctx: Context): Panel {
       h(
         "p",
         { class: "note" },
-        t("This replaces every holding of the chosen account with the linked balances above."),
+        t("This replaces every holding of “{account}” with the linked balances above.", {
+          account:
+            view.portfolio.accounts.find((a) => String(a.id) === accountSelect.value)?.name ?? "?",
+        }),
       ),
       apply,
     );
