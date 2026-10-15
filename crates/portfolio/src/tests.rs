@@ -674,3 +674,60 @@ fn plan_import_adds_up_names_linked_to_the_same_product() {
     assert_eq!(plan.matched[0].names, vec!["BTC", "ETH"]);
     assert_eq!(plan.matched[0].value, dec!(15));
 }
+
+#[test]
+fn import_mappings_are_saved_per_source_and_replaced() {
+    let mut p = Portfolio::default();
+    let set = |source: &str, name_column, value_column| Edit::SetImportMapping {
+        source: source.to_owned(),
+        name_column,
+        value_column,
+        header_rows: 1,
+    };
+
+    apply(&mut p, set(" SBI ", 0, 5));
+    apply(&mut p, set("Monex", 1, 2));
+    apply(&mut p, set("SBI", 0, 6));
+
+    assert_eq!(p.import_mappings.len(), 2);
+    assert_eq!(p.import_mappings[0].source, "SBI");
+    assert_eq!(p.import_mappings[0].value_column, 6);
+
+    apply(
+        &mut p,
+        Edit::RemoveImportMapping {
+            source: "Monex".to_owned(),
+        },
+    );
+    assert_eq!(p.import_mappings.len(), 1);
+}
+
+#[test]
+fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
+    let mut p = Portfolio::default();
+    let before = p.clone();
+
+    for edit in [
+        Edit::SetImportMapping {
+            source: "SBI".to_owned(),
+            name_column: 3,
+            value_column: 3,
+            header_rows: 0,
+        },
+        Edit::SetImportMapping {
+            source: "SBI".to_owned(),
+            name_column: 0,
+            value_column: 5000,
+            header_rows: 0,
+        },
+        Edit::SetImportMapping {
+            source: "  ".to_owned(),
+            name_column: 0,
+            value_column: 1,
+            header_rows: 0,
+        },
+    ] {
+        assert!(p.apply(edit).is_err());
+    }
+    assert_eq!(p, before);
+}

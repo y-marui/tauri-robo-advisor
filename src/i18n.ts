@@ -162,18 +162,50 @@ export const MESSAGES = {
   },
   "Link": { ja: "対応づける" },
   "Unlink": { ja: "対応づけを外す" },
-  "Add a JPY product first.": { ja: "先に、円建ての商品を追加してください。" },
-  "Linked to a product that is not in JPY, so they are left out: {names}": {
-    ja: "円建てでない商品に対応づけられているため、除外します: {names}",
+  "Add a {currency} product first.": { ja: "先に、{currency} 建ての商品を追加してください。" },
+  "Linked to a product that is not in {currency}, so they are left out: {names}": {
+    ja: "{currency} 建てでない商品に対応づけられているため、除外します: {names}",
   },
+  "Value ({currency})": { ja: "評価額 ({currency})" },
   "No JPY market, so these could not be valued and are left out: {names}": {
     ja: "円の市場がなく評価できないため、除外します: {names}",
   },
   "Replace holdings": { ja: "保有を置き換える" },
   "Confirm replace": { ja: "置き換える" },
-  "This replaces every holding of “{account}” with the linked balances above.": {
-    ja: "「{account}」の保有を、上の対応づけ済みの残高ですべて置き換えます。",
+  "This replaces every holding of “{account}” with the linked rows above.": {
+    ja: "「{account}」の保有を、上の対応づけ済みの行ですべて置き換えます。",
   },
+  "Import a table": { ja: "表の取り込み" },
+  "Log in to your brokerage in your own browser, then save the holdings as a CSV file or copy the table, and load it here.": {
+    ja: "証券会社には自分のブラウザでログインし、保有を CSV で保存するか、表をコピーして、ここに読み込んでください。",
+  },
+  "Source name": { ja: "取り込み元の名前" },
+  "Currency of the values": { ja: "値の通貨" },
+  "Choose a file": { ja: "ファイルを選ぶ" },
+  "Pasted table": { ja: "貼り付けた表" },
+  "Or paste the table here": { ja: "または、表をここに貼り付けてください" },
+  "Read pasted text": { ja: "貼り付けを読み込む" },
+  "Name column": { ja: "名前の列" },
+  "Value column": { ja: "評価額の列" },
+  "Heading rows": { ja: "見出しの行数" },
+  "Column": { ja: "列" },
+  "Save columns": { ja: "列の対応を保存" },
+  "Preview import": { ja: "取り込みを確認" },
+  "Reading…": { ja: "読み込み中…" },
+  "Could not read: {reason}": { ja: "読み込めませんでした: {reason}" },
+  "The file is too large.": { ja: "ファイルが大きすぎます。" },
+  "Paste a table first.": { ja: "先に表を貼り付けてください。" },
+  "Enter a source name and choose the columns first.": {
+    ja: "先に、取り込み元の名前と列を指定してください。",
+  },
+  "{rows} rows, {columns} columns": { ja: "{rows} 行、{columns} 列" },
+  "{count} rows read": { ja: "{count} 行を読み取りました" },
+  "{count} rows were left out: {rows}": { ja: "{count} 行を除外しました: {rows}" },
+  "row": { ja: "行" },
+  "column missing": { ja: "列がない" },
+  "no name": { ja: "名前がない" },
+  "not a number": { ja: "数値でない" },
+  "negative or too large": { ja: "負の値、または大きすぎる" },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use portfolio::{Edit, ImportPlan, ImportRow, Issue, Portfolio};
 use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
+use tabular::{ColumnMapping, Skipped, Table};
 
 use crate::store;
 
@@ -32,12 +33,43 @@ pub struct AppState {
     /// `Err` holds why the stored file could not be loaded. While it is an
     /// error nothing is written, so the unreadable file is never overwritten.
     portfolio: Mutex<Result<Portfolio, String>>,
+    /// The table last read for an import, kept here so the frontend does not
+    /// send a large table back and forth. It holds holdings, so it is dropped
+    /// as soon as it is replaced or cleared.
+    table: Mutex<Option<Table>>,
+}
+
+/// How many rows and how many characters per cell the preview shows.
+const PREVIEW_ROWS: usize = 30;
+const PREVIEW_CELL_CHARS: usize = 60;
+
+/// The top of a table read for an import, enough to choose the columns.
+#[derive(Debug, Serialize)]
+pub struct TablePreview {
+    pub rows: Vec<Vec<String>>,
+    pub total_rows: usize,
+    pub columns: usize,
+    pub encoding: Option<tabular::Encoding>,
+    pub delimiter: tabular::Delimiter,
+}
+
+/// What importing the loaded table would do.
+#[derive(Debug, Serialize)]
+pub struct TableImportPlan {
+    pub plan: ImportPlan,
+    /// Rows that were left out, so nothing is dropped silently.
+    pub skipped: Vec<Skipped>,
+    pub rows_read: usize,
 }
 
 impl AppState {
     pub fn load(path: PathBuf) -> Self {
         let portfolio = Mutex::new(store::load(&path));
-        Self { path, portfolio }
+        Self {
+            path,
+            portfolio,
+            table: Mutex::new(None),
+        }
     }
 
     pub fn view(&self) -> Result<PortfolioView, String> {
@@ -97,6 +129,70 @@ impl AppState {
         let guard = self.lock()?;
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
         Ok(portfolio.plan_import(source, currency, rows))
+    }
+
+    /// Keeps a table read for an import and returns its top for the preview.
+    pub fn keep_table(&self, table: Table) -> Result<TablePreview, String> {
+        let preview = TablePreview {
+            rows: table
+                .rows
+                .iter()
+                .take(PREVIEW_ROWS)
+                .map(|row| {
+                    row.iter()
+                        .map(|cell| cell.chars().take(PREVIEW_CELL_CHARS).collect())
+                        .collect()
+                })
+                .collect(),
+            total_rows: table.rows.len(),
+            columns: table.columns(),
+            encoding: table.encoding,
+            delimiter: table.delimiter,
+        };
+        *self.lock_table()? = Some(table);
+        Ok(preview)
+    }
+
+    pub fn clear_table(&self) -> Result<(), String> {
+        *self.lock_table()? = None;
+        Ok(())
+    }
+
+    /// Picks the chosen columns of the kept table and links the rows to products
+    /// by alias. Nothing is changed or saved.
+    pub fn plan_table_import(
+        &self,
+        source: &str,
+        currency: &str,
+        mapping: &ColumnMapping,
+    ) -> Result<TableImportPlan, String> {
+        let extraction = {
+            let table = self.lock_table()?;
+            let table = table
+                .as_ref()
+                .ok_or_else(|| "No table is loaded.".to_owned())?;
+            tabular::extract(&table.rows, mapping)
+        };
+        let rows: Vec<ImportRow> = extraction
+            .rows
+            .iter()
+            .map(|r| ImportRow {
+                name: r.name.clone(),
+                value: r.value,
+            })
+            .collect();
+        let plan = self.plan_import(source, currency, &rows)?;
+        Ok(TableImportPlan {
+            plan,
+            skipped: extraction.skipped,
+            rows_read: rows.len(),
+        })
+    }
+
+    fn lock_table(&self) -> Result<std::sync::MutexGuard<'_, Option<Table>>, String> {
+        self.table
+            .lock()
+            .map_err(|_| "The data is temporarily unavailable.".to_owned())
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Result<Portfolio, String>>, String> {
@@ -214,5 +310,51 @@ mod tests {
         assert!(state.view().is_err());
         assert!(state.apply(add_account("Account 1")).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"not json");
+    }
+
+    #[test]
+    fn a_loaded_table_is_planned_with_the_chosen_columns_and_dropped_when_cleared() {
+        let state = AppState::load(temp_path("table"));
+        state
+            .apply(Edit::AddCategory {
+                name: "A".to_owned(),
+                target_weight: rust_decimal::Decimal::ONE,
+            })
+            .unwrap();
+        let category = state.view().unwrap().portfolio.categories[0].id;
+        state
+            .apply(Edit::AddProduct {
+                name: "Fund".to_owned(),
+                category,
+                currency: "JPY".to_owned(),
+            })
+            .unwrap();
+        let product = state.view().unwrap().portfolio.products[0].id;
+        state
+            .apply(Edit::AddAlias {
+                product,
+                source: "Test".to_owned(),
+                name: "Fund X".to_owned(),
+            })
+            .unwrap();
+        let table =
+            tabular::read_text("name,value\nFund X,\"1,000\"\nUnknown,5\ntotal,-\n").unwrap();
+        let preview = state.keep_table(table).unwrap();
+        assert_eq!(preview.total_rows, 4);
+
+        let mapping = ColumnMapping {
+            name: 0,
+            value: 1,
+            header_rows: 1,
+        };
+        let result = state.plan_table_import("Test", "JPY", &mapping).unwrap();
+
+        assert_eq!(result.rows_read, 2);
+        assert_eq!(result.plan.matched.len(), 1);
+        assert_eq!(result.plan.unmatched.len(), 1);
+        assert_eq!(result.skipped.len(), 1);
+
+        state.clear_table().unwrap();
+        assert!(state.plan_table_import("Test", "JPY", &mapping).is_err());
     }
 }

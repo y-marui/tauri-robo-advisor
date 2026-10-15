@@ -5,7 +5,7 @@ mod store;
 
 use std::sync::Arc;
 
-use app_state::{AppState, PortfolioView};
+use app_state::{AppState, PortfolioView, TableImportPlan, TablePreview};
 use bitflyer::{Client, Holdings, ReqwestTransport};
 use portfolio::{Edit, ImportPlan, ImportRow};
 use rebalance::{Holding, Params, Proposal, Target};
@@ -98,6 +98,62 @@ async fn plan_import(
         .map_err(|e| e.to_string())?
 }
 
+// Reading a table for an import. The input comes from a file the user chose or
+// from pasted text; both are untrusted, so the `tabular` crate limits the size
+// and returns an error for anything it cannot read. The table is kept here and
+// only its top is returned.
+#[tauri::command]
+async fn load_table_file(
+    state: State<'_, Arc<AppState>>,
+    bytes: Vec<u8>,
+) -> Result<TablePreview, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let table = tabular::read_file(&bytes).map_err(|e| e.to_string())?;
+        state.keep_table(table)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn load_table_text(
+    state: State<'_, Arc<AppState>>,
+    text: String,
+) -> Result<TablePreview, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let table = tabular::read_text(&text).map_err(|e| e.to_string())?;
+        state.keep_table(table)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn clear_table(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.clear_table())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// A read-only preview of importing the loaded table with the chosen columns.
+#[tauri::command]
+async fn plan_table_import(
+    state: State<'_, Arc<AppState>>,
+    source: String,
+    currency: String,
+    mapping: tabular::ColumnMapping,
+) -> Result<TableImportPlan, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        state.plan_table_import(&source, &currency, &mapping)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // A read-only valuation for the balance charts.
 #[tauri::command]
 async fn get_overview(state: State<'_, Arc<AppState>>) -> Result<Overview, String> {
@@ -181,6 +237,10 @@ pub fn run() {
             apply_portfolio_edit,
             get_overview,
             plan_import,
+            load_table_file,
+            load_table_text,
+            clear_table,
+            plan_table_import,
             get_account_balance,
             suggest_rebalance,
             export_all

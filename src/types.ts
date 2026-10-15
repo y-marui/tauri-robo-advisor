@@ -46,6 +46,14 @@ export interface Holding {
   quantity: string | null;
 }
 
+/** Which columns of a source's table hold the name and the value (counted from 0). */
+export interface ImportMapping {
+  source: string;
+  name_column: number;
+  value_column: number;
+  header_rows: number;
+}
+
 export interface Settings {
   usd_jpy: string | null;
   category_tolerance: string;
@@ -61,6 +69,7 @@ export interface Portfolio {
   accounts: Account[];
   holdings: Holding[];
   settings: Settings;
+  import_mappings: ImportMapping[];
 }
 
 export type Issue =
@@ -115,6 +124,14 @@ export type Edit =
     }
   | { type: "remove_holding"; account: number; product: number }
   | { type: "replace_holdings"; account: number; holdings: { product: number; value: string }[] }
+  | {
+      type: "set_import_mapping";
+      source: string;
+      name_column: number;
+      value_column: number;
+      header_rows: number;
+    }
+  | { type: "remove_import_mapping"; source: string }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
@@ -233,4 +250,33 @@ export interface ImportPlan {
 export interface BitflyerHoldings {
   holdings: { symbol: string; value: string }[];
   unpriced: string[];
+}
+
+/** The top of a table read for an import. Mirrors `TablePreview` in Rust. */
+export interface TablePreview {
+  rows: string[][];
+  total_rows: number;
+  columns: number;
+  encoding: "utf8" | "shift_jis" | null;
+  delimiter: "comma" | "tab";
+}
+
+export interface ColumnMapping {
+  name: number;
+  value: number;
+  header_rows: number;
+}
+
+export type SkipReason = "missing_column" | "no_name" | "not_a_number" | "out_of_range";
+
+export interface Skipped {
+  /** The row's position in the table, counted from 1. */
+  row: number;
+  reason: SkipReason;
+}
+
+export interface TableImportPlan {
+  plan: ImportPlan;
+  skipped: Skipped[];
+  rows_read: number;
 }
