@@ -12,6 +12,7 @@
 
 ### Changed
 
+- Removed the unused `tauri-plugin-opener` plugin and its `opener:default` permission to reduce the permission surface and dependencies.
 - Set a strict Content Security Policy (production `csp` and development `devCsp`) instead of the scaffold default `null`.
 - Relicensed from MIT to AGPL v3 (`AGPL-3.0-only`), with contribution terms that allow future commercial licensing.
 
