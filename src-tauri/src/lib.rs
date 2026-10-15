@@ -1,3 +1,6 @@
+mod secrets;
+
+use bitflyer::{Client, Holdings, ReqwestTransport};
 use rebalance::{Holding, Params, Proposal, Target};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -17,10 +20,55 @@ fn propose_rebalance(
     rebalance::propose(&holdings, &targets, &params).map_err(|e| e.to_string())
 }
 
+// The commands below only ever hand the frontend a yes/no or the fetched
+// holdings; the API key and secret never cross the IPC boundary outward.
+// Keychain access can block (and may prompt the user), so it runs off the
+// async runtime's worker threads.
+#[tauri::command]
+async fn save_bitflyer_credentials(api_key: String, api_secret: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::save_bitflyer(&api_key, &api_secret))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn has_bitflyer_credentials() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(|| secrets::load_bitflyer().map(|c| c.is_some()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn delete_bitflyer_credentials() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(secrets::delete_bitflyer)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fetch_bitflyer_holdings() -> Result<Holdings, String> {
+    let credentials = tauri::async_runtime::spawn_blocking(secrets::load_bitflyer)
+        .await
+        .map_err(|e| e.to_string())??
+        .ok_or_else(|| "No bitFlyer API credentials are saved.".to_owned())?;
+    let transport = ReqwestTransport::new().map_err(|e| e.to_string())?;
+    Client::new(transport, credentials)
+        .holdings()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet, propose_rebalance])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            propose_rebalance,
+            save_bitflyer_credentials,
+            has_bitflyer_credentials,
+            delete_bitflyer_credentials,
+            fetch_bitflyer_holdings
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

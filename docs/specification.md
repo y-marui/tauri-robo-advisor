@@ -53,7 +53,20 @@ Broker site / API → Acquisition (Rust) → Normalized asset model → Rebalanc
 | 対象 | 方式 | 状況 |
 |---|---|---|
 | SBI 証券・マネックス証券 | 利用者がブラウザでログインし、保有一覧のファイルをダウンロードして取り込む | 方式は決定。各社が提供するファイルの形式（列・文字コード）は未調査 |
-| bitFlyer | REST API。API キーは OS のキーチェーンに保存する | 方式は決定。未実装 |
+| bitFlyer | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。証拠金の取得は未実装 |
 | ブラウザ拡張 | ログイン済みのブラウザで資産ページを読み取り、ローカルのアプリへ渡す | 将来の選択肢。必要になった時点で設計する |
 
 取り込み処理は、ファイルを読む部分と、共通の資産モデルへ変換するパーサーを分ける。パーサーは社ごとに独立した Rust のモジュール（Tauri に依存しない）とし、入力ファイルの検証と、想定外の形式でのエラーを明示的に扱う。
+
+## bitFlyer Balances
+
+`crates/bitflyer` が `GET /v1/me/getbalance` で残高を取得し、JPY 建ての保有（`rebalance::Holding`）へ変換する。
+
+- API キーには「資産残高を取得」の権限だけを付ける。注文・出金などの権限は不要で、クライアントは `GET` しか送らない。
+- 署名は `ACCESS-TIMESTAMP + GET + パス + 本文` の HMAC-SHA256（16 進）。
+- 通信は固定の `https://api.bitflyer.com` のみ。リダイレクトは追従せず、タイムアウトと応答サイズの上限を設ける。
+- JPY 以外の通貨は、公開 API の `GET /v1/ticker?product_code=<通貨>_JPY` の最終取引価格で評価する（認証情報は送らない）。残高 0 は除く。
+- JPY 市場がない通貨（HTTP 400）は評価できないので、`unpriced` として一覧で返す。黙って捨てるとポートフォリオを誤って表示するため。
+- 数値は JSON の文字列のまま十進数へ変換し、浮動小数点を通さない。
+- API キーとシークレットは OS のキーチェーンにだけ保存し、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
+- フロントエンドから呼べるコマンド: `save_bitflyer_credentials`、`has_bitflyer_credentials`、`delete_bitflyer_credentials`、`fetch_bitflyer_holdings`。
