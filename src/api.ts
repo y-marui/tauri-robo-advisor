@@ -8,6 +8,14 @@ export function getPortfolio(): Promise<PortfolioView> {
 }
 
 /**
+ * Writes every record as CSV and JSON files into a new folder and returns the
+ * folder. Rust chooses the location and the names.
+ */
+export function exportAll(): Promise<string> {
+  return invoke<string>("export_all");
+}
+
+/**
  * Sends one edit. Rust validates it, saves it, and returns the new state; a
  * rejected edit rejects this promise with a message and changes nothing.
  */

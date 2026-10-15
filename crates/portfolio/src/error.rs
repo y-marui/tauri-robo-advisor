@@ -16,6 +16,10 @@ pub enum Error {
     Corrupt(String),
     #[error("an amount is too large to calculate exactly")]
     Overflow,
+    #[error("holdings in {0} cannot be valued; only JPY and USD are supported")]
+    UnsupportedCurrency(String),
+    #[error("the USD/JPY rate is not set")]
+    MissingExchangeRate,
 }
 
 /// A problem that does not block saving but blocks computing suggestions.

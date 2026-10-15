@@ -644,20 +644,16 @@ impl<'a> Book<'a> {
     }
 }
 
-/// Converts a holding's value to JPY. Only JPY and USD are supported; the USD
-/// rate is a single number the user enters.
+/// Converts a holding's value to JPY and refuses amounts that could overflow
+/// the arithmetic below.
 fn to_jpy(portfolio: &Portfolio, currency: &str, value: Decimal) -> Result<Decimal, Error> {
-    let jpy = match currency {
-        "JPY" => value,
-        "USD" => {
-            let rate = portfolio
-                .settings
-                .usd_jpy
-                .ok_or(Error::MissingExchangeRate)?;
-            value.checked_mul(rate).ok_or(Error::TooLarge)?
-        }
-        other => return Err(Error::UnsupportedCurrency(other.to_owned())),
-    };
+    let jpy = portfolio
+        .value_in_jpy(currency, value)
+        .map_err(|error| match error {
+            portfolio::Error::UnsupportedCurrency(code) => Error::UnsupportedCurrency(code),
+            portfolio::Error::MissingExchangeRate => Error::MissingExchangeRate,
+            _ => Error::TooLarge,
+        })?;
     if jpy > MAX_AMOUNT {
         return Err(Error::TooLarge);
     }

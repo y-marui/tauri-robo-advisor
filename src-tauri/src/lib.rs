@@ -1,4 +1,5 @@
 mod app_state;
+mod exporter;
 mod secrets;
 mod store;
 
@@ -94,6 +95,37 @@ async fn suggest_rebalance(
         .map_err(|e| e.to_string())?
 }
 
+// Writes the full-record export (CSV files and JSON) into a new folder in the
+// user's Downloads and returns the folder. The user triggers it; the names and
+// location are chosen here, never by the frontend.
+#[tauri::command]
+async fn export_all(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let base = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().document_dir())
+        .map_err(|_| "Could not find a folder to export to.".to_owned())?;
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let (stamp, exported_at) = exporter::utc_stamp(seconds);
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let info = export::Info {
+            app_version: env!("CARGO_PKG_VERSION"),
+            exported_at: &exported_at,
+        };
+        let files = state.export_files(&info)?;
+        let folder = exporter::write_export(&base, &stamp, &files)?;
+        Ok(folder.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -111,7 +143,8 @@ pub fn run() {
             fetch_bitflyer_holdings,
             get_portfolio,
             apply_portfolio_edit,
-            suggest_rebalance
+            suggest_rebalance,
+            export_all
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

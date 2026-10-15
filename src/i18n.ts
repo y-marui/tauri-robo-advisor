@@ -58,6 +58,12 @@ export const MESSAGES = {
   "Rebalancing account": { ja: "全体リバランスの対象口座" },
   "None": { ja: "なし" },
   "Value": { ja: "評価額" },
+  "Export": { ja: "エクスポート" },
+  "Exporting…": { ja: "書き出し中…" },
+  "Exported to {folder}. The files contain your holdings; keep them private.": {
+    ja: "{folder} に書き出しました。ファイルには保有資産が含まれるので、取り扱いに注意してください。",
+  },
+  "Could not export: {reason}": { ja: "書き出せませんでした: {reason}" },
   "Loading…": { ja: "読み込み中…" },
   "Saved.": { ja: "保存しました。" },
   "Could not save: {reason}": { ja: "保存できませんでした: {reason}" },
