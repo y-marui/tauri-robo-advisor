@@ -36,7 +36,7 @@ AI はタスク開始時に以下の順で参照する:
 | フロントエンド | TypeScript（vanilla）+ Vite |
 | パッケージ管理 | npm（`package-lock.json`）/ cargo（`Cargo.lock`） |
 | Lint / Format | `tsc --noEmit` / `cargo fmt` / `cargo clippy -D warnings` |
-| テスト | `cargo test` |
+| テスト | `npm test`（フロントエンドの単体テスト。Node 組み込みのテストランナー）/ `cargo test` |
 | 対象 OS | macOS / Windows / Linux（デスクトップ優先。モバイルは対象外） |
 
 **主要ディレクトリ:**
@@ -92,12 +92,15 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 - **まとまったロジックは個別の Rust リポジトリへの切り出しを検討する。** 基準と手順は `docs/architecture.md` の Extraction Policy に従う。条件を満たす前に分けない。切り出し先のリポジトリ名は `rust-` を先頭に付ける。
 - **金額計算は浮動小数点を使わない。** Rust 側で decimal 型を使う。
 - **証券会社の画面を自動で読み取る処理は個人利用に限る。** 将来ブラウザ拡張などで自動化する場合は、利用規約を確認し、画面構造の変更で壊れうることを前提に、取得部分を差し替え可能なモジュールに閉じ込める。取り込みは、列の対応づけを利用者が指定する汎用方式にし、証券会社ごとの専用パーサーは作らない（形式は会社ごと・版ごとに変わり、公開仕様もないため）。取得元の名称は、利用者が確認した別名で商品へ対応づけ、自動推測しない。
+- **エクスポートには保有資産が含まれる。** 書き出し先はアプリが決めた新しいフォルダだけ（フロントエンドから指定させない）。所有者のみの権限で作り、既存のものを上書きしない。利用者が入力した名前は、表計算ソフトで数式として実行されないようテキストとして書く。
 - **本アプリは投資助言ではない。** リバランス案は機械的な計算結果であり、売買は利用者が自分で行う。
 - **過去のリポジトリ・旧アカウントとは無関係の新規実装。** 旧コードを持ち込まない。ポートフォリオの実データ（配分比率など）をリポジトリに含めない。
 
 ### Tauri Notes
 
-- Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。
+- Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。ポートフォリオは Rust が持ち、フロントエンドは `get_portfolio`（状態と不備の一覧）、`apply_portfolio_edit`（検証・保存は Rust）、`export_all`（全データの書き出し）を使う。`suggest_rebalance`（読み取り専用の提案）はコマンドとして公開済みだが、画面からはまだ呼んでいない（#15 で接続する）。
+- 金額と比率は、フロントエンドでも十進数の文字列のまま扱い、数値型に変換しない。％と小数の変換は文字列の小数点の移動だけで行う（`src/decimal.ts`）。
+- フロントエンドの単体テストは `src/*.test.ts`（`npm test`）。`@types/node` を入れないため、`tsc` の対象から外している。
 - `src-tauri/tauri.conf.json` に CSP（本番 `csp` と開発用 `devCsp`）を設定してある。外部への接続や外部スクリプトが必要になったら、許可先を最小限で追加し、`docs/architecture.md` に理由を記録する。
 - Cargo のルートは `Cargo.toml`（ワークスペース）。`Cargo.lock` はルートでコミットし、CI は `--locked` で実行する。
 - `withGlobalTauri` は無効にしてある。フロントエンドは `@tauri-apps/api` を import して使い、`window.__TAURI__` に頼らない。
@@ -109,7 +112,7 @@ make install        # npm ci
 make dev            # npm run tauri dev
 make lint           # tsc --noEmit + cargo fmt --all --check + cargo clippy --workspace
 make format         # cargo fmt
-make test           # cargo test
+make test           # npm test + cargo test
 make build          # npm run tauri build -- --no-bundle
 make all            # lint + test
 make update-charter # git subtree pull で dev-charter を最新化
