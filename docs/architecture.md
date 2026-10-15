@@ -61,7 +61,6 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 | ライブラリ / モジュール | 用途 |
 |---|---|
 | `tauri` | アプリ基盤 |
-| `tauri-plugin-opener` | 既定ブラウザでリンクを開く（雛形由来） |
 | `serde` / `serde_json` | シリアライズ |
 | `rust_decimal` | 金額の正確な十進演算（`rebalance`）。IPC では文字列として受け渡す |
 | `thiserror` | `rebalance` のエラー型 |
