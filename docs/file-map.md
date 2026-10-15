@@ -16,6 +16,7 @@ _最終更新: 2026-10-15_
 | `src/views/holdings-table.ts` | 中央パネル。カテゴリ別の保有の一覧、小計、その場の編集 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/account-tabs.ts` | 右パネル。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（全体のバランスと口座のタブで共有） | `src/api.ts` |
+| `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネル、全体のバランス（グラフと提案）のパネル、不備の表示 | `src/panel.ts`, `src/fields.ts` |
 | `src/*.test.ts` | Node の組み込みテストランナーによる単体テスト（`npm test`） | — |
 | `src/styles.css` | スタイル | — |

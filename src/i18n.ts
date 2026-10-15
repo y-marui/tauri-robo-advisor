@@ -141,6 +141,38 @@ export const MESSAGES = {
   "No accounts yet.": { ja: "口座がまだありません。" },
   "Nothing held or buyable in this account.": { ja: "この口座には、保有も買える商品もありません。" },
   "Choose an account first.": { ja: "先に口座を選んでください。" },
+  "API key": { ja: "API キー" },
+  "API secret": { ja: "API シークレット" },
+  "Save key": { ja: "キーを保存" },
+  "No key is saved.": { ja: "キーは保存されていません。" },
+  "A key is saved in the system keychain. It cannot be shown again.": {
+    ja: "キーはシステムのキーチェーンに保存されています。再表示はできません。",
+  },
+  "Enter both the API key and the secret.": { ja: "API キーとシークレットの両方を入力してください。" },
+  "Create the API key with the balance-read permission only. No trading or withdrawal permission is needed.": {
+    ja: "API キーには、資産残高の取得の権限だけを付けて作成してください。取引や出金の権限は不要です。",
+  },
+  "Balances": { ja: "残高" },
+  "Account to update": { ja: "更新する口座" },
+  "Fetch balances": { ja: "残高を取得" },
+  "Fetching…": { ja: "取得中…" },
+  "Could not fetch: {reason}": { ja: "取得できませんでした: {reason}" },
+  "Link each name to a product. The choice is remembered.": {
+    ja: "名前ごとに商品を選んでください。選んだ対応は記憶されます。",
+  },
+  "Link": { ja: "対応づける" },
+  "Add a JPY product first.": { ja: "先に、円建ての商品を追加してください。" },
+  "Linked to a product that is not in JPY, so they are left out: {names}": {
+    ja: "円建てでない商品に対応づけられているため、除外します: {names}",
+  },
+  "No JPY market, so these could not be valued and are left out: {names}": {
+    ja: "円の市場がなく評価できないため、除外します: {names}",
+  },
+  "Replace holdings": { ja: "保有を置き換える" },
+  "Confirm replace": { ja: "置き換える" },
+  "This replaces every holding of the chosen account with the linked balances above.": {
+    ja: "選んだ口座の保有を、上の対応づけ済みの残高ですべて置き換えます。",
+  },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

@@ -4,6 +4,7 @@
 
 ### Added
 
+- bitFlyer card: save and delete the API key (never shown again), fetch balances, link each currency to a product through an alias the user confirms, and replace an account's holdings with the linked balances. New `portfolio` pieces: the `ReplaceHoldings` edit and `plan_import` (also the base for the generic import).
 - Account tabs panel: one tab per account with the products inside the account compared with their weights (short or over, in yen) and a suggestion for adding to that account. The new read-only `get_account_balance` command supplies the figures from Rust; the suggestion box is now shared with the overall balance panel.
 - Holdings panel: holding records grouped by category with subtotal rows (value, share of the total, target, and difference in points), edited in place. `get_overview` now also returns each holding's JPY value and share, and one valuation is fetched per refresh for all panels.
 - Overall balance panel: target-vs-current bars and a composition pie in hand-written SVG, the rebalancing-account selector, and the four suggestion modes shown in the app. The new read-only `get_overview` command supplies the values and shares from Rust.

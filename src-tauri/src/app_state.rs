@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use portfolio::{Edit, Issue, Portfolio};
+use portfolio::{Edit, ImportPlan, ImportRow, Issue, Portfolio};
 use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
 
@@ -85,6 +85,18 @@ impl AppState {
         let guard = self.lock()?;
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
         suggest::account_balance(portfolio, account).map_err(|e| e.to_string())
+    }
+
+    /// Links imported rows to products by alias. Nothing is changed or saved.
+    pub fn plan_import(
+        &self,
+        source: &str,
+        currency: &str,
+        rows: &[ImportRow],
+    ) -> Result<ImportPlan, String> {
+        let guard = self.lock()?;
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        Ok(portfolio.plan_import(source, currency, rows))
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Result<Portfolio, String>>, String> {
