@@ -45,7 +45,7 @@ scripts/     # dev-charter 配布のチェックスクリプト
 |---|---|
 | `make dev` | 開発モードでアプリを起動 |
 | `make lint` | 型検査、`cargo fmt --check`、`cargo clippy` |
-| `make test` | Rust のテストを実行 |
+| `make test` | フロントエンドと Rust のテストを実行 |
 | `make build` | バンドルなしでアプリをビルド |
 | `make all` | lint と test |
 

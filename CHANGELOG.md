@@ -4,6 +4,7 @@
 
 ### Added
 
+- Manual entry screen (vanilla TypeScript, English and Japanese): categories, products, accounts, a holdings table, and settings, with every edit validated and saved by Rust. Frontend unit tests run with `npm test`.
 - `portfolio` crate with the portfolio model (categories, products, accounts, holdings, targets), validated edits, and integrity checks, plus JSON storage with atomic writes and the `get_portfolio` / `apply_portfolio_edit` commands.
 - `bitflyer` crate: read-only bitFlyer API client that signs requests, fetches balances, and values them in JPY from the public ticker; API credentials are stored in the OS keychain and never returned to the frontend.
 - `rebalance` crate: portfolio rebalancing calculation with exact decimal arithmetic, and the `propose_rebalance` Tauri command.
@@ -14,6 +15,7 @@
 
 ### Changed
 
+- Removed the scaffold demo (the `greet` command and the sample UI).
 - Documented the dashboard design: portfolio model, account roles, four suggestion modes, a generic table import with saved column mappings (instead of per-broker parsers), JSON storage, and the three-panel layout.
 - Changed the planned acquisition method for SBI Securities and Monex from in-app WebView login to importing files downloaded from the user's own browser session, because both brokerages require passkeys that embedded WebViews do not reliably support.
 - Removed the unused `tauri-plugin-opener` plugin and its `opener:default` permission to reduce the permission surface and dependencies.

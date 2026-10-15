@@ -1,117 +1,205 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.typescript:hover {
-  filter: drop-shadow(0 0 2em #2d79c7);
-}
+/* Light and dark follow the system (docs/dev-charter/UI_GUIDELINES.md). The
+   accent keeps its hue and flips its lightness between the two modes. */
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+  --bg: #ffffff;
+  --text: #4e454a;
+  --strong: #000000;
+  --line: #d9d4d7;
+  --field: #f6f4f5;
+  --error: #b3261e;
+  --warn: #8a5a00;
 
   color-scheme: light dark;
-  color: #4e454a;
-  background-color: #ffffff;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
 }
 
-.container {
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --text: #bab1b6;
+    --strong: #ffffff;
+    --line: #3a3438;
+    --field: #141214;
+    --error: #f2b8b5;
+    --warn: #e8c274;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
+h1,
+h2 {
+  color: var(--strong);
+  margin: 0;
 }
 
 h1 {
+  font-size: 1.4rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin-bottom: 8px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 4px 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+thead th {
+  font-weight: 600;
+  color: var(--strong);
+  border-bottom: 1px solid var(--line);
+}
+
+tbody th {
+  font-weight: 500;
+}
+
+td.center {
   text-align: center;
 }
 
 input,
+select,
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+  font: inherit;
+  color: var(--strong);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  vertical-align: middle;
+}
+
+input.number {
+  width: 8.5rem;
+  text-align: right;
+}
+
+input.currency {
+  width: 4.5rem;
+  text-transform: uppercase;
 }
 
 button {
   cursor: pointer;
 }
 
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+button.danger.armed {
+  border-color: var(--error);
+  color: var(--error);
+  font-weight: 600;
 }
 
-input,
-button {
-  outline: none;
+:focus-visible {
+  outline: 2px solid var(--strong);
+  outline-offset: 1px;
 }
 
-#greet-input {
-  margin-right: 5px;
+.add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #bab1b6;
-    background-color: #000000;
-  }
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 10px;
+}
 
-  a:hover {
-    color: #24c8db;
-  }
+.field {
+  display: grid;
+  gap: 2px;
+}
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.note,
+.muted {
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.note {
+  margin: 8px 0 0;
+}
+
+.status {
+  min-height: 1.5em;
+  margin: 0 0 8px;
+}
+
+.status.error {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.issues {
+  margin: 0 0 12px;
+  padding-left: 1.2rem;
+  color: var(--warn);
+  font-weight: 600;
 }

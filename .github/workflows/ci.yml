@@ -98,7 +98,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
+      - run: npm ci
+      - run: npm test
       - run: mkdir -p dist
       - run: cargo test --workspace --locked
 
