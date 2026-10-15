@@ -138,11 +138,19 @@ function describeNote(note: Note, view: PortfolioView): string {
         requested: yen(note.requested),
         applied: yen(note.applied),
       });
-    case "category_not_filled":
-      return t("“{category}” is {shortfall} JPY short of its target.", {
-        category: categoryName(view, note.category),
-        shortfall: yen(note.shortfall),
-      });
+    case "category_not_filled": {
+      // A full rebalance reports an unfilled sale as a negative shortfall.
+      const surplus = note.shortfall.startsWith("-");
+      return t(
+        surplus
+          ? "“{category}” is still {amount} JPY over its target."
+          : "“{category}” is {amount} JPY short of its target.",
+        {
+          category: categoryName(view, note.category),
+          amount: yen(surplus ? note.shortfall.slice(1) : note.shortfall),
+        },
+      );
+    }
     case "already_balanced":
       return t("Every category is already within tolerance.");
   }
@@ -238,11 +246,25 @@ export function overviewPanel(ctx: Context): Panel {
   const message = h("p", { class: "note", role: "status" });
 
   const targetSelect = h("select", { "aria-label": t("Rebalancing account") });
+  // The suggestion must use the saved account, so it waits while the choice is
+  // being saved or a calculation is running.
+  let saving = false;
+  let calculating = false;
+  const updateRunButton = (): void => {
+    run.disabled = saving || calculating;
+  };
   targetSelect.addEventListener("change", () => {
-    void ctx.apply({
-      type: "set_target_account",
-      account: targetSelect.value === "" ? null : Number(targetSelect.value),
-    });
+    saving = true;
+    updateRunButton();
+    void ctx
+      .apply({
+        type: "set_target_account",
+        account: targetSelect.value === "" ? null : Number(targetSelect.value),
+      })
+      .finally(() => {
+        saving = false;
+        updateRunButton();
+      });
   });
 
   const modeSelect = h(
@@ -300,7 +322,8 @@ export function overviewPanel(ctx: Context): Panel {
       mode = { type };
     }
     const mine = ++sequence;
-    run.disabled = true;
+    calculating = true;
+    updateRunButton();
     message.classList.remove("error");
     message.textContent = t("Calculating…");
     suggestRebalance({ account, mode })
@@ -317,7 +340,8 @@ export function overviewPanel(ctx: Context): Panel {
         }
       })
       .finally(() => {
-        run.disabled = false;
+        calculating = false;
+        updateRunButton();
       });
   });
 

@@ -119,8 +119,11 @@ export const MESSAGES = {
   "The amount was lowered from {requested} to {applied} JPY to fit the rounding unit.": {
     ja: "丸め単位に合わせて、{requested} 円から {applied} 円に下げました。",
   },
-  "“{category}” is {shortfall} JPY short of its target.": {
-    ja: "「{category}」は、目標に {shortfall} 円届きません。",
+  "“{category}” is {amount} JPY short of its target.": {
+    ja: "「{category}」は、目標に {amount} 円届きません。",
+  },
+  "“{category}” is still {amount} JPY over its target.": {
+    ja: "「{category}」は、まだ目標を {amount} 円上回っています。",
   },
   "Every category is already within tolerance.": {
     ja: "すべてのカテゴリが許容乖離の範囲内です。",
