@@ -77,7 +77,7 @@ export function tableImportPanel(ctx: Context): Panel {
   const perRecordSelect = h(
     "select",
     { "aria-label": t("Rows per record") },
-    ...[1, 2, 3, 4].map((n) => h("option", { value: String(n) }, String(n))),
+    ...Array.from({ length: 10 }, (_, i) => i + 1).map((n) => h("option", { value: String(n) }, String(n))),
   );
   const nameRowSelect = h("select", { "aria-label": t("Row with the name") });
   const valueRowSelect = h("select", { "aria-label": t("Row with the numbers") });

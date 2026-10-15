@@ -307,13 +307,14 @@ fn a_non_numeric_quantity_or_price_is_not_a_number() {
     let result = extract(&table, &two_rows(0));
 
     assert!(result.rows.is_empty());
+    // The bad records are reported; the reader then moves one row at a time to
+    // find where the records line up again, so other rows may be reported too.
     assert!(
         result
             .skipped
             .iter()
-            .all(|s| s.reason == SkipReason::NotANumber)
+            .any(|s| s.reason == SkipReason::NotANumber)
     );
-    assert_eq!(result.skipped.len(), 2);
 }
 
 #[test]
@@ -350,4 +351,36 @@ fn absurd_mappings_neither_overflow_nor_hang() {
         };
         let _ = extract(&table, &mapping);
     }
+}
+
+#[test]
+fn records_line_up_again_after_a_heading_or_subtotal_row() {
+    let table = grid(&[
+        &["Fund A", "", ""],
+        &["10", "0", "100"],
+        &["Subtotal", "", ""],
+        &["Section title", "", ""],
+        &["Fund B", "", ""],
+        &["2", "0", "50"],
+        &["Fund C", "", ""],
+        &["1", "0", "5"],
+    ]);
+
+    let result = extract(&table, &two_rows(0));
+
+    let read: Vec<_> = result
+        .rows
+        .iter()
+        .map(|r| (r.name.as_str(), r.value))
+        .collect();
+    assert_eq!(
+        read,
+        vec![
+            ("Fund A", dec!(1000)),
+            ("Fund B", dec!(100)),
+            ("Fund C", dec!(5))
+        ]
+    );
+    // The rows that were not holdings are reported, not hidden.
+    assert_eq!(result.skipped.len(), 2);
 }

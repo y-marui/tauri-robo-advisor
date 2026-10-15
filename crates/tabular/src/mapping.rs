@@ -83,8 +83,13 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
     while start < table.len() {
         let row = start + 1;
         let record = start;
+        // A record that is read moves on by its whole length. A row that does
+        // not fit (a section title, a subtotal, a label row) moves on by one
+        // row only, so the records after it line up again.
         start += per_record;
-        let skip = |skipped: &mut Vec<Skipped>, reason| skipped.push(Skipped { row, reason });
+        let skip = |skipped: &mut Vec<Skipped>, reason| {
+            skipped.push(Skipped { row, reason });
+        };
 
         let cells = |offset: usize| -> Option<&Vec<String>> {
             (offset < per_record)
@@ -95,14 +100,17 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
             (cells(mapping.name_row), cells(mapping.value_row))
         else {
             skip(&mut skipped, SkipReason::MissingColumn);
+            start = record + 1;
             continue;
         };
         let Some(name) = name_cells.get(mapping.name) else {
             skip(&mut skipped, SkipReason::MissingColumn);
+            start = record + 1;
             continue;
         };
         let Some(first) = value_cells.get(mapping.value) else {
             skip(&mut skipped, SkipReason::MissingColumn);
+            start = record + 1;
             continue;
         };
         let second = match mapping.price {
@@ -111,6 +119,7 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 Some(cell) => Some(cell),
                 None => {
                     skip(&mut skipped, SkipReason::MissingColumn);
+                    start = record + 1;
                     continue;
                 }
             },
@@ -118,6 +127,7 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
         let name = clean(name);
         if name.is_empty() {
             skip(&mut skipped, SkipReason::NoName);
+            start = record + 1;
             continue;
         }
         let value = match second {
@@ -132,6 +142,7 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                         Some(value) => Some(value),
                         None => {
                             skip(&mut skipped, SkipReason::OutOfRange);
+                            start = record + 1;
                             continue;
                         }
                     }
@@ -140,9 +151,13 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
             },
         };
         match value {
-            None => skip(&mut skipped, SkipReason::NotANumber),
+            None => {
+                skip(&mut skipped, SkipReason::NotANumber);
+                start = record + 1;
+            }
             Some(v) if v < Decimal::ZERO || v > MAX_VALUE => {
-                skip(&mut skipped, SkipReason::OutOfRange)
+                skip(&mut skipped, SkipReason::OutOfRange);
+                start = record + 1;
             }
             Some(value) => rows.push(Extracted { name, value }),
         }
