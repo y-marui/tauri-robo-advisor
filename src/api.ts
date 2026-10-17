@@ -13,6 +13,8 @@ import type {
   Overview,
   ColumnMapping,
   PortfolioView,
+  RecipeOutcome,
+  RecipeRun,
   TableImportPlan,
   TablePreview,
   Suggestion,
@@ -127,4 +129,23 @@ export function useFetchedTable(index: number): Promise<TablePreview> {
 
 export function closeBrowser(): Promise<void> {
   return invoke<void>("close_browser");
+}
+
+/** Follows the recipe's links in the browser and reads its table; the holdings are not changed. */
+export function runRecipe(name: string, page: string): Promise<RecipeOutcome> {
+  return invoke<RecipeOutcome>("run_recipe", { name, page });
+}
+
+/** The rows the recipes read, planned again with the aliases as they are now. */
+export function fetchAllPlan(): Promise<RecipeRun[]> {
+  return invoke<RecipeRun[]>("fetch_all_plan");
+}
+
+/** Replaces each account's holdings with the linked rows of all the recipes that feed it. */
+export function applyFetchAll(): Promise<PortfolioView> {
+  return invoke<PortfolioView>("apply_fetch_all");
+}
+
+export function clearFetchRuns(): Promise<void> {
+  return invoke<void>("clear_fetch_runs");
 }

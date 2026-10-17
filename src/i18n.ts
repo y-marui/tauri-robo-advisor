@@ -248,6 +248,47 @@ export const MESSAGES = {
   "No table was found on that page.": { ja: "そのページには、表が見つかりませんでした。" },
   "Choose the table with the holdings, then use it.": { ja: "保有が載っている表を選んで、使ってください。" },
   "The browser was closed.": { ja: "ブラウザを閉じました。" },
+  "Fetch recipes": { ja: "取得レシピ" },
+  "Fetch everything": { ja: "すべて取得" },
+  "Where the link goes": { ja: "リンクの行き先" },
+  "Choose the link again": { ja: "リンクを選び直す" },
+  "The link “{text}” of “{recipe}” has changed since it was saved.": {
+    ja: "レシピ「{recipe}」のリンク「{text}」が、保存したときから変わっています。",
+  },
+  "(the page handles it)": { ja: "（ページ内の処理）" },
+  "Use this link": { ja: "このリンクを使う" },
+  "Several different links say “{text}” (recipe “{recipe}”). Choose where it goes.": {
+    ja: "「{text}」と書かれたリンクが、行き先の違うものとして複数あります（レシピ「{recipe}」）。行き先を選んでください。",
+  },
+  "Open the browser, log in, and open a page of the site first.": {
+    ja: "先にブラウザを開き、ログインして、そのサイトのページを開いてください。",
+  },
+  "Fetching “{recipe}”…": { ja: "「{recipe}」を取得中…" },
+  "“{recipe}” failed: {reason}": { ja: "「{recipe}」に失敗しました: {reason}" },
+  "{count} rows were left out.": { ja: "{count} 行を除外しました。" },
+  "Apply to the accounts": { ja: "口座に反映する" },
+  "Confirm apply": { ja: "反映する" },
+  "The holdings were replaced.": { ja: "保有を置き換えました。" },
+  "Could not apply: {reason}": { ja: "反映できませんでした: {reason}" },
+  "This replaces every holding of these accounts with the linked rows above: {accounts}. An account without any linked row is left as it is.": {
+    ja: "次の口座の保有を、上の対応づけ済みの行ですべて置き換えます: {accounts}。対応づけ済みの行が1つもない口座は、そのままにします。",
+  },
+  "No recipes yet. Fetch a table once by hand in “Import a table”, then use “Save as a recipe”.": {
+    ja: "レシピはまだありません。「表の取り込み」で一度手で表を取得してから、「レシピとして保存」を使ってください。",
+  },
+  "(this page)": { ja: "（このページ）" },
+  "After you log in to the browser opened by the app, “Fetch everything” follows each recipe’s links (they only show other pages), reads its table, and shows the result of all of them. Nothing changes until you confirm.": {
+    ja: "アプリが開いたブラウザにログインしたあと、「すべて取得」を押すと、各レシピのリンク（別のページを表示するだけのもの）をたどって表を読み、すべての結果をまとめて見せます。確認するまで、何も変わりません。",
+  },
+  "Save as a recipe": { ja: "レシピとして保存" },
+  "Recipe name": { ja: "レシピの名前" },
+  "Links to follow, one per line (empty: the open page)": { ja: "たどるリンク（1行に1つ。空なら今のページ）" },
+  "Text the table’s first cell starts with": { ja: "表の先頭のセルの書き出し" },
+  "Save recipe": { ja: "レシピを保存" },
+  "The recipe was saved.": { ja: "レシピを保存しました。" },
+  "Choose an account and enter the recipe name and the table title first.": {
+    ja: "先に、口座を選び、レシピの名前と表のタイトルを入れてください。",
+  },
 } as const satisfies Record<string, { ja: string }>;
 
 export type MessageKey = keyof typeof MESSAGES;

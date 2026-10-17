@@ -3,8 +3,8 @@ use serde::Deserialize;
 
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
-    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, Funding, Holding,
-    ImportMapping, Portfolio, Product, ProductId, ProductTargeting,
+    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Funding,
+    Holding, ImportMapping, Portfolio, Product, ProductId, ProductTargeting, Recipe,
 };
 
 /// One user action. The frontend sends the intent and Rust validates it, assigns
@@ -109,6 +109,14 @@ pub enum Edit {
     RemoveImportMapping {
         source: String,
     },
+    /// Saves (or replaces, by name) a fetch recipe: the links to follow, the table
+    /// to read, how to read it, and the account to update.
+    SetRecipe {
+        recipe: Recipe,
+    },
+    RemoveRecipe {
+        name: String,
+    },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
     },
@@ -135,6 +143,100 @@ fn one_unit() -> u64 {
 fn one_row() -> usize {
     1
 }
+
+impl ImportMapping {
+    /// Checks the columns and rows and trims the source name.
+    pub(crate) fn validated(self) -> Result<Self, Error> {
+        let source = name(&self.source, "import source")?;
+        let invalid = |what: &str| Error::Invalid(format!("{what} is out of range"));
+        if self.name_column >= MAX_COLUMN
+            || self.value_column >= MAX_COLUMN
+            || self.price_column.is_some_and(|c| c >= MAX_COLUMN)
+        {
+            return Err(invalid("a column"));
+        }
+        if self.header_rows > MAX_HEADER_ROWS {
+            return Err(invalid("the heading count"));
+        }
+        if !(1..=MAX_ROWS_PER_RECORD).contains(&self.rows_per_record)
+            || self.name_row >= self.rows_per_record
+            || self.value_row >= self.rows_per_record
+        {
+            return Err(invalid("the rows per record"));
+        }
+        if !(1..=MAX_PRICE_UNIT).contains(&self.price_unit) {
+            return Err(invalid("the price unit"));
+        }
+        // The name and the value may share a column number only when they are in
+        // different rows of the record.
+        if self.name_column == self.value_column && self.name_row == self.value_row {
+            return Err(Error::Invalid(
+                "the name and the value must be in different cells".to_owned(),
+            ));
+        }
+        if self.price_column == Some(self.value_column) {
+            return Err(Error::Invalid(
+                "the quantity and the price must be in different columns".to_owned(),
+            ));
+        }
+        Ok(Self { source, ..self })
+    }
+}
+
+impl Recipe {
+    /// Checks a recipe and trims its names.
+    fn validated(self, portfolio: &Portfolio) -> Result<Self, Error> {
+        let recipe_name = name(&self.name, "recipe")?;
+        if self.links.len() > MAX_RECIPE_LINKS {
+            return Err(Error::Invalid("a recipe has too many links".to_owned()));
+        }
+        let mut links = Vec::with_capacity(self.links.len());
+        for link in self.links {
+            let text = link.text.trim().to_owned();
+            if text.is_empty()
+                || text.chars().count() > MAX_LINK_TEXT_CHARS
+                || text.chars().any(char::is_control)
+            {
+                return Err(Error::Invalid("a link text is not acceptable".to_owned()));
+            }
+            let reference = link
+                .reference
+                .map(|r| r.trim().to_owned())
+                .filter(|r| !r.is_empty());
+            if reference.as_ref().is_some_and(|r| {
+                r.chars().count() > MAX_LINK_REFERENCE_CHARS || r.chars().any(char::is_control)
+            }) {
+                return Err(Error::Invalid(
+                    "a link reference is not acceptable".to_owned(),
+                ));
+            }
+            links.push(FetchLink { text, reference });
+        }
+        let table_starts_with = self.table_starts_with.trim().to_owned();
+        if table_starts_with.is_empty()
+            || table_starts_with.chars().count() > MAX_LINK_TEXT_CHARS
+            || table_starts_with.chars().any(char::is_control)
+        {
+            return Err(Error::Invalid(
+                "the table title is not acceptable".to_owned(),
+            ));
+        }
+        portfolio.account(self.account)?;
+        Ok(Self {
+            name: recipe_name,
+            links,
+            table_starts_with,
+            currency: currency(&self.currency)?,
+            mapping: self.mapping.validated()?,
+            ..self
+        })
+    }
+}
+
+const MAX_RECIPES: usize = 50;
+const MAX_RECIPE_LINKS: usize = 5;
+const MAX_LINK_TEXT_CHARS: usize = 60;
+const MAX_LINK_REFERENCE_CHARS: usize = 500;
 
 const MAX_ITEMS: usize = 10_000;
 /// The widest table an import reads (see the `tabular` crate), and the most
@@ -376,6 +478,7 @@ impl Portfolio {
                 self.account(id)?;
                 self.accounts.retain(|a| a.id != id);
                 self.holdings.retain(|h| h.account != id);
+                self.recipes.retain(|r| r.account != id);
                 if self.settings.target_account == Some(id) {
                     self.settings.target_account = None;
                 }
@@ -454,38 +557,6 @@ impl Portfolio {
                 name_row,
                 value_row,
             } => {
-                let source = name(&source, "import source")?;
-                let invalid = |what: &str| Error::Invalid(format!("{what} is out of range"));
-                if name_column >= MAX_COLUMN
-                    || value_column >= MAX_COLUMN
-                    || price_column.is_some_and(|c| c >= MAX_COLUMN)
-                {
-                    return Err(invalid("a column"));
-                }
-                if header_rows > MAX_HEADER_ROWS {
-                    return Err(invalid("the heading count"));
-                }
-                if !(1..=MAX_ROWS_PER_RECORD).contains(&rows_per_record)
-                    || name_row >= rows_per_record
-                    || value_row >= rows_per_record
-                {
-                    return Err(invalid("the rows per record"));
-                }
-                if !(1..=MAX_PRICE_UNIT).contains(&price_unit) {
-                    return Err(invalid("the price unit"));
-                }
-                // The name and the value may share a column number only when
-                // they are in different rows of the record.
-                if name_column == value_column && name_row == value_row {
-                    return Err(Error::Invalid(
-                        "the name and the value must be in different cells".to_owned(),
-                    ));
-                }
-                if price_column == Some(value_column) {
-                    return Err(Error::Invalid(
-                        "the quantity and the price must be in different columns".to_owned(),
-                    ));
-                }
                 let mapping = ImportMapping {
                     source,
                     name_column,
@@ -496,7 +567,8 @@ impl Portfolio {
                     rows_per_record,
                     name_row,
                     value_row,
-                };
+                }
+                .validated()?;
                 match self
                     .import_mappings
                     .iter_mut()
@@ -508,6 +580,22 @@ impl Portfolio {
                         self.import_mappings.push(mapping);
                     }
                 }
+            }
+            Edit::SetRecipe { recipe } => {
+                let recipe = recipe.validated(self)?;
+                match self.recipes.iter_mut().find(|r| r.name == recipe.name) {
+                    Some(existing) => *existing = recipe,
+                    None => {
+                        if self.recipes.len() >= MAX_RECIPES {
+                            return Err(Error::Invalid("too many recipes".to_owned()));
+                        }
+                        self.recipes.push(recipe);
+                    }
+                }
+            }
+            Edit::RemoveRecipe { name } => {
+                let name = name.trim();
+                self.recipes.retain(|r| r.name != name);
             }
             Edit::RemoveImportMapping { source } => {
                 let source = source.trim();

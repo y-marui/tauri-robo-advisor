@@ -2,13 +2,20 @@
 //!
 //! This is separate from the Tauri commands so it can be tested without Tauri.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use portfolio::{Edit, ImportPlan, ImportRow, Issue, Portfolio};
+use portfolio::{
+    AccountId, Edit, HoldingInput, ImportMapping, ImportPlan, ImportRow, Issue, Portfolio,
+    ProductId, Recipe,
+};
+use rust_decimal::Decimal;
 use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
 use tabular::{ColumnMapping, Skipped, Table};
+
+use crate::browser_session::RecipeRead;
 
 use crate::store;
 
@@ -37,8 +44,64 @@ pub struct AppState {
     /// send a large table back and forth. It holds holdings, so it is dropped
     /// as soon as it is replaced or cleared.
     table: Mutex<Option<Table>>,
+    /// The rows each recipe read, until they are applied or dropped.
+    runs: Mutex<Vec<StoredRun>>,
     /// The browser opened for a fetch, and the tables read from it.
     pub browser: crate::browser_session::BrowserSession,
+}
+
+/// The rows a recipe read, kept until the user applies them. The plan is made
+/// again from these rows each time, so it follows the aliases as they are then.
+struct StoredRun {
+    name: String,
+    account: AccountId,
+    source: String,
+    currency: String,
+    rows: Vec<ImportRow>,
+    skipped: Vec<Skipped>,
+}
+
+/// One recipe's result for the screen.
+#[derive(Debug, Serialize)]
+pub struct RecipeRunView {
+    pub name: String,
+    pub account: AccountId,
+    pub source: String,
+    pub currency: String,
+    pub plan: ImportPlan,
+    pub skipped: Vec<Skipped>,
+    pub rows_read: usize,
+}
+
+/// What running a recipe gave.
+#[derive(Debug, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum RecipeOutcome {
+    Ready {
+        run: RecipeRunView,
+    },
+    /// Several different links have the link's text: the user picks one.
+    NeedsChoice {
+        link: usize,
+        choices: Vec<String>,
+    },
+    /// A saved link is gone: the page has changed.
+    LinkChanged {
+        link: usize,
+    },
+}
+
+fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
+    ColumnMapping {
+        name: mapping.name_column,
+        value: mapping.value_column,
+        price: mapping.price_column,
+        price_unit: mapping.price_unit,
+        header_rows: mapping.header_rows,
+        rows_per_record: mapping.rows_per_record,
+        name_row: mapping.name_row,
+        value_row: mapping.value_row,
+    }
 }
 
 /// How many rows and how many characters per cell the preview shows.
@@ -71,6 +134,7 @@ impl AppState {
             path,
             portfolio,
             table: Mutex::new(None),
+            runs: Mutex::new(Vec::new()),
             browser: crate::browser_session::BrowserSession::default(),
         }
     }
@@ -190,6 +254,123 @@ impl AppState {
             skipped: extraction.skipped,
             rows_read: rows.len(),
         })
+    }
+
+    fn recipe(&self, name: &str) -> Result<Recipe, String> {
+        let guard = self.lock()?;
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        portfolio
+            .recipes
+            .iter()
+            .find(|r| r.name == name)
+            .cloned()
+            .ok_or_else(|| "That recipe does not exist.".to_owned())
+    }
+
+    /// Follows the recipe's links in the browser, reads its table, and keeps the
+    /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
+    /// without a saved reference gets one now, so the same link is found next time.
+    pub fn run_recipe(&self, name: &str, page: &str) -> Result<RecipeOutcome, String> {
+        let recipe = self.recipe(name)?;
+        let read = self
+            .browser
+            .run_recipe(page, &recipe.links, &recipe.table_starts_with)?;
+        let (table, references) = match read {
+            RecipeRead::NeedsChoice { link, choices } => {
+                return Ok(RecipeOutcome::NeedsChoice { link, choices });
+            }
+            RecipeRead::LinkChanged { link } => return Ok(RecipeOutcome::LinkChanged { link }),
+            RecipeRead::Table { table, references } => (table, references),
+        };
+
+        if recipe.links.iter().any(|l| l.reference.is_none()) {
+            let mut learned = recipe.clone();
+            for (link, reference) in learned.links.iter_mut().zip(references) {
+                link.reference.get_or_insert(reference);
+            }
+            // Best effort: the run itself does not depend on it being saved.
+            let _ = self.apply(Edit::SetRecipe { recipe: learned });
+        }
+
+        let extraction = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
+        let rows: Vec<ImportRow> = extraction
+            .rows
+            .iter()
+            .map(|r| ImportRow {
+                name: r.name.clone(),
+                value: r.value,
+            })
+            .collect();
+        let run = StoredRun {
+            name: recipe.name.clone(),
+            account: recipe.account,
+            source: recipe.mapping.source.clone(),
+            currency: recipe.currency.clone(),
+            rows,
+            skipped: extraction.skipped,
+        };
+        let view = self.run_view(&run)?;
+        let mut runs = self.lock_runs()?;
+        runs.retain(|r| r.name != run.name);
+        runs.push(run);
+        Ok(RecipeOutcome::Ready { run: view })
+    }
+
+    fn run_view(&self, run: &StoredRun) -> Result<RecipeRunView, String> {
+        Ok(RecipeRunView {
+            name: run.name.clone(),
+            account: run.account,
+            source: run.source.clone(),
+            currency: run.currency.clone(),
+            plan: self.plan_import(&run.source, &run.currency, &run.rows)?,
+            skipped: run.skipped.clone(),
+            rows_read: run.rows.len(),
+        })
+    }
+
+    /// The kept runs, planned again with the aliases as they are now.
+    pub fn fetch_all_plan(&self) -> Result<Vec<RecipeRunView>, String> {
+        let runs = self.lock_runs()?;
+        runs.iter().map(|run| self.run_view(run)).collect()
+    }
+
+    pub fn clear_runs(&self) -> Result<(), String> {
+        self.lock_runs()?.clear();
+        Ok(())
+    }
+
+    /// Replaces the holdings of each account with the linked rows of all the
+    /// recipes that feed it (products that appear twice are added up). An account
+    /// with no linked row is left alone, so an unlinked first run never empties it.
+    pub fn apply_fetch_all(&self) -> Result<PortfolioView, String> {
+        let views = self.fetch_all_plan()?;
+        let mut per_account: BTreeMap<AccountId, BTreeMap<ProductId, Decimal>> = BTreeMap::new();
+        for view in &views {
+            let products = per_account.entry(view.account).or_default();
+            for row in &view.plan.matched {
+                *products.entry(row.product).or_default() += row.value;
+            }
+        }
+        for (account, products) in per_account {
+            if products.is_empty() {
+                continue;
+            }
+            self.apply(Edit::ReplaceHoldings {
+                account,
+                holdings: products
+                    .into_iter()
+                    .map(|(product, value)| HoldingInput { product, value })
+                    .collect(),
+            })?;
+        }
+        self.clear_runs()?;
+        self.view()
+    }
+
+    fn lock_runs(&self) -> Result<std::sync::MutexGuard<'_, Vec<StoredRun>>, String> {
+        self.runs
+            .lock()
+            .map_err(|_| "The data is temporarily unavailable.".to_owned())
     }
 
     fn lock_table(&self) -> Result<std::sync::MutexGuard<'_, Option<Table>>, String> {
@@ -364,5 +545,159 @@ mod tests {
 
         state.clear_table().unwrap();
         assert!(state.plan_table_import("Test", "JPY", &mapping).is_err());
+    }
+
+    // ---- recipe runs ------------------------------------------------------------
+
+    /// A portfolio with one JPY category, two products linked (or not) by alias to
+    /// source "SBI", and two accounts.
+    fn recipe_state(label: &str) -> (AppState, AccountId, AccountId, ProductId, ProductId) {
+        let state = AppState::load(temp_path(label));
+        state
+            .apply(Edit::AddCategory {
+                name: "All".to_owned(),
+                target_weight: rust_decimal::Decimal::ONE,
+            })
+            .unwrap();
+        let category = state.view().unwrap().portfolio.categories[0].id;
+        for name in ["Stock", "Fund"] {
+            state
+                .apply(Edit::AddProduct {
+                    name: name.to_owned(),
+                    category,
+                    currency: "JPY".to_owned(),
+                })
+                .unwrap();
+        }
+        for name in ["Main", "Other"] {
+            state.apply(add_account(name)).unwrap();
+        }
+        let view = state.view().unwrap();
+        let (a, b) = (view.portfolio.accounts[0].id, view.portfolio.accounts[1].id);
+        let (stock, fund) = (view.portfolio.products[0].id, view.portfolio.products[1].id);
+        (state, a, b, stock, fund)
+    }
+
+    fn link(state: &AppState, product: ProductId, name: &str) {
+        state
+            .apply(Edit::AddAlias {
+                product,
+                source: "SBI".to_owned(),
+                name: name.to_owned(),
+            })
+            .unwrap();
+    }
+
+    fn stored(name: &str, account: AccountId, rows: &[(&str, i64)]) -> StoredRun {
+        StoredRun {
+            name: name.to_owned(),
+            account,
+            source: "SBI".to_owned(),
+            currency: "JPY".to_owned(),
+            rows: rows
+                .iter()
+                .map(|(n, v)| ImportRow {
+                    name: (*n).to_owned(),
+                    value: rust_decimal::Decimal::from(*v),
+                })
+                .collect(),
+            skipped: Vec::new(),
+        }
+    }
+
+    fn held(state: &AppState, account: AccountId) -> Vec<(ProductId, rust_decimal::Decimal)> {
+        state
+            .view()
+            .unwrap()
+            .portfolio
+            .holdings
+            .iter()
+            .filter(|h| h.account == account)
+            .map(|h| (h.product, h.value))
+            .collect()
+    }
+
+    #[test]
+    fn recipes_that_feed_one_account_are_added_up_before_it_is_replaced() {
+        let (state, main, _, stock, fund) = recipe_state("merge");
+        link(&state, stock, "Stock A");
+        link(&state, stock, "Stock B");
+        link(&state, fund, "Fund X");
+        state
+            .apply(Edit::SetHolding {
+                account: main,
+                product: fund,
+                value: rust_decimal::Decimal::from(1),
+                quantity: None,
+            })
+            .unwrap();
+        *state.runs.lock().unwrap() = vec![
+            stored("Domestic", main, &[("Stock A", 100), ("Unknown", 5)]),
+            stored("Other stocks", main, &[("Stock B", 50), ("Fund X", 7)]),
+        ];
+
+        let view = state.apply_fetch_all().unwrap();
+
+        let mut rows = held(&state, main);
+        rows.sort();
+        assert_eq!(
+            rows,
+            vec![
+                (stock, rust_decimal::Decimal::from(150)),
+                (fund, rust_decimal::Decimal::from(7))
+            ]
+        );
+        assert_eq!(view.portfolio.holdings.len(), 2);
+        assert!(
+            state.runs.lock().unwrap().is_empty(),
+            "the runs are consumed"
+        );
+    }
+
+    #[test]
+    fn an_account_with_no_linked_row_is_left_alone() {
+        let (state, main, other, stock, _) = recipe_state("untouched");
+        state
+            .apply(Edit::SetHolding {
+                account: other,
+                product: stock,
+                value: rust_decimal::Decimal::from(42),
+                quantity: None,
+            })
+            .unwrap();
+        // Nothing is linked yet, as on a first run.
+        *state.runs.lock().unwrap() = vec![
+            stored("Other", other, &[("New name", 1)]),
+            stored("Main", main, &[]),
+        ];
+
+        state.apply_fetch_all().unwrap();
+
+        assert_eq!(
+            held(&state, other),
+            vec![(stock, rust_decimal::Decimal::from(42))]
+        );
+        assert!(held(&state, main).is_empty());
+    }
+
+    #[test]
+    fn the_plan_follows_the_aliases_as_they_are_when_it_is_asked_for() {
+        let (state, main, _, stock, _) = recipe_state("replan");
+        *state.runs.lock().unwrap() = vec![stored("Domestic", main, &[("Stock A", 100)])];
+        assert_eq!(state.fetch_all_plan().unwrap()[0].plan.unmatched.len(), 1);
+
+        link(&state, stock, "Stock A");
+
+        let plan = state.fetch_all_plan().unwrap();
+        assert!(plan[0].plan.unmatched.is_empty());
+        assert_eq!(plan[0].plan.matched[0].product, stock);
+        assert_eq!(plan[0].rows_read, 1);
+    }
+
+    #[test]
+    fn running_an_unknown_recipe_or_without_a_browser_is_an_error() {
+        let (state, ..) = recipe_state("norecipe");
+
+        assert!(state.run_recipe("missing", "page").is_err());
     }
 }

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
+use crate::links::{self, CLICK_LINK, FIND_LINKS, READY_STATE};
 use crate::{Endpoint, Error};
 
 /// How long one answer may take, and the largest message accepted.
@@ -69,6 +70,13 @@ fn parse_tables(value: &Value) -> Result<Vec<Vec<Vec<String>>>, Error> {
                 .collect()
         })
         .collect()
+}
+
+/// The link that was followed, described by where it went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Followed {
+    /// Save this next to the link text so the same link is found next time.
+    pub reference: String,
 }
 
 /// A page the browser has open.
@@ -193,6 +201,80 @@ impl Cdp {
     pub fn read_tables(&mut self, session: &str) -> Result<Vec<Vec<Vec<String>>>, Error> {
         let value = self.evaluate(session, READ_TABLES)?;
         parse_tables(&value)
+    }
+
+    /// Follows the link with exactly this visible text, to show another page,
+    /// and waits until the page has loaded. Only a plain `<a>` link on the page's
+    /// own site is followed, and not one that looks like an order or a money
+    /// movement; nothing is typed or submitted.
+    ///
+    /// Links with the same text that go to the same place count as one. When they
+    /// go to different places, nothing is clicked unless a `reference` (from an
+    /// earlier run) says which one; a reference that matches nothing means the
+    /// page has changed, and nothing is clicked either.
+    pub fn follow_link(
+        &mut self,
+        session: &str,
+        text: &str,
+        reference: Option<&str>,
+    ) -> Result<Followed, Error> {
+        links::link_text_allowed(text)?;
+        let wanted = serde_json::to_string(text.trim()).map_err(|_| Error::Script)?;
+        let found = self.evaluate(session, &format!("({FIND_LINKS})({wanted})"))?;
+        let candidates = links::parse_candidates(&found)?;
+        if candidates.is_empty() {
+            return Err(Error::LinkNotFound);
+        }
+        let allowed: Vec<_> = candidates.iter().filter(|c| c.allowed()).collect();
+        if allowed.is_empty() {
+            return Err(Error::LinkRefused);
+        }
+        let chosen = match reference {
+            Some(reference) => allowed
+                .iter()
+                .find(|c| c.reference() == reference)
+                .ok_or(Error::LinkChanged)?,
+            None => {
+                // Different destinations are ambiguous; scripted links cannot be
+                // told apart by where they go, so several of them are ambiguous too.
+                let mut places: Vec<String> = Vec::new();
+                for candidate in &allowed {
+                    let place = candidate.reference();
+                    if place.is_empty() || !places.contains(&place) {
+                        places.push(place);
+                    }
+                }
+                if places.len() > 1 {
+                    return Err(Error::LinkAmbiguous(places));
+                }
+                &allowed[0]
+            }
+        };
+        let clicked = self.evaluate(
+            session,
+            &format!("({CLICK_LINK})({wanted}, {})", chosen.index),
+        )?;
+        if clicked.as_str() != Some("clicked") {
+            return Err(Error::LinkNotFound);
+        }
+        let followed = Followed {
+            reference: chosen.reference(),
+        };
+        self.wait_loaded(session)?;
+        Ok(followed)
+    }
+
+    /// Waits (a short while, bounded) until the page says it has loaded.
+    pub fn wait_loaded(&mut self, session: &str) -> Result<(), Error> {
+        // The old page may still say "complete" for a moment after the click.
+        std::thread::sleep(Duration::from_millis(600));
+        for _ in 0..50 {
+            if self.evaluate(session, READY_STATE)?.as_str() == Some("complete") {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(300));
+        }
+        Err(Error::Timeout)
     }
 
     fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {

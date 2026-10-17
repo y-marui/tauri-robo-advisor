@@ -139,6 +139,14 @@ impl Portfolio {
         {
             return corrupt("the target account is missing");
         }
+        if self.recipes.len() > 1000
+            || self
+                .recipes
+                .iter()
+                .any(|r| !self.accounts.iter().any(|a| a.id == r.account))
+        {
+            return corrupt("a recipe refers to an account that does not exist");
+        }
         Ok(())
     }
 

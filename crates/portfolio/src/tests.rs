@@ -785,3 +785,143 @@ fn a_portfolio_file_with_an_old_mapping_still_loads() {
     assert_eq!(mapping.price_unit, 1);
     assert_eq!(mapping.price_column, None);
 }
+
+// ---- recipes ---------------------------------------------------------------
+
+fn mapping_for(source: &str) -> ImportMapping {
+    ImportMapping {
+        source: source.to_owned(),
+        name_column: 0,
+        value_column: 0,
+        price_column: Some(2),
+        price_unit: 1,
+        header_rows: 2,
+        rows_per_record: 2,
+        name_row: 0,
+        value_row: 1,
+    }
+}
+
+fn recipe_for(account: AccountId) -> Recipe {
+    Recipe {
+        name: " Domestic stocks ".to_owned(),
+        links: vec![
+            FetchLink {
+                text: " Account ".to_owned(),
+                reference: None,
+            },
+            FetchLink {
+                text: "Yen account".to_owned(),
+                reference: Some("/a/list".to_owned()),
+            },
+        ],
+        table_starts_with: " Stocks (".to_owned(),
+        currency: "JPY".to_owned(),
+        account,
+        mapping: mapping_for(" SBI "),
+    }
+}
+
+#[test]
+fn a_recipe_is_saved_trimmed_and_replaced_by_name() {
+    let (mut p, _, _, acc) = sample();
+
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    let mut again = recipe_for(acc);
+    again.table_starts_with = "Funds".to_owned();
+    apply(&mut p, Edit::SetRecipe { recipe: again });
+
+    assert_eq!(p.recipes.len(), 1);
+    let saved = &p.recipes[0];
+    assert_eq!(saved.name, "Domestic stocks");
+    assert_eq!(saved.links[0].text, "Account");
+    assert_eq!(saved.table_starts_with, "Funds");
+    assert_eq!(saved.mapping.source, "SBI");
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn bad_recipes_are_rejected_and_change_nothing() {
+    let (mut p, _, _, acc) = sample();
+    let before = p.clone();
+    let mut with = |change: &dyn Fn(&mut Recipe)| {
+        let mut r = recipe_for(acc);
+        change(&mut r);
+        p.apply(Edit::SetRecipe { recipe: r }).is_err()
+    };
+
+    assert!(with(&|r| r.name = "  ".to_owned()));
+    assert!(with(&|r| r.links = vec![
+        FetchLink {
+            text: "x".repeat(61),
+            reference: None
+        };
+        1
+    ]));
+    assert!(with(&|r| r.links = vec![
+        FetchLink {
+            text: "".to_owned(),
+            reference: None
+        };
+        1
+    ]));
+    assert!(with(&|r| r.links = vec![
+        FetchLink {
+            text: "a".to_owned(),
+            reference: None
+        };
+        6
+    ]));
+    assert!(with(&|r| r.links[1].reference = Some("x".repeat(501))));
+    assert!(with(&|r| r.table_starts_with = " ".to_owned()));
+    assert!(with(&|r| r.currency = "jpy".to_owned()));
+    assert!(with(&|r| r.account = AccountId(9999)));
+    assert!(with(&|r| r.mapping.rows_per_record = 0));
+    assert_eq!(p, before);
+}
+
+#[test]
+fn removing_an_account_removes_its_recipes_and_a_recipe_can_be_removed() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::RemoveRecipe {
+            name: " Domestic stocks ".to_owned(),
+        },
+    );
+    assert!(p.recipes.is_empty());
+
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    apply(&mut p, Edit::RemoveAccount { id: acc });
+    assert!(p.recipes.is_empty());
+}
+
+#[test]
+fn a_file_with_a_recipe_for_a_missing_account_is_not_valid() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    p.recipes[0].account = AccountId(9999);
+
+    assert!(p.validate_integrity().is_err());
+}

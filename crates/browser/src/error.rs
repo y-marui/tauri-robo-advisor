@@ -18,4 +18,12 @@ pub enum Error {
     Script,
     #[error("no page is open")]
     NoPage,
+    #[error("no link with that text was found on the page")]
+    LinkNotFound,
+    #[error("that link is not one the app may follow")]
+    LinkRefused,
+    #[error("the link has changed since it was saved; choose it again")]
+    LinkChanged,
+    #[error("several different links have that text; choose one")]
+    LinkAmbiguous(Vec<String>),
 }

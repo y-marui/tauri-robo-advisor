@@ -1,0 +1,330 @@
+//! Following a link to show another page.
+//!
+//! This is the only kind of action the crate takes in a page, and it is kept
+//! narrow on purpose: an `<a>` link, found by its exact visible text, on the
+//! site the user logged in to. Nothing is typed, submitted, or entered. A link
+//! whose text or address looks like an order or a money movement is refused
+//! even when a recipe names it, unless it is clearly a view of past or current
+//! state (an inquiry, a history, a list, a balance).
+
+use serde::Deserialize;
+
+use crate::Error;
+
+const MAX_LINK_TEXT_CHARS: usize = 60;
+const MAX_HREF_CHARS: usize = 500;
+
+/// Words that suggest an action that changes something (orders, money, the account, the session).
+const RISKY_TEXT: &[&str] = &[
+    "注文",
+    "発注",
+    "売却",
+    "売付",
+    "買付",
+    "買い",
+    "売り",
+    "購入",
+    "入金",
+    "出金",
+    "送金",
+    "振替",
+    "振込",
+    "解約",
+    "申込",
+    "申し込み",
+    "取消",
+    "訂正",
+    "変更",
+    "削除",
+    "登録",
+    "承認",
+    "確定",
+    "実行",
+    "約定",
+    "ログアウト",
+    "order",
+    "buy",
+    "sell",
+    "purchase",
+    "deposit",
+    "withdraw",
+    "transfer",
+    "trade",
+    "payment",
+    "cancel",
+    "delete",
+    "submit",
+    "confirm",
+    "logout",
+    "sign out",
+];
+
+/// Words that show a link only displays something (so "注文照会" or "買付余力" may be followed).
+const VIEW_TEXT: &[&str] = &[
+    "照会", "履歴", "一覧", "余力", "残高", "明細", "状況", "inquiry", "history", "list",
+    "balance", "status", "detail", "summary", "position", "holding",
+];
+
+/// The same idea for the address, which is English-ish and lower case.
+const RISKY_HREF: &[&str] = &[
+    "order", "buy", "sell", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
+    "cancel", "delete", "submit", "confirm", "logout", "signout",
+];
+const VIEW_HREF: &[&str] = &[
+    "inquiry",
+    "history",
+    "list",
+    "balance",
+    "status",
+    "detail",
+    "summary",
+    "position",
+    "holding",
+    "asset",
+    "portfolio",
+    "account",
+];
+
+fn mentions(haystack: &str, words: &[&str]) -> bool {
+    let lower = haystack.to_lowercase();
+    words.iter().any(|w| lower.contains(w))
+}
+
+/// Whether a link may be named by a recipe, judged by its visible text.
+pub fn link_text_allowed(text: &str) -> Result<(), Error> {
+    let trimmed = text.trim();
+    if trimmed.is_empty()
+        || trimmed.chars().count() > MAX_LINK_TEXT_CHARS
+        || trimmed.chars().any(char::is_control)
+    {
+        return Err(Error::LinkRefused);
+    }
+    if mentions(trimmed, RISKY_TEXT) && !mentions(trimmed, VIEW_TEXT) {
+        return Err(Error::LinkRefused);
+    }
+    Ok(())
+}
+
+/// A link found in the page.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct Candidate {
+    pub index: usize,
+    /// The address, cut to a safe length; empty for a link with no address.
+    #[serde(default)]
+    pub href: String,
+    /// The address is on the page's own site.
+    #[serde(default)]
+    pub same_site: bool,
+    /// A `javascript:` or `#` link, which the page handles itself (the text was already checked).
+    #[serde(default)]
+    pub scripted: bool,
+}
+
+impl Candidate {
+    /// A short, stable description of where the link goes, so that links with the
+    /// same text can be told apart and a saved link can be recognized again. The
+    /// parts that change from one visit to the next are left out.
+    pub fn reference(&self) -> String {
+        if self.scripted {
+            String::new()
+        } else {
+            normalize_href(&self.href)
+        }
+    }
+
+    pub(crate) fn allowed(&self) -> bool {
+        if self.scripted {
+            return true;
+        }
+        if !self.same_site || self.href.chars().count() > MAX_HREF_CHARS {
+            return false;
+        }
+        !(mentions(&self.href, RISKY_HREF) && !mentions(&self.href, VIEW_HREF))
+    }
+}
+
+/// Words in a query name that mean the value belongs to one visit.
+const VOLATILE_KEYS: &[&str] = &[
+    "seq", "token", "session", "sid", "time", "stamp", "nonce", "rand", "csrf",
+];
+
+/// A value that is a long run of digits or hex is a number made for one visit.
+fn volatile_value(value: &str) -> bool {
+    value.len() >= 10 && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// The path of an address and its query without the parts that change per visit.
+/// The remaining keys are sorted, so the same destination always gives the same text.
+pub fn normalize_href(href: &str) -> String {
+    let (path, query) = href.split_once('?').unwrap_or((href, ""));
+    let mut kept: Vec<(String, String)> = query
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+        .filter_map(|pair| {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            let lower = key.to_lowercase();
+            let volatile = VOLATILE_KEYS.iter().any(|k| lower.contains(k)) || volatile_value(value);
+            (!volatile).then(|| (key.to_owned(), value.to_owned()))
+        })
+        .collect();
+    kept.sort();
+    let query: Vec<String> = kept.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    if query.is_empty() {
+        path.to_owned()
+    } else {
+        format!("{path}?{}", query.join("&"))
+    }
+}
+
+pub(crate) fn parse_candidates(value: &serde_json::Value) -> Result<Vec<Candidate>, Error> {
+    let list = value.as_array().ok_or(Error::Script)?;
+    if list.len() > 20 {
+        return Err(Error::Script);
+    }
+    list.iter()
+        .map(|item| serde_json::from_value(item.clone()).map_err(|_| Error::Script))
+        .collect()
+}
+
+/// Finds the links with exactly this visible text and says where each one goes.
+/// It only reads. The text is passed in as data, JSON-encoded.
+pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
+  const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+  const out = [];
+  [...document.querySelectorAll('a')].forEach((a, i) => {
+    if (clean(a.innerText ?? a.textContent) !== wanted || out.length >= 5) return;
+    const raw = a.getAttribute('href') ?? '';
+    const scripted = raw === '' || raw.startsWith('#') || raw.toLowerCase().startsWith('javascript:');
+    let sameSite = false;
+    let href = '';
+    if (!scripted) {
+      try {
+        const url = new URL(raw, location.href);
+        sameSite = (url.protocol === 'https:' || url.protocol === 'http:') && url.host === location.host;
+        href = (url.pathname + url.search).slice(0, 500);
+      } catch (e) { href = ''; }
+    }
+    out.push({ index: i, href, same_site: sameSite, scripted });
+  });
+  return out;
+})"#;
+
+/// Clicks the link at the given position among all `<a>` elements, but only
+/// if it still has the wanted text.
+pub(crate) const CLICK_LINK: &str = r#"((wanted, index) => {
+  const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+  const a = document.querySelectorAll('a')[index];
+  if (!a || clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
+  a.click();
+  return 'clicked';
+})"#;
+
+pub(crate) const READY_STATE: &str = "document.readyState";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_view_links_are_allowed() {
+        for ok in [
+            "口座管理",
+            "口座(円建)",
+            "口座(外貨建)",
+            "保有銘柄",
+            "資産残高・推移（My資産）",
+            "注文照会",
+            "買付余力",
+            "出金履歴",
+            "Account balance",
+        ] {
+            assert!(link_text_allowed(ok).is_ok(), "{ok}");
+        }
+    }
+
+    #[test]
+    fn links_that_act_are_refused() {
+        for bad in [
+            "注文",
+            "株式 買い注文",
+            "売却",
+            "入金",
+            "出金",
+            "振替",
+            "解約",
+            "ログアウト",
+            "Buy",
+            "Place order",
+            "Withdraw funds",
+            "Sign out",
+            "Transfer",
+            "",
+        ] {
+            assert_eq!(link_text_allowed(bad), Err(Error::LinkRefused), "{bad:?}");
+        }
+        assert_eq!(link_text_allowed(&"あ".repeat(61)), Err(Error::LinkRefused));
+        assert_eq!(link_text_allowed("a\nb"), Err(Error::LinkRefused));
+    }
+
+    fn candidate(href: &str, same_site: bool, scripted: bool) -> Candidate {
+        Candidate {
+            index: 0,
+            href: href.to_owned(),
+            same_site,
+            scripted,
+        }
+    }
+
+    #[test]
+    fn only_same_site_links_that_do_not_act_are_followed() {
+        assert!(candidate("/ETGate/?_ControlID=WPLETacR001Control", true, false).allowed());
+        assert!(candidate("/orderhistory/list", true, false).allowed());
+        assert!(!candidate("/trade/order/confirm", true, false).allowed());
+        assert!(!candidate("/transfer", true, false).allowed());
+        assert!(
+            !candidate("/ETGate/", false, false).allowed(),
+            "another site"
+        );
+        assert!(
+            candidate("", false, true).allowed(),
+            "the page handles it itself"
+        );
+        assert!(!candidate(&"a".repeat(600), true, false).allowed());
+    }
+
+    #[test]
+    fn the_parts_of_an_address_that_change_per_visit_are_left_out() {
+        assert_eq!(
+            normalize_href(
+                "/ETGate/?_ControlID=WPLETacR001Control&_SeqNo=1649728758632_default_task_354&getFlg=on"
+            ),
+            "/ETGate/?_ControlID=WPLETacR001Control&getFlg=on",
+        );
+        assert_eq!(
+            normalize_href("/a?b=2&a=1&sessionId=abc&n=0123456789abcdef"),
+            "/a?a=1&b=2",
+            "sorted, and long numbers and session-like names are dropped",
+        );
+        assert_eq!(normalize_href("/plain"), "/plain");
+        assert_eq!(normalize_href("/x?"), "/x");
+    }
+
+    #[test]
+    fn what_the_page_returns_is_checked() {
+        let good =
+            serde_json::json!([{"index": 3, "href": "/a", "same_site": true, "scripted": false}]);
+        assert_eq!(parse_candidates(&good).unwrap()[0].index, 3);
+        assert_eq!(
+            parse_candidates(&serde_json::json!("x")),
+            Err(Error::Script)
+        );
+        assert_eq!(
+            parse_candidates(&serde_json::json!([{"href": "/a"}])),
+            Err(Error::Script)
+        );
+        assert_eq!(
+            parse_candidates(&serde_json::json!(vec![serde_json::json!({}); 21])),
+            Err(Error::Script)
+        );
+    }
+}

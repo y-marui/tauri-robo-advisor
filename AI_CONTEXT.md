@@ -84,8 +84,8 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 
 ### Design Constraints
 
-- **外部ランタイム依存を持たない。** Python・Selenium・chromedriver を要求しない。利用者が自分で入れたシステムのブラウザ（Chrome・Edge・Brave）を任意で使う「ブラウザで取得」は設けてよいが、必須にしない（ブラウザがなくてもアプリのすべてが動く）。ブラウザの操作は `crates/browser` に閉じ込め、読み取りだけを行い、認証情報には触れない。
-- **証券会社へのログインはアプリ内で行わない。** SBI 証券・マネックス証券のログインにはパスキーが必要で、Tauri の組み込み WebView では OS ごとに対応が不完全なため。利用者がシステムのブラウザで自分でログインし、保有一覧を CSV で保存するか、画面の表をコピーして、アプリに取り込む。出力できない証券会社は手入力にする。ログイン後の表を自動で読むには、アプリが専用のプロファイルでブラウザを起動し、利用者がそこで自分でログインしたあと、アプリが DevTools プロトコル（localhost のみ）で表を読む（#28）。ブラウザ拡張は採らない。
+- **外部ランタイム依存を持たない。** Python・Selenium・chromedriver を要求しない。利用者が自分で入れたシステムのブラウザ（Chrome・Edge・Brave）を任意で使う「ブラウザで取得」は設けてよいが、必須にしない（ブラウザがなくてもアプリのすべてが動く）。ブラウザの操作は `crates/browser` に閉じ込める。行うのは、表の読み取りと、別のページを表示するだけの通常のリンク（`<a>`）をたどることだけ（#36）。入力・送信・ボタンやフォームの操作はしない。注文・売買・入出金・ログアウトなどに見えるリンクは、レシピに書かれていても押さない。認証情報には触れない。
+- **証券会社へのログインはアプリ内で行わない。** SBI 証券・マネックス証券のログインにはパスキーが必要で、Tauri の組み込み WebView では OS ごとに対応が不完全なため。利用者がシステムのブラウザで自分でログインし、保有一覧を CSV で保存するか、画面の表をコピーして、アプリに取り込む。出力できない証券会社は手入力にする。ログイン後の表を自動で読むには、アプリが専用のプロファイルでブラウザを起動し、利用者がそこで自分でログインしたあと、アプリが DevTools プロトコル（localhost のみ）で表を読む（#28）。ブラウザ拡張は採らない。ログイン後は、利用者が保存した「レシピ」（たどるリンクの文字、表の書き出し、列の指定、口座）で、リンクをたどって表を読む。証券会社ごとのコードは持たず、ページが変わったときはレシピを直す。
 - **ログイン情報（ID・パスワード・2FA コード）を保存しない。** bitFlyer の API キー・シークレットは OS のキーチェーンに保存し、ファイル・ログ・設定に平文で書かない。
 - **データはローカルのみ。** 外部へ送信しない。テレメトリを入れない。
 - **ロジックは Rust に寄せる。** TypeScript は表示と入力に限定し、計算・変換・検証を書かない。Tauri コマンドは薄い境界層にし、ドメインロジックは Tauri に依存しない純粋な Rust として書く。
@@ -98,7 +98,7 @@ scripts/          # dev-charter 配布の pre-commit 用チェックスクリプ
 
 ### Tauri Notes
 
-- Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。ポートフォリオは Rust が持ち、フロントエンドは `get_portfolio`（状態と不備の一覧）、`apply_portfolio_edit`（検証・保存は Rust）、`export_all`（全データの書き出し）、`get_overview`（カテゴリごとの評価額と比率。グラフ用の読み取り専用）、`get_account_balance`（口座内の商品バランス。読み取り専用）、`suggest_rebalance`（読み取り専用の提案）、`plan_import`（取り込みの対応づけの確認。読み取り専用）、表の取り込み（`load_table_file`、`load_table_text`、`plan_table_import`、`clear_table`）、ブラウザで取得（`list_browsers`、`open_browser`、`browser_pages`、`fetch_browser_tables`、`use_fetched_table`、`close_browser`）と、bitFlyer のキー・残高のコマンドを使う。左パネル（`src/views/overview.ts`）、中央パネル（`holdings-table.ts`）、右パネル（`account-tabs.ts`）が表示する。
+- Rust 側のコマンドは `src-tauri/src/lib.rs` に集約し、フロントエンドからは `invoke` で呼ぶ。ポートフォリオは Rust が持ち、フロントエンドは `get_portfolio`（状態と不備の一覧）、`apply_portfolio_edit`（検証・保存は Rust）、`export_all`（全データの書き出し）、`get_overview`（カテゴリごとの評価額と比率。グラフ用の読み取り専用）、`get_account_balance`（口座内の商品バランス。読み取り専用）、`suggest_rebalance`（読み取り専用の提案）、`plan_import`（取り込みの対応づけの確認。読み取り専用）、表の取り込み（`load_table_file`、`load_table_text`、`plan_table_import`、`clear_table`）、取得レシピ（`run_recipe`、`fetch_all_plan`、`apply_fetch_all`、`clear_fetch_runs`）、ブラウザで取得（`list_browsers`、`open_browser`、`browser_pages`、`fetch_browser_tables`、`use_fetched_table`、`close_browser`）と、bitFlyer のキー・残高のコマンドを使う。左パネル（`src/views/overview.ts`）、中央パネル（`holdings-table.ts`）、右パネル（`account-tabs.ts`）が表示する。
 - 金額と比率は、フロントエンドでも十進数の文字列のまま扱い、数値型に変換しない。％と小数の変換は文字列の小数点の移動だけで行う（`src/decimal.ts`）。
 - フロントエンドの単体テストは `src/*.test.ts`（`npm test`）。`@types/node` を入れないため、`tsc` の対象から外している。
 - `src-tauri/tauri.conf.json` に CSP（本番 `csp` と開発用 `devCsp`）を設定してある。外部への接続や外部スクリプトが必要になったら、許可先を最小限で追加し、`docs/architecture.md` に理由を記録する。

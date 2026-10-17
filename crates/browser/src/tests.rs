@@ -116,12 +116,28 @@ fn fake_browser(script_value: Value) -> Endpoint {
 }
 
 fn fake_browser_with(script_value: Value, fail_script: bool) -> Endpoint {
+    fake_browser_queue(vec![script_value], fail_script)
+}
+
+/// Like `fake_browser`, but the page answers successive scripts with these values
+/// in order (the last one is repeated), and the scripts it was asked to run are
+/// kept for the test to look at.
+fn fake_browser_queue(values: Vec<Value>, fail_script: bool) -> Endpoint {
+    fake_browser_logged(values, fail_script, None)
+}
+
+fn fake_browser_logged(
+    values: Vec<Value>,
+    fail_script: bool,
+    log: Option<std::sync::Arc<std::sync::Mutex<Vec<String>>>>,
+) -> Endpoint {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
         let mut socket = tungstenite::accept(stream).unwrap();
         let mut first = true;
+        let mut next = 0usize;
         while let Ok(Message::Text(text)) = socket.read() {
             let request: Value = serde_json::from_str(text.as_str()).unwrap();
             let id = request["id"].clone();
@@ -141,10 +157,16 @@ fn fake_browser_with(script_value: Value, fail_script: bool) -> Endpoint {
                 }
                 "Runtime.evaluate" => {
                     assert_eq!(request["sessionId"], "s1");
+                    if let Some(log) = &log {
+                        let expression = request["params"]["expression"].as_str().unwrap_or("");
+                        log.lock().unwrap().push(expression.to_owned());
+                    }
                     if fail_script {
                         json!({"exceptionDetails": {"text": "secret page text"}})
                     } else {
-                        json!({"result": {"type": "object", "value": script_value}})
+                        let value = values[next.min(values.len() - 1)].clone();
+                        next += 1;
+                        json!({"result": {"type": "object", "value": value}})
                     }
                 }
                 "Browser.close" => json!({}),
@@ -252,4 +274,202 @@ fn the_fixed_script_only_reads_the_page() {
     ] {
         assert!(!script.contains(action), "{action}");
     }
+}
+
+// ---- following a link --------------------------------------------------------
+
+fn attached(endpoint: &Endpoint) -> (Cdp, String) {
+    let mut cdp = Cdp::connect(endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+    (cdp, session)
+}
+
+fn found(href: &str, same_site: bool, scripted: bool) -> Value {
+    json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted}])
+}
+
+#[test]
+fn a_plain_link_is_found_clicked_and_waited_for() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            found("/account/list", true, false),
+            json!("clicked"),
+            json!("loading"),
+            json!("complete"),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let followed = cdp.follow_link(&session, "口座(円建)", None).unwrap();
+    assert_eq!(followed.reference, "/account/list");
+
+    let scripts = log.lock().unwrap().clone();
+    assert_eq!(scripts.len(), 4, "find, click, then two readiness checks");
+    assert!(
+        scripts[0].contains("\"口座(円建)\""),
+        "the text is passed as JSON data"
+    );
+    assert!(
+        scripts[1].ends_with(", 4)"),
+        "the clicked position comes from the search"
+    );
+    assert_eq!(scripts[2], "document.readyState");
+}
+
+#[test]
+fn a_link_text_is_passed_as_data_not_as_code() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![json!([])], false, Some(log.clone()));
+    let (mut cdp, session) = attached(&endpoint);
+
+    let result = cdp.follow_link(&session, "x\"); alert(1); (\"", None);
+
+    assert_eq!(result, Err(Error::LinkNotFound));
+    let scripts = log.lock().unwrap().clone();
+    assert!(
+        scripts[0].contains("x\\\"); alert(1); (\\\""),
+        "quotes are escaped: {}",
+        scripts[0]
+    );
+}
+
+#[test]
+fn risky_links_are_refused_before_the_page_is_asked() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![json!([])], false, Some(log.clone()));
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "買い注文", None),
+        Err(Error::LinkRefused)
+    );
+    assert_eq!(
+        cdp.follow_link(&session, "ログアウト", None),
+        Err(Error::LinkRefused)
+    );
+    assert!(log.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_link_to_another_site_or_to_an_action_is_refused_and_nothing_is_clicked() {
+    for page in [
+        found("/x", false, false),
+        found("/trade/order/confirm", true, false),
+    ] {
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let endpoint = fake_browser_logged(vec![page], false, Some(log.clone()));
+        let (mut cdp, session) = attached(&endpoint);
+
+        assert_eq!(
+            cdp.follow_link(&session, "保有銘柄", None),
+            Err(Error::LinkRefused)
+        );
+        assert_eq!(log.lock().unwrap().len(), 1, "only the search ran");
+    }
+}
+
+#[test]
+fn a_missing_link_and_a_link_that_is_gone_are_reported() {
+    let endpoint = fake_browser(json!([]));
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkNotFound)
+    );
+
+    let endpoint = fake_browser_queue(vec![found("/a", true, false), json!("gone")], false);
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkNotFound)
+    );
+}
+
+fn two_links(a: &str, b: &str) -> Value {
+    json!([
+        {"index": 1, "href": a, "same_site": true, "scripted": false},
+        {"index": 7, "href": b, "same_site": true, "scripted": false},
+    ])
+}
+
+#[test]
+fn links_with_the_same_text_and_the_same_destination_count_as_one() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            two_links(
+                "/ETGate/?_ControlID=A&_SeqNo=1111111111",
+                "/ETGate/?_ControlID=A&_SeqNo=2222222222",
+            ),
+            json!("clicked"),
+            json!("complete"),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let followed = cdp.follow_link(&session, "ポートフォリオ", None).unwrap();
+
+    assert_eq!(followed.reference, "/ETGate/?_ControlID=A");
+    assert!(
+        log.lock().unwrap()[1].ends_with(", 1)"),
+        "the first one is clicked"
+    );
+}
+
+#[test]
+fn links_with_the_same_text_and_different_destinations_are_not_guessed() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![two_links("/a/list", "/b/list")],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
+
+    assert_eq!(
+        error,
+        Error::LinkAmbiguous(vec!["/a/list".to_owned(), "/b/list".to_owned()])
+    );
+    assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
+}
+
+#[test]
+fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            two_links("/a/list", "/b/list"),
+            json!("clicked"),
+            json!("complete"),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    cdp.follow_link(&session, "一覧", Some("/b/list")).unwrap();
+    assert!(
+        log.lock().unwrap()[1].ends_with(", 7)"),
+        "the second link was clicked"
+    );
+
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![two_links("/a/list", "/b/list")],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "一覧", Some("/c/list")),
+        Err(Error::LinkChanged)
+    );
+    assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
 }
