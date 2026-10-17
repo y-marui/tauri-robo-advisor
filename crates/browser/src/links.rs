@@ -71,18 +71,7 @@ const RISKY_HREF: &[&str] = &[
     "cancel", "delete", "submit", "confirm", "logout", "signout",
 ];
 const VIEW_HREF: &[&str] = &[
-    "inquiry",
-    "history",
-    "list",
-    "balance",
-    "status",
-    "detail",
-    "summary",
-    "position",
-    "holding",
-    "asset",
-    "portfolio",
-    "account",
+    "inquiry", "history", "list", "balance", "status", "detail", "summary", "position", "holding",
 ];
 
 fn mentions(haystack: &str, words: &[&str]) -> bool {
@@ -145,7 +134,13 @@ impl Candidate {
         if !self.same_site || self.too_long || self.href.chars().count() > MAX_HREF_CHARS {
             return false;
         }
-        !(mentions(&self.href, RISKY_HREF) && !mentions(&self.href, VIEW_HREF))
+        // Only the route (the path) can show that a link is a view. A word in the
+        // query never does: "/transfer?account=1" is still a transfer.
+        let (route, _) = self
+            .href
+            .split_once('?')
+            .unwrap_or((self.href.as_str(), ""));
+        !(mentions(&self.href, RISKY_HREF) && !mentions(route, VIEW_HREF))
     }
 }
 
@@ -302,6 +297,16 @@ mod tests {
         assert!(candidate("/orderhistory/list", true, false).allowed());
         assert!(!candidate("/trade/order/confirm", true, false).allowed());
         assert!(!candidate("/transfer", true, false).allowed());
+        assert!(
+            !candidate("/transfer?account=123", true, false).allowed(),
+            "a word in the query does not make a transfer a view"
+        );
+        assert!(!candidate("/order/confirm?return=/portfolio", true, false).allowed());
+        assert!(
+            !candidate("/account/transfer", true, false).allowed(),
+            "account is not a sign of a view"
+        );
+        assert!(candidate("/transfer/history", true, false).allowed());
         assert!(
             !candidate("/ETGate/", false, false).allowed(),
             "another site"

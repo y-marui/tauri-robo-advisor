@@ -4,6 +4,9 @@ use rust_decimal::Decimal;
 
 use crate::{Error, Issue, Portfolio, ProductTargeting, SCHEMA_VERSION};
 
+/// The most recipes a data file may hold.
+const MAX_RECIPES_ALLOWED: usize = 50;
+
 /// Largest allowed distance between the category weights' sum and 1. Weights
 /// are typed by hand, so a tiny tolerance absorbs rounding such as 33.33 + 33.33
 /// + 33.34.
@@ -139,13 +142,26 @@ impl Portfolio {
         {
             return corrupt("the target account is missing");
         }
-        if self.recipes.len() > 1000
-            || self
-                .recipes
-                .iter()
-                .any(|r| !self.accounts.iter().any(|a| a.id == r.account))
-        {
-            return corrupt("a recipe refers to an account that does not exist");
+        // Saved mappings and recipes were checked when they were saved; a file is
+        // not trusted to have been written by this app, so the same rules apply here.
+        let mut sources = HashSet::new();
+        for mapping in &self.import_mappings {
+            if !sources.insert(mapping.source.clone())
+                || mapping.clone().validated().as_ref() != Ok(mapping)
+            {
+                return corrupt("a saved import mapping is not valid");
+            }
+        }
+        let mut names = HashSet::new();
+        if self.recipes.len() > MAX_RECIPES_ALLOWED {
+            return corrupt("there are too many recipes");
+        }
+        for recipe in &self.recipes {
+            if !names.insert(recipe.name.clone())
+                || recipe.clone().validated(self).as_ref() != Ok(recipe)
+            {
+                return corrupt("a recipe is not valid");
+            }
         }
         Ok(())
     }

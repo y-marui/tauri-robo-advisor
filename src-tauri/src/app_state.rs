@@ -53,6 +53,9 @@ pub struct AppState {
 /// The rows a recipe read, kept until the user applies them. The plan is made
 /// again from these rows each time, so it follows the aliases as they are then.
 struct StoredRun {
+    /// The recipe as it was when it ran. A run whose recipe has since been changed
+    /// or removed no longer says what to do and is dropped.
+    recipe: Recipe,
     name: String,
     account: AccountId,
     source: String,
@@ -271,7 +274,7 @@ impl AppState {
     /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
     /// without a saved reference gets one now, so the same link is found next time.
     pub fn run_recipe(&self, name: &str, page: &str) -> Result<RecipeOutcome, String> {
-        let recipe = self.recipe(name)?;
+        let mut recipe = self.recipe(name)?;
         // An earlier result of this recipe must never survive a run that fails or needs
         // attention: it would be applied together with the fresh ones.
         self.lock_runs()?.retain(|r| r.name != name);
@@ -292,7 +295,14 @@ impl AppState {
                 link.reference.get_or_insert(reference);
             }
             // Best effort: the run itself does not depend on it being saved.
-            let _ = self.apply(Edit::SetRecipe { recipe: learned });
+            if self
+                .apply(Edit::SetRecipe {
+                    recipe: learned.clone(),
+                })
+                .is_ok()
+            {
+                recipe = learned;
+            }
         }
 
         let extraction = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
@@ -305,6 +315,7 @@ impl AppState {
             })
             .collect();
         let run = StoredRun {
+            recipe: recipe.clone(),
             name: recipe.name.clone(),
             account: recipe.account,
             source: recipe.mapping.source.clone(),
@@ -333,7 +344,16 @@ impl AppState {
 
     /// The kept runs, planned again with the aliases as they are now.
     pub fn fetch_all_plan(&self) -> Result<Vec<RecipeRunView>, String> {
-        let runs = self.lock_runs()?;
+        let mut runs = self.lock_runs()?;
+        // A recipe that was changed or removed after its run must not be applied.
+        let current = {
+            let guard = self.lock()?;
+            guard
+                .as_ref()
+                .map(|p| p.recipes.clone())
+                .unwrap_or_default()
+        };
+        runs.retain(|run| current.iter().any(|r| r == &run.recipe));
         runs.iter().map(|run| self.run_view(run)).collect()
     }
 
@@ -593,6 +613,10 @@ mod tests {
 
     fn stored(name: &str, account: AccountId, rows: &[(&str, i64)]) -> StoredRun {
         StoredRun {
+            recipe: Recipe {
+                name: name.to_owned(),
+                ..domestic_recipe(account)
+            },
             name: name.to_owned(),
             account,
             source: "SBI".to_owned(),
@@ -634,6 +658,8 @@ mod tests {
                 quantity: None,
             })
             .unwrap();
+        save_recipe(&state, "Domestic", main);
+        save_recipe(&state, "Other stocks", main);
         *state.runs.lock().unwrap() = vec![
             stored("Domestic", main, &[("Stock A", 100), ("Unknown", 5)]),
             stored("Other stocks", main, &[("Stock B", 50), ("Fund X", 7)]),
@@ -669,6 +695,8 @@ mod tests {
             })
             .unwrap();
         // Nothing is linked yet, as on a first run.
+        save_recipe(&state, "Other", other);
+        save_recipe(&state, "Main", main);
         *state.runs.lock().unwrap() = vec![
             stored("Other", other, &[("New name", 1)]),
             stored("Main", main, &[]),
@@ -686,6 +714,7 @@ mod tests {
     #[test]
     fn the_plan_follows_the_aliases_as_they_are_when_it_is_asked_for() {
         let (state, main, _, stock, _) = recipe_state("replan");
+        save_recipe(&state, "Domestic", main);
         *state.runs.lock().unwrap() = vec![stored("Domestic", main, &[("Stock A", 100)])];
         assert_eq!(state.fetch_all_plan().unwrap()[0].plan.unmatched.len(), 1);
 
@@ -745,5 +774,92 @@ mod tests {
         let (state, ..) = recipe_state("norecipe");
 
         assert!(state.run_recipe("missing", "page").is_err());
+    }
+
+    /// Saves a recipe of this name for the account, as a run needs one to stay valid.
+    fn save_recipe(state: &AppState, name: &str, account: AccountId) {
+        state
+            .apply(Edit::SetRecipe {
+                recipe: Recipe {
+                    name: name.to_owned(),
+                    ..domestic_recipe(account)
+                },
+            })
+            .unwrap();
+    }
+
+    fn domestic_recipe(account: AccountId) -> Recipe {
+        Recipe {
+            name: "Domestic".to_owned(),
+            links: Vec::new(),
+            table_starts_with: "Stocks".to_owned(),
+            currency: "JPY".to_owned(),
+            account,
+            mapping: ImportMapping {
+                source: "SBI".to_owned(),
+                name_column: 0,
+                value_column: 1,
+                price_column: None,
+                price_unit: 1,
+                header_rows: 0,
+                rows_per_record: 1,
+                name_row: 0,
+                value_row: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn a_run_is_dropped_when_its_recipe_is_changed_or_removed() {
+        let (state, main, other, _, _) = recipe_state("changed");
+        let recipe = domestic_recipe(main);
+        state
+            .apply(Edit::SetRecipe {
+                recipe: recipe.clone(),
+            })
+            .unwrap();
+        let keep = |state: &AppState| {
+            *state.runs.lock().unwrap() = vec![StoredRun {
+                recipe: recipe.clone(),
+                ..stored("Domestic", main, &[("A", 1)])
+            }];
+        };
+
+        keep(&state);
+        assert_eq!(
+            state.fetch_all_plan().unwrap().len(),
+            1,
+            "unchanged: still there"
+        );
+
+        let mut moved = recipe.clone();
+        moved.account = other;
+        state.apply(Edit::SetRecipe { recipe: moved }).unwrap();
+        keep(&state);
+        assert!(
+            state.fetch_all_plan().unwrap().is_empty(),
+            "retargeted to another account"
+        );
+
+        state
+            .apply(Edit::SetRecipe {
+                recipe: recipe.clone(),
+            })
+            .unwrap();
+        keep(&state);
+        state
+            .apply(Edit::RemoveRecipe {
+                name: "Domestic".to_owned(),
+            })
+            .unwrap();
+        assert!(state.fetch_all_plan().unwrap().is_empty(), "removed");
+        assert!(
+            state
+                .apply_fetch_all()
+                .unwrap()
+                .portfolio
+                .holdings
+                .is_empty()
+        );
     }
 }

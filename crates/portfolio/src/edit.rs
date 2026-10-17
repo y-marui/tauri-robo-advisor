@@ -185,7 +185,7 @@ impl ImportMapping {
 
 impl Recipe {
     /// Checks a recipe and trims its names.
-    fn validated(self, portfolio: &Portfolio) -> Result<Self, Error> {
+    pub(crate) fn validated(self, portfolio: &Portfolio) -> Result<Self, Error> {
         let recipe_name = name(&self.name, "recipe")?;
         if self.links.len() > MAX_RECIPE_LINKS {
             return Err(Error::Invalid("a recipe has too many links".to_owned()));

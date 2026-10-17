@@ -925,3 +925,61 @@ fn a_file_with_a_recipe_for_a_missing_account_is_not_valid() {
 
     assert!(p.validate_integrity().is_err());
 }
+
+#[test]
+fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    p.validate_integrity().unwrap();
+
+    let mut duplicate = p.clone();
+    duplicate.recipes.push(duplicate.recipes[0].clone());
+    assert!(
+        duplicate.validate_integrity().is_err(),
+        "two recipes with one name"
+    );
+
+    let mut bad_currency = p.clone();
+    bad_currency.recipes[0].currency = "jpy".to_owned();
+    assert!(bad_currency.validate_integrity().is_err());
+
+    let mut bad_mapping = p.clone();
+    bad_mapping.recipes[0].mapping.rows_per_record = 0;
+    assert!(bad_mapping.validate_integrity().is_err());
+
+    let mut untrimmed = p.clone();
+    untrimmed.recipes[0].name = " padded ".to_owned();
+    assert!(
+        untrimmed.validate_integrity().is_err(),
+        "names are stored trimmed"
+    );
+
+    let mut mappings = p.clone();
+    apply(
+        &mut mappings,
+        Edit::SetImportMapping {
+            source: "SBI".to_owned(),
+            name_column: 0,
+            value_column: 1,
+            price_column: None,
+            price_unit: 1,
+            header_rows: 0,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+        },
+    );
+    mappings.validate_integrity().unwrap();
+    mappings
+        .import_mappings
+        .push(mappings.import_mappings[0].clone());
+    assert!(
+        mappings.validate_integrity().is_err(),
+        "two mappings for one source"
+    );
+}
