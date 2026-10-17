@@ -77,6 +77,8 @@ export interface Portfolio {
   holdings: Holding[];
   settings: Settings;
   import_mappings: ImportMapping[];
+  /** Counts the accepted edits; a copy with a lower number is stale. */
+  revision: number;
 }
 
 export type Issue =
@@ -85,9 +87,23 @@ export type Issue =
   | { type: "category_has_no_products"; category: number }
   | { type: "missing_exchange_rate"; currency: string };
 
+/** Where the data lives and what the folder shows. */
+export interface DataInfo {
+  folder: string;
+  /** `true` when no folder was chosen and the data is in the app's own local folder. */
+  is_local: boolean;
+  /** Other copies of the data file made by the sync (for example "portfolio 2.json"). */
+  conflict_copies: string[];
+  /** The data file has not been downloaded to this computer yet. */
+  waiting_for_download: boolean;
+  /** Why a newer file on disk could not be used. */
+  warning: string | null;
+}
+
 export interface PortfolioView {
   portfolio: Portfolio;
   issues: Issue[];
+  data: DataInfo;
 }
 
 export type Edit =

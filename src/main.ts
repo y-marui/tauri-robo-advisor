@@ -6,10 +6,12 @@ import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
 import { bitflyerPanel } from "./views/bitflyer.ts";
 import { categoriesPanel } from "./views/categories.ts";
+import { dataFolderPanel } from "./views/data-folder.ts";
 import { holdingsPanel } from "./views/holdings.ts";
 import { accountTabsPanel } from "./views/account-tabs.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
+import { dataNotes } from "./views/data-folder.ts";
 import { issuesList } from "./views/issues.ts";
 import { productsPanel } from "./views/products.ts";
 import { tableImportPanel } from "./views/table-import.ts";
@@ -57,7 +59,9 @@ function renderAll(): void {
   if (!view) {
     return;
   }
-  issues.replaceChildren(...[issuesList(view.issues, view.portfolio)].filter((e) => e !== null));
+  issues.replaceChildren(
+    ...[dataNotes(view.data), issuesList(view.issues, view.portfolio)].filter((e) => e !== null),
+  );
   for (const panel of panels) {
     panel.render(view);
   }
@@ -85,14 +89,26 @@ const context: Context = {
       showStatus(t("Saved."), false);
       return true;
     } catch (error) {
+      // The file may have been changed on another computer: look at it again so
+      // the controls show what is really saved.
+      try {
+        view = await getPortfolio();
+      } catch {
+        // Keep showing the last state.
+      }
       showStatus(t("Could not save: {reason}", { reason: String(error) }), true);
-      renderAll(); // puts the previous values back into the controls
+      renderAll(); // puts the saved values back into the controls
       return false;
     }
   },
   fail(message) {
     showStatus(message, true);
     renderAll();
+  },
+  setView(next, message) {
+    view = next;
+    renderAll();
+    showStatus(message, false);
   },
 };
 
@@ -146,6 +162,7 @@ function build(): void {
     accountsPanel(context),
     holdingsPanel(context),
     settingsPanel(context),
+    dataFolderPanel(context),
   ];
   app.replaceChildren(
     h("header", { class: "top" }, h("h1", {}, t("Portfolio")), h("div", { class: "tools" }, exportButton, language)),
@@ -169,5 +186,23 @@ async function start(): Promise<void> {
     showStatus(t("Could not load: {reason}", { reason: String(error) }), true);
   }
 }
+
+// Another computer may have saved while this window was in the background: look
+// at the file again when the window comes back.
+window.addEventListener("focus", () => {
+  if (!view) {
+    return;
+  }
+  getPortfolio()
+    .then((next) => {
+      if (next.portfolio.revision !== view?.portfolio.revision || next.data.folder !== view?.data.folder) {
+        view = next;
+        renderAll();
+      }
+    })
+    .catch(() => {
+      // Keep showing the last state.
+    });
+});
 
 void start();

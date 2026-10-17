@@ -531,6 +531,7 @@ impl Portfolio {
                 self.settings.target_account = account;
             }
         }
+        self.revision = self.revision.saturating_add(1);
         Ok(())
     }
 

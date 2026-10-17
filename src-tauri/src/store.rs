@@ -6,6 +6,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
+use std::time::SystemTime;
 
 use portfolio::Portfolio;
 
@@ -33,6 +34,29 @@ pub fn load(path: &Path) -> Result<Portfolio, String> {
         .validate_integrity()
         .map_err(|e| format!("{e}; the data file was left untouched."))?;
     Ok(portfolio)
+}
+
+/// Cheap check for "did the file change?": its modification time and size.
+pub fn fingerprint(path: &Path) -> Option<(SystemTime, u64)> {
+    let metadata = fs::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+/// The revision stored in the file, without keeping the rest. `None` when the
+/// file is missing or unreadable.
+pub fn peek_revision(path: &Path) -> Option<u64> {
+    #[derive(serde::Deserialize)]
+    struct Revision {
+        #[serde(default)]
+        revision: u64,
+    }
+    if fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
+        return None;
+    }
+    let bytes = fs::read(path).ok()?;
+    serde_json::from_slice::<Revision>(&bytes)
+        .ok()
+        .map(|r| r.revision)
 }
 
 /// Writes the portfolio atomically: the data goes to a temporary file in the
