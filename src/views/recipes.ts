@@ -98,6 +98,12 @@ export function recipesPanel(ctx: Context): Panel {
     runButton.disabled = true;
     attention.replaceChildren();
     try {
+      // A full run starts from nothing; only a retry of named recipes keeps the others.
+      if (!only) {
+        await clearFetchRuns();
+        hasRuns = false;
+        results.replaceChildren();
+      }
       for (const recipe of view.portfolio.recipes.filter((r) => !only || only.includes(r.name))) {
         info(t("Fetching “{recipe}”…", { recipe: recipe.name }));
         try {

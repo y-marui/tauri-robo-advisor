@@ -1,8 +1,8 @@
 //! Following a link to show another page.
 //!
 //! This is the only kind of action the crate takes in a page, and it is kept
-//! narrow on purpose: an `<a>` link, found by its exact visible text, on the
-//! site the user logged in to. Nothing is typed, submitted, or entered. A link
+//! narrow on purpose: an `<a>` link with a real address, found by its exact
+//! visible text, on the site the user logged in to. Nothing is typed, submitted, or entered. A link
 //! whose text or address looks like an order or a money movement is refused
 //! even when a recipe names it, unless it is clearly a view of past or current
 //! state (an inquiry, a history, a list, a balance).
@@ -115,7 +115,7 @@ pub(crate) struct Candidate {
     /// The address is on the page's own site.
     #[serde(default)]
     pub same_site: bool,
-    /// A `javascript:` or `#` link, which the page handles itself (the text was already checked).
+    /// A `javascript:` or `#` link, or one with no address: the page handles it itself.
     #[serde(default)]
     pub scripted: bool,
 }
@@ -133,8 +133,11 @@ impl Candidate {
     }
 
     pub(crate) fn allowed(&self) -> bool {
+        // A link the page handles itself (`javascript:`, `#`, no address) runs the
+        // page's own script when clicked, and nothing can show that it only
+        // navigates. It is never followed.
         if self.scripted {
-            return true;
+            return false;
         }
         if !self.same_site || self.href.chars().count() > MAX_HREF_CHARS {
             return false;
@@ -190,9 +193,9 @@ pub(crate) fn parse_candidates(value: &serde_json::Value) -> Result<Vec<Candidat
 /// It only reads. The text is passed in as data, JSON-encoded.
 pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
-  const out = [];
+  const seen = new Map();
   [...document.querySelectorAll('a')].forEach((a, i) => {
-    if (clean(a.innerText ?? a.textContent) !== wanted || out.length >= 5) return;
+    if (clean(a.innerText ?? a.textContent) !== wanted) return;
     const raw = a.getAttribute('href') ?? '';
     const scripted = raw === '' || raw.startsWith('#') || raw.toLowerCase().startsWith('javascript:');
     let sameSite = false;
@@ -204,9 +207,11 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
         href = (url.pathname + url.search).slice(0, 500);
       } catch (e) { href = ''; }
     }
-    out.push({ index: i, href, same_site: sameSite, scripted });
+    // Every matching link is looked at, but each distinct destination is listed once.
+    const key = scripted + '|' + sameSite + '|' + href;
+    if (!seen.has(key) && seen.size < 21) seen.set(key, { index: i, href, same_site: sameSite, scripted });
   });
-  return out;
+  return [...seen.values()];
 })"#;
 
 /// Clicks the link at the given position among all `<a>` elements, but only
@@ -286,8 +291,8 @@ mod tests {
             "another site"
         );
         assert!(
-            candidate("", false, true).allowed(),
-            "the page handles it itself"
+            !candidate("", false, true).allowed(),
+            "a link the page handles itself is never followed"
         );
         assert!(!candidate(&"a".repeat(600), true, false).allowed());
     }

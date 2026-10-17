@@ -272,6 +272,9 @@ impl AppState {
     /// without a saved reference gets one now, so the same link is found next time.
     pub fn run_recipe(&self, name: &str, page: &str) -> Result<RecipeOutcome, String> {
         let recipe = self.recipe(name)?;
+        // An earlier result of this recipe must never survive a run that fails or needs
+        // attention: it would be applied together with the fresh ones.
+        self.lock_runs()?.retain(|r| r.name != name);
         let read = self
             .browser
             .run_recipe(page, &recipe.links, &recipe.table_starts_with)?;
@@ -692,6 +695,49 @@ mod tests {
         assert!(plan[0].plan.unmatched.is_empty());
         assert_eq!(plan[0].plan.matched[0].product, stock);
         assert_eq!(plan[0].rows_read, 1);
+    }
+
+    #[test]
+    fn a_failed_run_does_not_leave_an_old_result_of_the_same_recipe_behind() {
+        let (state, main, _, _, _) = recipe_state("stale");
+        state
+            .apply(Edit::SetRecipe {
+                recipe: Recipe {
+                    name: "Domestic".to_owned(),
+                    links: Vec::new(),
+                    table_starts_with: "Stocks".to_owned(),
+                    currency: "JPY".to_owned(),
+                    account: main,
+                    mapping: ImportMapping {
+                        source: "SBI".to_owned(),
+                        name_column: 0,
+                        value_column: 1,
+                        price_column: None,
+                        price_unit: 1,
+                        header_rows: 0,
+                        rows_per_record: 1,
+                        name_row: 0,
+                        value_row: 0,
+                    },
+                },
+            })
+            .unwrap();
+        *state.runs.lock().unwrap() = vec![
+            stored("Domestic", main, &[("Old", 1)]),
+            stored("Other", main, &[("Keep", 2)]),
+        ];
+
+        // No browser is open, so this run fails after the old result is dropped.
+        assert!(state.run_recipe("Domestic", "page").is_err());
+
+        let names: Vec<String> = state
+            .runs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.name.clone())
+            .collect();
+        assert_eq!(names, vec!["Other"]);
     }
 
     #[test]

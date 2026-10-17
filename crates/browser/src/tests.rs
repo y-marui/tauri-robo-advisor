@@ -473,3 +473,16 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     );
     assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
 }
+
+#[test]
+fn a_link_the_page_handles_itself_is_never_followed() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![found("", false, true)], false, Some(log.clone()));
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkRefused)
+    );
+    assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
+}
