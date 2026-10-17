@@ -485,9 +485,9 @@ fn json_round_trip_keeps_amounts_as_exact_strings() {
 
 #[test]
 fn json_with_missing_optional_sections_uses_defaults() {
-    let json = r#"{"schema_version":1,"next_id":1}"#;
+    let json = format!(r#"{{"schema_version":{SCHEMA_VERSION},"next_id":1}}"#);
 
-    let p: Portfolio = serde_json::from_str(json).unwrap();
+    let p: Portfolio = serde_json::from_str(&json).unwrap();
 
     assert_eq!(p, Portfolio::default());
 }
