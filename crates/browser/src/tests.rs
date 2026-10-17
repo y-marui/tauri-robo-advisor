@@ -295,7 +295,7 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     let endpoint = fake_browser_logged(
         vec![
             found("/account/list", true, false),
-            json!("clicked"),
+            json!("navigated"),
             json!("loading"),
             json!("complete"),
         ],
@@ -314,8 +314,8 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
         "the text is passed as JSON data"
     );
     assert!(
-        scripts[1].ends_with(", 4)"),
-        "the clicked position comes from the search"
+        scripts[1].contains(", 4, \"/account/list\")"),
+        "the position and the accepted address come from the search"
     );
     assert_eq!(scripts[2], "document.readyState");
 }
@@ -405,7 +405,7 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
                 "/ETGate/?_ControlID=A&_SeqNo=1111111111",
                 "/ETGate/?_ControlID=A&_SeqNo=2222222222",
             ),
-            json!("clicked"),
+            json!("navigated"),
             json!("complete"),
         ],
         false,
@@ -417,8 +417,8 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
 
     assert_eq!(followed.reference, "/ETGate/?_ControlID=A");
     assert!(
-        log.lock().unwrap()[1].ends_with(", 1)"),
-        "the first one is clicked"
+        log.lock().unwrap()[1].contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\")"),
+        "the first one is followed"
     );
 }
 
@@ -447,7 +447,7 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     let endpoint = fake_browser_logged(
         vec![
             two_links("/a/list", "/b/list"),
-            json!("clicked"),
+            json!("navigated"),
             json!("complete"),
         ],
         false,
@@ -456,8 +456,8 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     let (mut cdp, session) = attached(&endpoint);
     cdp.follow_link(&session, "一覧", Some("/b/list")).unwrap();
     assert!(
-        log.lock().unwrap()[1].ends_with(", 7)"),
-        "the second link was clicked"
+        log.lock().unwrap()[1].contains(", 7, \"/b/list\")"),
+        "the second link was followed"
     );
 
     let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -485,4 +485,30 @@ fn a_link_the_page_handles_itself_is_never_followed() {
         Err(Error::LinkRefused)
     );
     assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
+}
+
+#[test]
+fn an_address_that_was_too_long_to_check_is_refused() {
+    let mut page = found("/ok/list", true, false);
+    page[0]["too_long"] = json!(true);
+    let endpoint = fake_browser(page);
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkRefused)
+    );
+}
+
+#[test]
+fn links_that_differ_only_in_an_account_number_are_different_destinations() {
+    let endpoint = fake_browser(two_links(
+        "/holdings?account=1234567890",
+        "/holdings?account=2234567890",
+    ));
+    let (mut cdp, session) = attached(&endpoint);
+
+    let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
+
+    assert!(matches!(error, Error::LinkAmbiguous(choices) if choices.len() == 2));
 }

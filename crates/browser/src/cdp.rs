@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
-use crate::links::{self, CLICK_LINK, FIND_LINKS, READY_STATE};
+use crate::links::{self, FIND_LINKS, NAVIGATE, READY_STATE};
 use crate::{Endpoint, Error};
 
 /// How long one answer may take, and the largest message accepted.
@@ -204,9 +204,11 @@ impl Cdp {
     }
 
     /// Follows the link with exactly this visible text, to show another page,
-    /// and waits until the page has loaded. Only a plain `<a>` link on the page's
-    /// own site is followed, and not one that looks like an order or a money
-    /// movement; nothing is typed or submitted.
+    /// and waits until the page has loaded. Only a plain `<a>` link with a real
+    /// address on the page's own site is followed, and not one that looks like an
+    /// order or a money movement. The browser is sent to the checked address
+    /// directly; the link is not clicked, so no script of the page runs.
+    /// Nothing is typed or submitted.
     ///
     /// Links with the same text that go to the same place count as one. When they
     /// go to different places, nothing is clicked unless a `reference` (from an
@@ -250,11 +252,12 @@ impl Cdp {
                 &allowed[0]
             }
         };
-        let clicked = self.evaluate(
+        let expected = serde_json::to_string(&chosen.href).map_err(|_| Error::Script)?;
+        let navigated = self.evaluate(
             session,
-            &format!("({CLICK_LINK})({wanted}, {})", chosen.index),
+            &format!("({NAVIGATE})({wanted}, {}, {expected})", chosen.index),
         )?;
-        if clicked.as_str() != Some("clicked") {
+        if navigated.as_str() != Some("navigated") {
             return Err(Error::LinkNotFound);
         }
         let followed = Followed {

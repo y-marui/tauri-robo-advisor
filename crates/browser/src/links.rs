@@ -118,6 +118,9 @@ pub(crate) struct Candidate {
     /// A `javascript:` or `#` link, or one with no address: the page handles it itself.
     #[serde(default)]
     pub scripted: bool,
+    /// The address (path and query) is longer than the safe length, so it was cut and cannot be checked.
+    #[serde(default)]
+    pub too_long: bool,
 }
 
 impl Candidate {
@@ -139,7 +142,7 @@ impl Candidate {
         if self.scripted {
             return false;
         }
-        if !self.same_site || self.href.chars().count() > MAX_HREF_CHARS {
+        if !self.same_site || self.too_long || self.href.chars().count() > MAX_HREF_CHARS {
             return false;
         }
         !(mentions(&self.href, RISKY_HREF) && !mentions(&self.href, VIEW_HREF))
@@ -151,9 +154,12 @@ const VOLATILE_KEYS: &[&str] = &[
     "seq", "token", "session", "sid", "time", "stamp", "nonce", "rand", "csrf",
 ];
 
-/// A value that is a long run of digits or hex is a number made for one visit.
+/// A value that is a timestamp (13 digits or more, like a time in milliseconds) or a long
+/// token (24 or more hex characters) is made for one visit. Shorter numbers, such as an
+/// account number, are part of where the link goes and are kept.
 fn volatile_value(value: &str) -> bool {
-    value.len() >= 10 && value.chars().all(|c| c.is_ascii_hexdigit())
+    (value.len() >= 13 && value.chars().all(|c| c.is_ascii_digit()))
+        || (value.len() >= 24 && value.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 /// The path of an address and its query without the parts that change per visit.
@@ -200,28 +206,37 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
     const scripted = raw === '' || raw.startsWith('#') || raw.toLowerCase().startsWith('javascript:');
     let sameSite = false;
     let href = '';
+    let tooLong = false;
     if (!scripted) {
       try {
         const url = new URL(raw, location.href);
         sameSite = (url.protocol === 'https:' || url.protocol === 'http:') && url.host === location.host;
-        href = (url.pathname + url.search).slice(0, 500);
+        const full = url.pathname + url.search;
+        tooLong = full.length > 500;
+        href = full.slice(0, 500);
       } catch (e) { href = ''; }
     }
     // Every matching link is looked at, but each distinct destination is listed once.
-    const key = scripted + '|' + sameSite + '|' + href;
-    if (!seen.has(key) && seen.size < 21) seen.set(key, { index: i, href, same_site: sameSite, scripted });
+    const key = scripted + '|' + sameSite + '|' + tooLong + '|' + href;
+    if (!seen.has(key) && seen.size < 21) seen.set(key, { index: i, href, same_site: sameSite, scripted, too_long: tooLong });
   });
   return [...seen.values()];
 })"#;
 
-/// Clicks the link at the given position among all `<a>` elements, but only
-/// if it still has the wanted text.
-pub(crate) const CLICK_LINK: &str = r#"((wanted, index) => {
+/// Goes to the address of the link at the given position, without clicking it:
+/// a click would run whatever script the page attached to the link. Everything is
+/// checked again in the page (the text, the site, and the exact path and query that
+/// the Rust side accepted), and anything that differs is not followed.
+pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected) => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
   const a = document.querySelectorAll('a')[index];
   if (!a || clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
-  a.click();
-  return 'clicked';
+  let url;
+  try { url = new URL(a.getAttribute('href') ?? '', location.href); } catch (e) { return 'gone'; }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.host !== location.host) return 'gone';
+  if (url.pathname + url.search !== expected) return 'gone';
+  location.assign(url.href);
+  return 'navigated';
 })"#;
 
 pub(crate) const READY_STATE: &str = "document.readyState";
@@ -277,6 +292,7 @@ mod tests {
             href: href.to_owned(),
             same_site,
             scripted,
+            too_long: false,
         }
     }
 
@@ -306,9 +322,16 @@ mod tests {
             "/ETGate/?_ControlID=WPLETacR001Control&getFlg=on",
         );
         assert_eq!(
-            normalize_href("/a?b=2&a=1&sessionId=abc&n=0123456789abcdef"),
+            normalize_href(
+                "/a?b=2&a=1&sessionId=abc&n=0123456789abcdef0123456789abcdef&t=1649728758632"
+            ),
             "/a?a=1&b=2",
-            "sorted, and long numbers and session-like names are dropped",
+            "sorted, and timestamps, long tokens, and session-like names are dropped",
+        );
+        assert_ne!(
+            normalize_href("/holdings?account=1234567890"),
+            normalize_href("/holdings?account=2234567890"),
+            "an account number is part of where the link goes",
         );
         assert_eq!(normalize_href("/plain"), "/plain");
         assert_eq!(normalize_href("/x?"), "/x");

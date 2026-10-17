@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 /// The on-disk schema version. A file with a newer version is refused rather
 /// than guessed at, so an older app never rewrites data it does not understand.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Version 2 added the saved import mappings, the revision, and the fetch recipes
+/// (all with defaults, so a version 1 file loads and is saved as version 2).
+pub const SCHEMA_VERSION: u32 = 2;
 
 macro_rules! id_type {
     ($name:ident) => {
