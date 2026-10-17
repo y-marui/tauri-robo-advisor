@@ -134,14 +134,54 @@ impl Candidate {
         if !self.same_site || self.too_long || self.href.chars().count() > MAX_HREF_CHARS {
             return false;
         }
-        // Only the route (the path) can show that a link is a view. A word in the
-        // query never does: "/transfer?account=1" is still a transfer.
-        let (route, _) = self
-            .href
-            .split_once('?')
-            .unwrap_or((self.href.as_str(), ""));
-        !(mentions(&self.href, RISKY_HREF) && !mentions(route, VIEW_HREF))
+        address_looks_read_only(&self.href)
     }
+}
+
+/// Decodes `%xx` escapes (more than once, in case of double encoding) so that a
+/// word such as `/trans%66er` is seen as what the server will read. The address that
+/// is actually followed stays as it was; this is only for judging it.
+fn percent_decoded(text: &str) -> String {
+    let mut current = text.to_owned();
+    for _ in 0..3 {
+        let bytes = current.as_bytes();
+        let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        let mut changed = false;
+        while i < bytes.len() {
+            let hex = |b: u8| (b as char).to_digit(16);
+            if bytes[i] == b'%'
+                && i + 2 < bytes.len()
+                && let (Some(high), Some(low)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
+            {
+                out.push((high * 16 + low) as u8);
+                i += 3;
+                changed = true;
+            } else {
+                out.push(if bytes[i] == b'+' { b' ' } else { bytes[i] });
+                i += 1;
+            }
+        }
+        current = String::from_utf8_lossy(&out).into_owned();
+        if !changed {
+            break;
+        }
+    }
+    current
+}
+
+/// Whether an address (path and query) looks like it only shows something. Every
+/// part is judged on its own: a path segment or a query pair with an action word
+/// is refused unless the same part also says it is a view (so `orderhistory` is
+/// fine), and a view word in a neighbouring part never excuses it
+/// (`/history/delete` and `/transfer/history` are both refused).
+fn address_looks_read_only(href: &str) -> bool {
+    let decoded = percent_decoded(href);
+    let (route, query) = decoded.split_once('?').unwrap_or((decoded.as_str(), ""));
+    route
+        .split('/')
+        .chain(query.split('&'))
+        .all(|part| !mentions(part, RISKY_HREF) || mentions(part, VIEW_HREF))
 }
 
 /// Words in a query name that mean the value belongs to one visit.
@@ -306,7 +346,23 @@ mod tests {
             !candidate("/account/transfer", true, false).allowed(),
             "account is not a sign of a view"
         );
-        assert!(candidate("/transfer/history", true, false).allowed());
+        assert!(
+            !candidate("/transfer/history", true, false).allowed(),
+            "an action word in one part is not excused by a view word in another"
+        );
+        assert!(!candidate("/history/delete", true, false).allowed());
+        assert!(!candidate("/transfer/history/cancel", true, false).allowed());
+        assert!(
+            !candidate("/trans%66er", true, false).allowed(),
+            "escapes are decoded"
+        );
+        assert!(!candidate("/log%6fut", true, false).allowed());
+        assert!(
+            !candidate("/tr%2561nsfer", true, false).allowed(),
+            "double encoding"
+        );
+        assert!(!candidate("/page?action=cancel", true, false).allowed());
+        assert!(candidate("/orderhistory/list", true, false).allowed());
         assert!(
             !candidate("/ETGate/", false, false).allowed(),
             "another site"

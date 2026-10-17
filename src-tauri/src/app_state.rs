@@ -289,7 +289,10 @@ impl AppState {
             RecipeRead::Table { table, references } => (table, references),
         };
 
-        if recipe.links.iter().any(|l| l.reference.is_none()) {
+        // Only fill in the references if the recipe is still the one that ran: an edit made
+        // while the page was being read must not be put back the way it was.
+        let unchanged = self.recipe(name).ok().as_ref() == Some(&recipe);
+        if unchanged && recipe.links.iter().any(|l| l.reference.is_none()) {
             let mut learned = recipe.clone();
             for (link, reference) in learned.links.iter_mut().zip(references) {
                 link.reference.get_or_insert(reference);
@@ -367,6 +370,26 @@ impl AppState {
     /// with no linked row is left alone, so an unlinked first run never empties it.
     pub fn apply_fetch_all(&self) -> Result<PortfolioView, String> {
         let views = self.fetch_all_plan()?;
+        // An account is replaced by what ALL of its recipes read. If one of them has no
+        // result (it failed, needs a choice, or was added after the others ran), replacing
+        // would delete the holdings that recipe was meant to supply.
+        let missing: Vec<String> = {
+            let guard = self.lock()?;
+            let portfolio = guard.as_ref().map_err(Clone::clone)?;
+            portfolio
+                .recipes
+                .iter()
+                .filter(|r| views.iter().any(|v| v.account == r.account))
+                .filter(|r| !views.iter().any(|v| v.name == r.name))
+                .map(|r| r.name.clone())
+                .collect()
+        };
+        if !missing.is_empty() {
+            return Err(format!(
+                "These recipes have no result yet: {}. Run them, or remove them, before applying.",
+                missing.join(", ")
+            ));
+        }
         let mut per_account: BTreeMap<AccountId, BTreeMap<ProductId, Decimal>> = BTreeMap::new();
         for view in &views {
             let products = per_account.entry(view.account).or_default();
@@ -860,6 +883,33 @@ mod tests {
                 .portfolio
                 .holdings
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn nothing_is_replaced_while_a_recipe_of_the_account_has_no_result() {
+        let (state, main, _, stock, _) = recipe_state("missing");
+        link(&state, stock, "Stock A");
+        save_recipe(&state, "Domestic", main);
+        save_recipe(&state, "Funds", main);
+        state
+            .apply(Edit::SetHolding {
+                account: main,
+                product: stock,
+                value: rust_decimal::Decimal::from(9),
+                quantity: None,
+            })
+            .unwrap();
+        // Only one of the two recipes of the account has run.
+        *state.runs.lock().unwrap() = vec![stored("Domestic", main, &[("Stock A", 100)])];
+
+        let error = state.apply_fetch_all().unwrap_err();
+
+        assert!(error.contains("Funds"));
+        assert_eq!(
+            held(&state, main),
+            vec![(stock, rust_decimal::Decimal::from(9))],
+            "untouched"
         );
     }
 }
