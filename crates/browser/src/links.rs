@@ -177,10 +177,13 @@ fn percent_decoded(text: &str) -> String {
 /// (`/history/delete` and `/transfer/history` are both refused).
 fn address_looks_read_only(href: &str) -> bool {
     let decoded = percent_decoded(href);
-    let (route, query) = decoded.split_once('?').unwrap_or((decoded.as_str(), ""));
+    // A page that routes by the part after `#` is judged like the rest of the address.
+    let (before, fragment) = decoded.split_once('#').unwrap_or((decoded.as_str(), ""));
+    let (route, query) = before.split_once('?').unwrap_or((before, ""));
     route
         .split('/')
         .chain(query.split('&'))
+        .chain(fragment.split(['/', '&', '?']))
         .all(|part| !mentions(part, RISKY_HREF) || mentions(part, VIEW_HREF))
 }
 
@@ -200,6 +203,13 @@ fn volatile_value(value: &str) -> bool {
 /// The path of an address and its query without the parts that change per visit.
 /// The remaining keys are sorted, so the same destination always gives the same text.
 pub fn normalize_href(href: &str) -> String {
+    // The part after `#` is kept as it is: on a page that routes by it, it is where the link goes.
+    let (href, fragment) = href.split_once('#').unwrap_or((href, ""));
+    let fragment = if fragment.is_empty() {
+        String::new()
+    } else {
+        format!("#{fragment}")
+    };
     let (path, query) = href.split_once('?').unwrap_or((href, ""));
     let mut kept: Vec<(String, String)> = query
         .split('&')
@@ -214,9 +224,9 @@ pub fn normalize_href(href: &str) -> String {
     kept.sort();
     let query: Vec<String> = kept.iter().map(|(k, v)| format!("{k}={v}")).collect();
     if query.is_empty() {
-        path.to_owned()
+        format!("{path}{fragment}")
     } else {
-        format!("{path}?{}", query.join("&"))
+        format!("{path}?{}{fragment}", query.join("&"))
     }
 }
 
@@ -246,7 +256,7 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
       try {
         const url = new URL(raw, location.href);
         sameSite = (url.protocol === 'https:' || url.protocol === 'http:') && url.host === location.host;
-        const full = url.pathname + url.search;
+        const full = url.pathname + url.search + url.hash;
         tooLong = full.length > 500;
         href = full.slice(0, 500);
       } catch (e) { href = ''; }
@@ -269,7 +279,7 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected) => {
   let url;
   try { url = new URL(a.getAttribute('href') ?? '', location.href); } catch (e) { return 'gone'; }
   if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.host !== location.host) return 'gone';
-  if (url.pathname + url.search !== expected) return 'gone';
+  if (url.pathname + url.search + url.hash !== expected) return 'gone';
   location.assign(url.href);
   return 'navigated';
 })"#;
@@ -362,6 +372,13 @@ mod tests {
             "double encoding"
         );
         assert!(!candidate("/page?action=cancel", true, false).allowed());
+        assert!(
+            !candidate("/#/transfer", true, false).allowed(),
+            "a route after #"
+        );
+        assert!(!candidate("/app#/history/delete", true, false).allowed());
+        assert!(candidate("/app#/orderhistory", true, false).allowed());
+        assert!(!candidate("/app#!/logout", true, false).allowed());
         assert!(candidate("/orderhistory/list", true, false).allowed());
         assert!(
             !candidate("/ETGate/", false, false).allowed(),
@@ -395,6 +412,12 @@ mod tests {
             "an account number is part of where the link goes",
         );
         assert_eq!(normalize_href("/plain"), "/plain");
+        assert_eq!(
+            normalize_href("/app?_SeqNo=1&b=2#/holdings"),
+            "/app?b=2#/holdings",
+            "the part after # is kept"
+        );
+        assert_ne!(normalize_href("/app#/a"), normalize_href("/app#/b"));
         assert_eq!(normalize_href("/x?"), "/x");
     }
 
