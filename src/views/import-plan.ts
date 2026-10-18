@@ -161,7 +161,13 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
       void ctx.apply({
         type: "replace_holdings",
         account: accountId,
-        holdings: plan.matched.map((m) => ({ product: m.product, value: m.value })),
+        holdings: plan.matched.map((m) => ({
+          product: m.product,
+          value: m.value,
+          quantity: m.quantity,
+          price: m.price,
+          price_unit: m.price_unit,
+        })),
       });
     });
     parts.push(

@@ -113,6 +113,10 @@ pub enum Edit {
         price_part: Option<usize>,
         #[serde(default)]
         loose_numbers: bool,
+        #[serde(default)]
+        quantity_column: Option<usize>,
+        #[serde(default)]
+        quantity_part: Option<usize>,
     },
     RemoveImportMapping {
         source: String,
@@ -142,6 +146,13 @@ pub enum Edit {
 pub struct HoldingInput {
     pub product: ProductId,
     pub value: Decimal,
+    /// What the value was worked out from, when the import knows it.
+    #[serde(default)]
+    pub quantity: Option<Decimal>,
+    #[serde(default)]
+    pub price: Option<Decimal>,
+    #[serde(default = "one_unit")]
+    pub price_unit: u64,
 }
 
 /// How many values one cell can be split into.
@@ -163,6 +174,7 @@ impl ImportMapping {
         if self.name_column >= MAX_COLUMN
             || self.value_column >= MAX_COLUMN
             || self.price_column.is_some_and(|c| c >= MAX_COLUMN)
+            || self.quantity_column.is_some_and(|c| c >= MAX_COLUMN)
         {
             return Err(invalid("a column"));
         }
@@ -175,9 +187,14 @@ impl ImportMapping {
         {
             return Err(invalid("the rows per record"));
         }
-        if [self.name_part, self.value_part, self.price_part]
-            .iter()
-            .any(|p| p.is_some_and(|p| p >= MAX_PARTS))
+        if [
+            self.name_part,
+            self.value_part,
+            self.price_part,
+            self.quantity_part,
+        ]
+        .iter()
+        .any(|p| p.is_some_and(|p| p >= MAX_PARTS))
         {
             return Err(invalid("a part number"));
         }
@@ -243,7 +260,12 @@ impl Recipe {
             name: recipe_name,
             links,
             table_starts_with,
-            currency: currency(&self.currency)?,
+            // Empty: the currency of each product the rows are linked to.
+            currency: if self.currency.trim().is_empty() {
+                String::new()
+            } else {
+                currency(&self.currency)?
+            },
             mapping: self.mapping.validated()?,
             ..self
         })
@@ -518,6 +540,9 @@ impl Portfolio {
                     Some(holding) => {
                         holding.value = value;
                         holding.quantity = quantity;
+                        // A value typed by hand no longer follows from an imported price.
+                        holding.price = None;
+                        holding.price_unit = 1;
                     }
                     None => {
                         self.check_capacity(self.holdings.len())?;
@@ -526,6 +551,8 @@ impl Portfolio {
                             product,
                             value,
                             quantity,
+                            price: None,
+                            price_unit: 1,
                         });
                     }
                 }
@@ -545,11 +572,19 @@ impl Portfolio {
                             "a product appears twice in the import".to_owned(),
                         ));
                     }
+                    if !(1..=MAX_PRICE_UNIT).contains(&input.price_unit) {
+                        return Err(Error::Invalid("the price unit is out of range".to_owned()));
+                    }
                     next.push(Holding {
                         account,
                         product: input.product,
                         value: non_negative(input.value, "holding value")?,
-                        quantity: None,
+                        quantity: input
+                            .quantity
+                            .map(|q| non_negative(q, "quantity"))
+                            .transpose()?,
+                        price: input.price.map(|p| non_negative(p, "price")).transpose()?,
+                        price_unit: input.price_unit,
                     });
                 }
                 let others = self
@@ -577,6 +612,8 @@ impl Portfolio {
                 value_part,
                 price_part,
                 loose_numbers,
+                quantity_column,
+                quantity_part,
             } => {
                 let mapping = ImportMapping {
                     source,
@@ -592,6 +629,8 @@ impl Portfolio {
                     value_part,
                     price_part,
                     loose_numbers,
+                    quantity_column,
+                    quantity_part,
                 }
                 .validated()?;
                 match self

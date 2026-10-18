@@ -12,7 +12,6 @@ use portfolio::{
     AccountId, Edit, HoldingInput, ImportMapping, ImportPlan, ImportRow, Issue, Portfolio,
     ProductId, Recipe,
 };
-use rust_decimal::Decimal;
 use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
 use tabular::{ColumnMapping, Skipped, Table};
@@ -187,7 +186,28 @@ fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
         value_part: mapping.value_part,
         price_part: mapping.price_part,
         loose_numbers: mapping.loose_numbers,
+        quantity: mapping.quantity_column,
+        quantity_part: mapping.quantity_part,
     }
+}
+
+/// The rows of an extraction as import rows. The price unit comes with a price only.
+fn import_rows(extraction: &tabular::Extraction, price_unit: u64) -> Vec<ImportRow> {
+    extraction
+        .rows
+        .iter()
+        .map(|r| ImportRow {
+            name: r.name.clone(),
+            value: r.value,
+            quantity: r.quantity,
+            price: r.price,
+            price_unit: if r.price.is_some() {
+                price_unit.max(1)
+            } else {
+                1
+            },
+        })
+        .collect()
 }
 
 /// How many rows and how many characters per cell the preview shows.
@@ -472,14 +492,7 @@ impl AppState {
                 .ok_or_else(|| "No table is loaded.".to_owned())?;
             tabular::extract(&table.rows, mapping)
         };
-        let rows: Vec<ImportRow> = extraction
-            .rows
-            .iter()
-            .map(|r| ImportRow {
-                name: r.name.clone(),
-                value: r.value,
-            })
-            .collect();
+        let rows = import_rows(&extraction, mapping.price_unit);
         let plan = self.plan_import(source, currency, &rows)?;
         Ok(TableImportPlan {
             plan,
@@ -577,14 +590,7 @@ impl AppState {
         }
 
         let extraction = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
-        let rows: Vec<ImportRow> = extraction
-            .rows
-            .iter()
-            .map(|r| ImportRow {
-                name: r.name.clone(),
-                value: r.value,
-            })
-            .collect();
+        let rows = import_rows(&extraction, recipe.mapping.price_unit);
         let run = StoredRun {
             recipe: recipe.clone(),
             name: recipe.name.clone(),
@@ -705,11 +711,38 @@ impl AppState {
                 missing.join(", ")
             ));
         }
-        let mut per_account: BTreeMap<AccountId, BTreeMap<ProductId, Decimal>> = BTreeMap::new();
+        let mut per_account: BTreeMap<AccountId, BTreeMap<ProductId, HoldingInput>> =
+            BTreeMap::new();
         for view in &views {
             let products = per_account.entry(view.account).or_default();
             for row in &view.plan.matched {
-                *products.entry(row.product).or_default() += row.value;
+                match products.get_mut(&row.product) {
+                    // Another recipe feeds the same product: the values and quantities are
+                    // added up, and the price is kept only if it is the same.
+                    Some(held) => {
+                        held.value += row.value;
+                        held.quantity = match (held.quantity, row.quantity) {
+                            (Some(a), Some(b)) => a.checked_add(b),
+                            _ => None,
+                        };
+                        if held.price != row.price || held.price_unit != row.price_unit {
+                            held.price = None;
+                            held.price_unit = 1;
+                        }
+                    }
+                    None => {
+                        products.insert(
+                            row.product,
+                            HoldingInput {
+                                product: row.product,
+                                value: row.value,
+                                quantity: row.quantity,
+                                price: row.price,
+                                price_unit: row.price_unit,
+                            },
+                        );
+                    }
+                }
             }
         }
         // The plan was made from `snapshot`. Everything is checked and replaced under one
@@ -737,10 +770,7 @@ impl AppState {
                 }
                 next.apply(Edit::ReplaceHoldings {
                     account,
-                    holdings: products
-                        .into_iter()
-                        .map(|(product, value)| HoldingInput { product, value })
-                        .collect(),
+                    holdings: products.into_values().collect(),
                 })
                 .map_err(|e| e.to_string())?;
             }
@@ -945,6 +975,8 @@ mod tests {
             value_part: None,
             price_part: None,
             loose_numbers: false,
+            quantity: None,
+            quantity_part: None,
         };
         let result = state.plan_table_import("Test", "JPY", &mapping).unwrap();
 
@@ -1140,6 +1172,9 @@ mod tests {
                 .map(|(n, v)| ImportRow {
                     name: (*n).to_owned(),
                     value: rust_decimal::Decimal::from(*v),
+                    quantity: None,
+                    price: None,
+                    price_unit: 1,
                 })
                 .collect(),
             skipped: Vec::new(),
@@ -1265,6 +1300,8 @@ mod tests {
                         value_part: None,
                         price_part: None,
                         loose_numbers: false,
+                        quantity_column: None,
+                        quantity_part: None,
                     },
                 },
             })
@@ -1327,6 +1364,8 @@ mod tests {
                 value_part: None,
                 price_part: None,
                 loose_numbers: false,
+                quantity_column: None,
+                quantity_part: None,
             },
         }
     }
@@ -1495,5 +1534,32 @@ mod tests {
 
         assert_eq!(account_names(&a), vec!["From C"]);
         assert!(view.data.warning.is_some());
+    }
+
+    #[test]
+    fn quantities_and_prices_of_recipes_feeding_one_product_are_combined_when_applied() {
+        let (state, main, _, stock, _) = recipe_state("qty");
+        link(&state, stock, "Stock A");
+        link(&state, stock, "Stock B");
+        save_recipe(&state, "Domestic", main);
+        save_recipe(&state, "Other stocks", main);
+        let with = |name: &str, row: &str, quantity: i64, price: i64| {
+            let mut run = stored(name, main, &[(row, quantity * price)]);
+            run.rows[0].quantity = Some(rust_decimal::Decimal::from(quantity));
+            run.rows[0].price = Some(rust_decimal::Decimal::from(price));
+            run
+        };
+        *state.runs.lock().unwrap() = vec![
+            with("Domestic", "Stock A", 2, 50),
+            with("Other stocks", "Stock B", 3, 50),
+        ];
+
+        state.apply_fetch_all().unwrap();
+
+        let held = state.view().unwrap().portfolio.holdings;
+        assert_eq!(held.len(), 1);
+        assert_eq!(held[0].value, rust_decimal::Decimal::from(250));
+        assert_eq!(held[0].quantity, Some(rust_decimal::Decimal::from(5)));
+        assert_eq!(held[0].price, Some(rust_decimal::Decimal::from(50)));
     }
 }

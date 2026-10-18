@@ -3,7 +3,7 @@ import { h } from "../dom.ts";
 import { textField } from "../fields.ts";
 import { getLanguage, t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
-import type { Overview, PortfolioView } from "../types.ts";
+import type { Holding, Overview, PortfolioView } from "../types.ts";
 
 // The center panel: holding records grouped by category, each group closed by
 // a subtotal row. The amounts are edited in place (in the product's own
@@ -74,6 +74,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
             { class: "group" },
             h("th", { scope: "rowgroup", colspan: 2 }, category.name),
             h("td", {}),
+            h("td", {}),
+            h("td", {}),
             subtotal.value,
             subtotal.share,
             subtotal.target,
@@ -122,6 +124,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 }),
                 h("span", { class: "muted" }, ` ${product.currency}`),
               ),
+              h("td", { class: "num" }, holdingOf(current, record.account, record.product)?.quantity ?? ""),
+              h("td", { class: "num" }, priceText(holdingOf(current, record.account, record.product))),
               cells.value,
               cells.share,
               h("td", {}),
@@ -147,6 +151,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 h("th", {}, t("Product")),
                 h("th", {}, t("Account")),
                 h("th", {}, t("Amount")),
+                h("th", {}, t("Quantity")),
+                h("th", {}, t("Price")),
                 h("th", {}, t("Value (JPY)")),
                 h("th", {}, t("Share")),
                 h("th", {}, t("Target")),
@@ -190,4 +196,12 @@ export function holdingsTablePanel(ctx: Context): Panel {
       note.textContent = t("Could not load: {reason}", { reason: String(error) });
     },
   };
+}
+
+/** The price a holding was worked out from, with its unit when it is not 1 (a fund's price per 10,000 units). */
+function priceText(holding: Holding | undefined): string {
+  if (!holding || holding.price === null) {
+    return "";
+  }
+  return holding.price_unit > 1 ? `${holding.price} / ${holding.price_unit}` : holding.price;
 }

@@ -541,6 +541,9 @@ fn replace_holdings_overwrites_only_that_account() {
             holdings: vec![HoldingInput {
                 product: second,
                 value: dec!(55),
+                quantity: None,
+                price: None,
+                price_unit: 1,
             }],
         },
     );
@@ -573,6 +576,9 @@ fn replace_holdings_rejects_bad_input_and_changes_nothing() {
     let input = |value| HoldingInput {
         product: prod,
         value,
+        quantity: None,
+        price: None,
+        price_unit: 1,
     };
 
     assert!(
@@ -630,6 +636,9 @@ fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
     let row = |name: &str| ImportRow {
         name: name.to_owned(),
         value: dec!(10),
+        quantity: None,
+        price: None,
+        price_unit: 1,
     };
 
     let plan = p.plan_import("bitflyer", "JPY", &[row("BTC"), row("ETH"), row("USDT")]);
@@ -662,6 +671,9 @@ fn plan_import_adds_up_names_linked_to_the_same_product() {
     let row = |name: &str, value| ImportRow {
         name: name.to_owned(),
         value,
+        quantity: None,
+        price: None,
+        price_unit: 1,
     };
 
     let plan = p.plan_import(
@@ -692,6 +704,8 @@ fn import_mappings_are_saved_per_source_and_replaced() {
         value_part: None,
         price_part: None,
         loose_numbers: false,
+        quantity_column: None,
+        quantity_part: None,
     };
 
     apply(&mut p, set(" SBI ", 0, 5));
@@ -737,6 +751,8 @@ fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
         value_part: None,
         price_part: None,
         loose_numbers: false,
+        quantity_column: None,
+        quantity_part: None,
     };
 
     for edit in [
@@ -778,6 +794,8 @@ fn a_two_row_record_may_keep_the_name_and_the_value_in_one_column() {
             value_part: None,
             price_part: None,
             loose_numbers: false,
+            quantity_column: None,
+            quantity_part: None,
         },
     );
 
@@ -815,6 +833,8 @@ fn mapping_for(source: &str) -> ImportMapping {
         value_part: None,
         price_part: None,
         loose_numbers: false,
+        quantity_column: None,
+        quantity_part: None,
     }
 }
 
@@ -992,6 +1012,8 @@ fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
             value_part: None,
             price_part: None,
             loose_numbers: false,
+            quantity_column: None,
+            quantity_part: None,
         },
     );
     mappings.validate_integrity().unwrap();
@@ -1084,5 +1106,183 @@ fn set_mapping(m: ImportMapping) -> Edit {
         value_part: m.value_part,
         price_part: m.price_part,
         loose_numbers: m.loose_numbers,
+        quantity_column: None,
+        quantity_part: None,
     }
+}
+
+#[test]
+fn quantity_and_price_follow_the_rows_linked_to_one_product() {
+    let (mut p, _, prod, _) = sample();
+    for name in ["A", "B", "C"] {
+        apply(
+            &mut p,
+            Edit::AddAlias {
+                product: prod,
+                source: "src".to_owned(),
+                name: name.to_owned(),
+            },
+        );
+    }
+    let row = |name: &str, quantity, price| ImportRow {
+        name: name.to_owned(),
+        value: dec!(100),
+        quantity,
+        price,
+        price_unit: 1,
+    };
+
+    // Same price: the quantities add up and the price stays.
+    let same = p.plan_import(
+        "src",
+        "JPY",
+        &[
+            row("A", Some(dec!(2)), Some(dec!(50))),
+            row("B", Some(dec!(3)), Some(dec!(50))),
+        ],
+    );
+    assert_eq!(same.matched[0].quantity, Some(dec!(5)));
+    assert_eq!(same.matched[0].price, Some(dec!(50)));
+
+    // Different prices: there is no single price.
+    let different = p.plan_import(
+        "src",
+        "JPY",
+        &[
+            row("A", Some(dec!(2)), Some(dec!(50))),
+            row("B", Some(dec!(3)), Some(dec!(60))),
+        ],
+    );
+    assert_eq!(different.matched[0].quantity, Some(dec!(5)));
+    assert_eq!(different.matched[0].price, None);
+
+    // A row without a quantity makes the total quantity unknown.
+    let unknown = p.plan_import(
+        "src",
+        "JPY",
+        &[
+            row("A", Some(dec!(2)), Some(dec!(50))),
+            row("C", None, Some(dec!(50))),
+        ],
+    );
+    assert_eq!(unknown.matched[0].quantity, None);
+}
+
+#[test]
+fn an_empty_import_currency_takes_the_products_own_currency() {
+    let (mut p, cat, _, _) = sample();
+    apply(
+        &mut p,
+        Edit::AddProduct {
+            name: "Dollar Fund".to_owned(),
+            category: cat,
+            currency: "USD".to_owned(),
+        },
+    );
+    let dollar = p.products.last().unwrap().id;
+    apply(
+        &mut p,
+        Edit::AddAlias {
+            product: dollar,
+            source: "src".to_owned(),
+            name: "D".to_owned(),
+        },
+    );
+    let rows = [ImportRow {
+        name: "D".to_owned(),
+        value: dec!(10),
+        quantity: None,
+        price: None,
+        price_unit: 1,
+    }];
+
+    assert_eq!(p.plan_import("src", "", &rows).matched.len(), 1);
+    assert_eq!(p.plan_import("src", "USD", &rows).matched.len(), 1);
+    assert_eq!(p.plan_import("src", "JPY", &rows).wrong_currency.len(), 1);
+}
+
+#[test]
+fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_price() {
+    let (mut p, _, prod, acc) = sample();
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![HoldingInput {
+                product: prod,
+                value: dec!(125),
+                quantity: Some(dec!(10)),
+                price: Some(dec!(12.5)),
+                price_unit: 1,
+            }],
+        },
+    );
+    let held = &p.holdings[0];
+    assert_eq!(
+        (held.quantity, held.price, held.price_unit),
+        (Some(dec!(10)), Some(dec!(12.5)), 1)
+    );
+
+    // A bad price unit or a negative price is refused and changes nothing.
+    let before = p.clone();
+    for bad in [
+        HoldingInput {
+            product: prod,
+            value: dec!(1),
+            quantity: None,
+            price: None,
+            price_unit: 0,
+        },
+        HoldingInput {
+            product: prod,
+            value: dec!(1),
+            quantity: None,
+            price: Some(dec!(-1)),
+            price_unit: 1,
+        },
+    ] {
+        assert!(
+            p.apply(Edit::ReplaceHoldings {
+                account: acc,
+                holdings: vec![bad],
+            })
+            .is_err()
+        );
+    }
+    assert_eq!(p, before);
+
+    // A value typed by hand no longer follows from the price.
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: acc,
+            product: prod,
+            value: dec!(200),
+            quantity: Some(dec!(10)),
+        },
+    );
+    assert_eq!(p.holdings[0].price, None);
+}
+
+#[test]
+fn a_file_without_prices_loads_with_defaults() {
+    let json = r#"{"account":1,"product":2,"value":"5"}"#;
+
+    let holding: Holding = serde_json::from_str(json).unwrap();
+
+    assert_eq!(
+        (holding.quantity, holding.price, holding.price_unit),
+        (None, None, 1)
+    );
+}
+
+#[test]
+fn a_recipe_may_leave_its_currency_empty() {
+    let (mut p, _, _, acc) = sample();
+    let mut recipe = recipe_for(acc);
+    recipe.currency = " ".to_owned();
+
+    apply(&mut p, Edit::SetRecipe { recipe });
+
+    assert_eq!(p.recipes[0].currency, "");
 }

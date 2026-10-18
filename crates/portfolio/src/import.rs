@@ -8,6 +8,17 @@ use crate::{Portfolio, ProductId};
 pub struct ImportRow {
     pub name: String,
     pub value: Decimal,
+    /// What the value was worked out from, when the table gave it.
+    #[serde(default)]
+    pub quantity: Option<Decimal>,
+    #[serde(default)]
+    pub price: Option<Decimal>,
+    #[serde(default = "one")]
+    pub price_unit: u64,
+}
+
+fn one() -> u64 {
+    1
 }
 
 /// A product with the imported rows linked to it through aliases the user
@@ -18,6 +29,11 @@ pub struct MatchedRow {
     pub names: Vec<String>,
     pub product: ProductId,
     pub value: Decimal,
+    /// The quantities added up, when every row had one.
+    pub quantity: Option<Decimal>,
+    /// The price, when every row had the same one (rows at different prices have no single price).
+    pub price: Option<Decimal>,
+    pub price_unit: u64,
 }
 
 /// What an import would do. Nothing here changes the portfolio.
@@ -34,7 +50,8 @@ impl Portfolio {
     /// Links imported rows to products by alias. Names are matched exactly (after
     /// trimming); a name is never guessed. `currency` is the currency of the
     /// rows' values: a product in another currency would be valued wrongly, so
-    /// it is reported instead of matched.
+    /// it is reported instead of matched. An empty `currency` means "the product's own":
+    /// the values are taken as they are in the currency of the product they are linked to.
     pub fn plan_import(&self, source: &str, currency: &str, rows: &[ImportRow]) -> ImportPlan {
         let mut plan = ImportPlan {
             matched: Vec::new(),
@@ -50,16 +67,29 @@ impl Portfolio {
             });
             match product {
                 None => plan.unmatched.push(row.clone()),
-                Some(p) if p.currency != currency => plan.wrong_currency.push(row.clone()),
+                Some(p) if !currency.is_empty() && p.currency != currency => {
+                    plan.wrong_currency.push(row.clone());
+                }
                 Some(p) => match plan.matched.iter_mut().find(|m| m.product == p.id) {
                     Some(existing) => {
                         existing.names.push(name.to_owned());
                         existing.value += row.value;
+                        existing.quantity = match (existing.quantity, row.quantity) {
+                            (Some(a), Some(b)) => a.checked_add(b),
+                            _ => None,
+                        };
+                        if existing.price != row.price || existing.price_unit != row.price_unit {
+                            existing.price = None;
+                            existing.price_unit = 1;
+                        }
                     }
                     None => plan.matched.push(MatchedRow {
                         names: vec![name.to_owned()],
                         product: p.id,
                         value: row.value,
+                        quantity: row.quantity,
+                        price: row.price,
+                        price_unit: row.price_unit,
                     }),
                 },
             }
