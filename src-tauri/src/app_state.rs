@@ -497,6 +497,12 @@ impl AppState {
         // lock and saved once, so an edit made meanwhile (a recipe, an alias, a product)
         // cannot let stale rows through, and no account is replaced without the others.
         {
+            // The runs are locked first (the same order as when planning) and stay locked until
+            // the rows are consumed: a retry cannot replace a run between the check and the save.
+            let mut runs = self.lock_runs()?;
+            if self.runs_generation.load(Ordering::SeqCst) != generation {
+                return Err("The results changed while they were shown. Fetch again.".to_owned());
+            }
             let mut guard = self.lock()?;
             let current = guard.as_ref().map_err(Clone::clone)?;
             if *current != snapshot {
@@ -520,8 +526,10 @@ impl AppState {
             }
             store::save(&self.path, &next)?;
             *guard = Ok(next);
+            runs.clear();
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
         }
-        self.clear_runs()?;
+        *lock_shown(&self.shown)? = None;
         self.view()
     }
 

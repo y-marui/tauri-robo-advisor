@@ -319,8 +319,8 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     let scripts = log.lock().unwrap().clone();
     assert_eq!(
         scripts.len(),
-        7,
-        "find, mark, go, two checks, the settle wait, the site check"
+        8,
+        "find, mark, go, two checks, the settle wait, the site and address checks"
     );
     assert!(scripts[5].contains("MutationObserver"));
     assert!(
@@ -641,6 +641,28 @@ fn going_back_is_accepted_only_on_the_start_page() {
 
     assert_eq!(
         cdp.go_back(&session, 1, "https://h.example/start"),
+        Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn a_redirect_to_a_refused_address_on_the_same_site_is_not_accepted() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/next", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
+            json!("/logout"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
         Err(Error::WrongPage)
     );
 }

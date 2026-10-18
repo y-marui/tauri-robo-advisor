@@ -35,9 +35,9 @@ pub(crate) const READ_TABLES: &str = r#"(() => {
     .filter((table) => !table.querySelector('table') && shown(table))
     .slice(0, 200)
     .map((table) =>
-      [...table.rows].slice(0, 5000).map((row) => {
+      [...table.rows].filter(shown).slice(0, 5000).map((row) => {
         const cells = [];
-        for (const cell of [...row.cells].slice(0, 200)) {
+        for (const cell of [...row.cells].filter(shown).slice(0, 200)) {
           cells.push(clean(cell.innerText ?? cell.textContent));
           for (let i = 1; i < Math.min(cell.colSpan || 1, 200); i++) cells.push('');
         }
@@ -294,6 +294,16 @@ impl Cdp {
         let site = self.evaluate(session, "location.origin")?;
         if site.as_str() != Some(chosen.origin.as_str()) {
             return Err(Error::WrongPage);
+        }
+        // The address that was really reached (a redirect may have changed it) is judged by
+        // the same rules as a link.
+        let reached = self.evaluate(
+            session,
+            "location.pathname + location.search + location.hash",
+        )?;
+        match reached.as_str() {
+            Some(address) if links::address_allowed(address) => {}
+            _ => return Err(Error::WrongPage),
         }
         Ok(followed)
     }

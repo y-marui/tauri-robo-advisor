@@ -346,6 +346,12 @@ fn part_looks_read_only(part: &str) -> bool {
     !action && (!mentions(&lower, MONEY_HREF) || mentions(&lower, VIEW_HREF))
 }
 
+/// Whether the address the tab ended up on (after any redirect) may be stayed on: it is
+/// judged by the rules for a link's destination, and an address too long to check is not.
+pub(crate) fn address_allowed(address: &str) -> bool {
+    address.chars().count() <= MAX_HREF_CHARS && address_looks_read_only(address)
+}
+
 /// Whether an address (path and query) looks like it only shows something. Every
 /// part is judged on its own: a path segment or a query pair with an action word
 /// is refused unless the same part also says it is a view (so `orderhistory` is

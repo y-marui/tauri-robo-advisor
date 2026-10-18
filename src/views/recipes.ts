@@ -11,6 +11,10 @@ import { importPlanView } from "./import-plan.ts";
 // page), reads its table, and shows the result of all of them together. The
 // holdings change only when the user confirms, once, at the end.
 
+// Only one run drives the browser tab at a time, even if the panel is rebuilt (for example
+// after a language change) while a batch is still running; a later run waits for the one before.
+let running: Promise<void> = Promise.resolve();
+
 export function recipesPanel(ctx: Context): Panel {
   const list = h("div", { class: "recipe-list" });
   const pageSelect = h("select", { "aria-label": t("Page") });
@@ -25,8 +29,6 @@ export function recipesPanel(ctx: Context): Panel {
   let sequence = 0;
   let applyButton: HTMLButtonElement | null = null;
   let refresh = 0;
-  // Only one run drives the browser tab at a time; a retry waits for the one before it.
-  let running: Promise<void> = Promise.resolve();
 
   const info = (text: string): void => {
     message.classList.remove("error");
