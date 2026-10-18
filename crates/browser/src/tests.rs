@@ -285,6 +285,12 @@ fn attached(endpoint: &Endpoint) -> (Cdp, String) {
     (cdp, session)
 }
 
+/// What the page answers to the readiness probe: whether the old document's mark is still there,
+/// and its state.
+fn probe(marker: bool, ready: &str) -> Value {
+    json!({"marker": marker, "ready": ready, "href": "https://h.example/old"})
+}
+
 fn found(href: &str, same_site: bool, scripted: bool) -> Value {
     json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted}])
 }
@@ -295,9 +301,10 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     let endpoint = fake_browser_logged(
         vec![
             found("/account/list", true, false),
+            json!("https://h.example/old"),
             json!("navigated"),
-            json!("loading"),
-            json!("complete"),
+            probe(true, "loading"),
+            probe(false, "complete"),
         ],
         false,
         Some(log.clone()),
@@ -308,16 +315,19 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     assert_eq!(followed.reference, "/account/list");
 
     let scripts = log.lock().unwrap().clone();
-    assert_eq!(scripts.len(), 4, "find, click, then two readiness checks");
+    assert_eq!(scripts.len(), 5, "find, mark, go, then two checks");
     assert!(
         scripts[0].contains("\"口座(円建)\""),
         "the text is passed as JSON data"
     );
     assert!(
-        scripts[1].contains(", 4, \"/account/list\")"),
+        scripts[1].contains("__roboAdvisorNav"),
+        "the old document is marked first"
+    );
+    assert!(
+        scripts[2].contains(", 4, \"/account/list\")"),
         "the position and the accepted address come from the search"
     );
-    assert_eq!(scripts[2], "document.readyState");
 }
 
 #[test]
@@ -381,7 +391,14 @@ fn a_missing_link_and_a_link_that_is_gone_are_reported() {
         Err(Error::LinkNotFound)
     );
 
-    let endpoint = fake_browser_queue(vec![found("/a", true, false), json!("gone")], false);
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/a", true, false),
+            json!("https://h.example/old"),
+            json!("gone"),
+        ],
+        false,
+    );
     let (mut cdp, session) = attached(&endpoint);
     assert_eq!(
         cdp.follow_link(&session, "保有銘柄", None),
@@ -405,8 +422,9 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
                 "/ETGate/?_ControlID=A&_SeqNo=1111111111",
                 "/ETGate/?_ControlID=A&_SeqNo=2222222222",
             ),
+            json!("https://h.example/old"),
             json!("navigated"),
-            json!("complete"),
+            probe(false, "complete"),
         ],
         false,
         Some(log.clone()),
@@ -417,7 +435,7 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
 
     assert_eq!(followed.reference, "/ETGate/?_ControlID=A");
     assert!(
-        log.lock().unwrap()[1].contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\")"),
+        log.lock().unwrap()[2].contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\")"),
         "the first one is followed"
     );
 }
@@ -447,8 +465,9 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     let endpoint = fake_browser_logged(
         vec![
             two_links("/a/list", "/b/list"),
+            json!("https://h.example/old"),
             json!("navigated"),
-            json!("complete"),
+            probe(false, "complete"),
         ],
         false,
         Some(log.clone()),
@@ -456,7 +475,7 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     let (mut cdp, session) = attached(&endpoint);
     cdp.follow_link(&session, "一覧", Some("/b/list")).unwrap();
     assert!(
-        log.lock().unwrap()[1].contains(", 7, \"/b/list\")"),
+        log.lock().unwrap()[2].contains(", 7, \"/b/list\")"),
         "the second link was followed"
     );
 
@@ -511,4 +530,46 @@ fn links_that_differ_only_in_an_account_number_are_different_destinations() {
     let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
 
     assert!(matches!(error, Error::LinkAmbiguous(choices) if choices.len() == 2));
+}
+
+#[test]
+fn the_old_document_saying_complete_is_not_taken_for_the_new_page() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/next", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            // The old document is still there (its mark is on it) and still says complete.
+            probe(true, "complete"),
+            probe(true, "complete"),
+            // Now the new document has replaced it.
+            probe(false, "complete"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    let started = std::time::Instant::now();
+
+    cdp.follow_link(&session, "保有銘柄", None).unwrap();
+
+    assert!(
+        started.elapsed() >= std::time::Duration::from_millis(900),
+        "it kept waiting through the two probes of the old document"
+    );
+}
+
+#[test]
+fn a_page_that_only_changes_its_address_is_also_recognized() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/app#/holdings", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            json!({"marker": true, "ready": "complete", "href": "https://h.example/app#/holdings"}),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert!(cdp.follow_link(&session, "保有銘柄", None).is_ok());
 }

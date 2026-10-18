@@ -42,6 +42,10 @@ const RISKY_TEXT: &[&str] = &[
     "実行",
     "約定",
     "ログアウト",
+    "保存",
+    "追加",
+    "送信",
+    "解除",
     "order",
     "buy",
     "sell",
@@ -57,6 +61,18 @@ const RISKY_TEXT: &[&str] = &[
     "confirm",
     "logout",
     "sign out",
+    "change",
+    "update",
+    "save",
+    "edit",
+    "modify",
+    "register",
+    "apply",
+    "execute",
+    "approve",
+    "remove",
+    "create",
+    "send",
 ];
 
 /// Words that show a link only displays something (so "注文照会" or "買付余力" may be followed).
@@ -68,7 +84,9 @@ const VIEW_TEXT: &[&str] = &[
 /// The same idea for the address, which is English-ish and lower case.
 const RISKY_HREF: &[&str] = &[
     "order", "buy", "sell", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
-    "cancel", "delete", "submit", "confirm", "logout", "signout",
+    "cancel", "delete", "submit", "confirm", "logout", "signout", "change", "update", "save",
+    "edit", "modify", "regist", "apply", "execute", "approve", "remove", "create", "send",
+    "settle", "remit",
 ];
 const VIEW_HREF: &[&str] = &[
     "inquiry", "history", "list", "balance", "status", "detail", "summary", "position", "holding",
@@ -284,8 +302,6 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected) => {
   return 'navigated';
 })"#;
 
-pub(crate) const READY_STATE: &str = "document.readyState";
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,6 +388,16 @@ mod tests {
             "double encoding"
         );
         assert!(!candidate("/page?action=cancel", true, false).allowed());
+        for route in [
+            "/account/change",
+            "/profile/update",
+            "/settings/save",
+            "/user/edit",
+            "/x/register",
+            "/x/remove",
+        ] {
+            assert!(!candidate(route, true, false).allowed(), "{route}");
+        }
         assert!(
             !candidate("/#/transfer", true, false).allowed(),
             "a route after #"

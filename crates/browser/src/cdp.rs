@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
-use crate::links::{self, FIND_LINKS, NAVIGATE, READY_STATE};
+use crate::links::{self, FIND_LINKS, NAVIGATE};
 use crate::{Endpoint, Error};
 
 /// How long one answer may take, and the largest message accepted.
@@ -252,6 +252,16 @@ impl Cdp {
                 &allowed[0]
             }
         };
+        // A mark on the current document: it is gone once the new document has replaced it.
+        let mark = navigation_mark();
+        let before = self
+            .evaluate(
+                session,
+                &format!("(() => {{ window.__roboAdvisorNav = {mark}; return location.href; }})()"),
+            )?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
         let expected = serde_json::to_string(&chosen.href).map_err(|_| Error::Script)?;
         let navigated = self.evaluate(
             session,
@@ -263,19 +273,35 @@ impl Cdp {
         let followed = Followed {
             reference: chosen.reference(),
         };
-        self.wait_loaded(session)?;
+        self.wait_navigated(session, mark, &before)?;
         Ok(followed)
     }
 
-    /// Waits (a short while, bounded) until the page says it has loaded.
-    pub fn wait_loaded(&mut self, session: &str) -> Result<(), Error> {
-        // The old page may still say "complete" for a moment after the click.
-        std::thread::sleep(Duration::from_millis(600));
-        for _ in 0..50 {
-            if self.evaluate(session, READY_STATE)?.as_str() == Some("complete") {
+    /// Waits (bounded) until the page that was asked for has really replaced the old
+    /// one and has loaded. The old document still reports "complete" for a while after
+    /// the navigation starts, so readiness alone proves nothing: the mark left on the old
+    /// document must be gone (a new document), or, for a page that changes its address
+    /// without loading a new document, the address must have changed.
+    fn wait_navigated(&mut self, session: &str, mark: u64, before: &str) -> Result<(), Error> {
+        let probe = format!(
+            "({{ marker: window.__roboAdvisorNav === {mark}, ready: document.readyState, href: location.href }})"
+        );
+        for _ in 0..60 {
+            std::thread::sleep(Duration::from_millis(300));
+            let state = self.evaluate(session, &probe)?;
+            let marker = state.get("marker").and_then(Value::as_bool).unwrap_or(true);
+            let ready = state.get("ready").and_then(Value::as_str) == Some("complete");
+            let href = state
+                .get("href")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if ready && (!marker || href != before) {
+                // A page that builds itself after loading gets a moment to settle.
+                if marker {
+                    std::thread::sleep(Duration::from_millis(700));
+                }
                 return Ok(());
             }
-            std::thread::sleep(Duration::from_millis(300));
         }
         Err(Error::Timeout)
     }
@@ -302,6 +328,13 @@ impl Cdp {
         let _ = self.socket.close(None);
         sent.map(|_| ())
     }
+}
+
+/// A number that differs from visit to visit, to tell one document from the next.
+fn navigation_mark() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(1, |d| d.as_nanos() as u64 % 1_000_000_000_000)
 }
 
 fn connection(error: tungstenite::Error) -> Error {

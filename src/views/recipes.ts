@@ -53,8 +53,15 @@ export function recipesPanel(ctx: Context): Panel {
     }
     const link = recipe.links[outcome.link];
     const saveReference = async (reference: string | null): Promise<void> => {
-      const links = recipe.links.map((l, i) => (i === outcome.link ? { ...l, reference } : l));
-      if (await ctx.apply({ type: "set_recipe", recipe: { ...recipe, links } })) {
+      // Only the link's reference is changed, and only if the recipe is still the one that
+      // produced this question: an edit made meanwhile must not be put back.
+      const latest = current?.portfolio.recipes.find((r) => r.name === recipe.name);
+      if (!latest || JSON.stringify(latest) !== JSON.stringify(recipe)) {
+        fail(t("The recipe was changed or removed in the meantime. Fetch again."));
+        return;
+      }
+      const links = latest.links.map((l, i) => (i === outcome.link ? { ...l, reference } : l));
+      if (await ctx.apply({ type: "set_recipe", recipe: { ...latest, links } })) {
         await runAll([recipe.name]);
       }
     };

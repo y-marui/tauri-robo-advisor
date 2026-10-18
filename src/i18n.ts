@@ -249,6 +249,9 @@ export const MESSAGES = {
   "Choose the table with the holdings, then use it.": { ja: "保有が載っている表を選んで、使ってください。" },
   "The browser was closed.": { ja: "ブラウザを閉じました。" },
   "Fetch recipes": { ja: "取得レシピ" },
+  "The recipe was changed or removed in the meantime. Fetch again.": {
+    ja: "その間に、レシピが変更または削除されました。もう一度取得してください。",
+  },
   "Fetch everything": { ja: "すべて取得" },
   "Where the link goes": { ja: "リンクの行き先" },
   "Choose the link again": { ja: "リンクを選び直す" },
