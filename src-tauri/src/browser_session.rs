@@ -74,6 +74,9 @@ pub const STOP_BATCH: &str = "[stop] ";
 pub struct BrowserSession {
     endpoint: Mutex<Option<Endpoint>>,
     fetched: Mutex<Vec<Table>>,
+    /// The tab and the address a batch of recipes started from. Every recipe of the batch
+    /// must start on exactly this page; a tab that was navigated meanwhile stops the batch.
+    pinned: Mutex<Option<(String, String)>>,
 }
 
 impl BrowserSession {
@@ -174,6 +177,19 @@ impl BrowserSession {
         let session = cdp.attach(&page).map_err(|e| e.to_string())?;
 
         let start = cdp.current_href(&session).map_err(|e| e.to_string())?;
+        {
+            let mut pinned = lock(&self.pinned)?;
+            match pinned.as_ref() {
+                Some((id, href)) if id == page_id => {
+                    if *href != start {
+                        return Err(format!(
+                            "{STOP_BATCH}The page changed while the recipes were running. Fetch again."
+                        ));
+                    }
+                }
+                _ => *pinned = Some((page_id.to_owned(), start.clone())),
+            }
+        }
         let mut references = Vec::with_capacity(links.len());
         for (index, link) in links.iter().enumerate() {
             match cdp.follow_link(&session, &link.text, link.reference.as_deref()) {
@@ -233,6 +249,13 @@ impl BrowserSession {
         restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;
         let table = read?;
         Ok(RecipeRead::Table { table, references })
+    }
+
+    /// Forgets the page a batch started from; the next run pins its own.
+    pub fn unpin(&self) {
+        if let Ok(mut pinned) = self.pinned.lock() {
+            *pinned = None;
+        }
     }
 
     /// The table the user chose from the last fetch.

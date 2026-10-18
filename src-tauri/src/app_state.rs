@@ -443,6 +443,7 @@ impl AppState {
             self.runs_generation.fetch_add(1, Ordering::SeqCst);
         }
         *lock_shown(&self.shown)? = None;
+        self.browser.unpin();
         Ok(())
     }
 

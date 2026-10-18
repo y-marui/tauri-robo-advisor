@@ -70,6 +70,8 @@ const ACTION_TEXT: &[&str] = &[
     "sell",
     "redeem",
     "redemption",
+    "liquidate",
+    "liquidation",
 ];
 
 /// Order and money words. They can also name a view ("注文照会", "出金履歴", "Payment history"),
@@ -131,6 +133,8 @@ const ACTION_HREF: &[&str] = &[
     "sell",
     "redeem",
     "redemption",
+    "liquidate",
+    "liquidation",
     "取消",
     "取り消し",
     "削除",
