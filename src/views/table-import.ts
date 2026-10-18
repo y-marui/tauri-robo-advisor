@@ -82,6 +82,12 @@ export function tableImportPanel(ctx: Context): Panel {
   );
   const nameRowSelect = h("select", { "aria-label": t("Row with the name") });
   const valueRowSelect = h("select", { "aria-label": t("Row with the numbers") });
+  const partInput = (label: string): HTMLInputElement =>
+    h("input", { type: "number", min: 0, max: 19, class: "number", "aria-label": label, placeholder: t("whole cell") });
+  const namePartInput = partInput(t("Value of the name cell"));
+  const valuePartInput = partInput(t("Value of the number cell"));
+  const pricePartInput = partInput(t("Value of the price cell"));
+  const looseInput = h("input", { type: "checkbox", "aria-label": t("Allow text around numbers") });
   const saveMapping = h("button", { type: "button" }, t("Save columns"));
   const planButton = h("button", { type: "button" }, t("Preview import"));
   const accountSelect = h("select", { "aria-label": t("Account to update") });
@@ -99,6 +105,10 @@ export function tableImportPanel(ctx: Context): Panel {
       h("label", { class: "field" }, h("span", {}, t("Rows per record")), perRecordSelect),
       h("label", { class: "field" }, h("span", {}, t("Row with the name")), nameRowSelect),
       h("label", { class: "field" }, h("span", {}, t("Row with the numbers")), valueRowSelect),
+      h("label", { class: "field" }, h("span", {}, t("Value of the name cell")), namePartInput),
+      h("label", { class: "field" }, h("span", {}, t("Value of the number cell")), valuePartInput),
+      h("label", { class: "field price-only" }, h("span", {}, t("Value of the price cell")), pricePartInput),
+      h("label", { class: "field" }, h("span", {}, t("Allow text around numbers")), looseInput),
       h("label", { class: "field" }, h("span", {}, t("Account to update")), accountSelect),
     ),
     h("div", { class: "add-row" }, saveMapping, planButton),
@@ -151,6 +161,10 @@ export function tableImportPanel(ctx: Context): Panel {
   const mapping = (): ColumnMapping | null => {
     const header = Number(headerInput.value);
     const product = modeSelect.value === "product";
+    const parts = [part(namePartInput), part(valuePartInput), part(pricePartInput)];
+    if (parts[0] === undefined || parts[1] === undefined || (product && parts[2] === undefined)) {
+      return null; // a part that is not a whole number from 0 to 19 is not guessed at
+    }
     if (
       nameSelect.value === "" ||
       valueSelect.value === "" ||
@@ -169,7 +183,20 @@ export function tableImportPanel(ctx: Context): Panel {
       rows_per_record: Number(perRecordSelect.value),
       name_row: Number(nameRowSelect.value),
       value_row: Number(valueRowSelect.value),
+      name_part: parts[0],
+      value_part: parts[1],
+      price_part: product ? parts[2] : null,
+      loose_numbers: looseInput.checked,
     };
+  };
+  /** Which value of a cell (counted from 0); empty: the whole cell; anything else that is not 0 to 19: `undefined`. */
+  const part = (input: HTMLInputElement): number | null | undefined => {
+    const text = input.value.trim();
+    if (text === "") {
+      return null;
+    }
+    const n = Number(text);
+    return Number.isInteger(n) && n >= 0 && n <= 19 ? n : undefined;
   };
 
   /** Shows the controls that fit the mode, and the rows a record can have. */
@@ -210,6 +237,10 @@ export function tableImportPanel(ctx: Context): Panel {
       syncControls();
       nameRowSelect.value = String(saved.name_row);
       valueRowSelect.value = String(saved.value_row);
+      namePartInput.value = saved.name_part == null ? "" : String(saved.name_part);
+      valuePartInput.value = saved.value_part == null ? "" : String(saved.value_part);
+      pricePartInput.value = saved.price_part == null ? "" : String(saved.price_part);
+      looseInput.checked = saved.loose_numbers === true;
     }
   }
 
@@ -234,6 +265,11 @@ export function tableImportPanel(ctx: Context): Panel {
     unitSelect.value = "1";
     headerInput.value = "1";
     perRecordSelect.value = "1";
+    // The cell parts and the number mode belong to the table that is being replaced.
+    namePartInput.value = "";
+    valuePartInput.value = "";
+    pricePartInput.value = "";
+    looseInput.checked = false;
     syncControls();
     useSavedMapping();
 
@@ -327,6 +363,10 @@ export function tableImportPanel(ctx: Context): Panel {
       rows_per_record: chosen.rows_per_record,
       name_row: chosen.name_row,
       value_row: chosen.value_row,
+      name_part: chosen.name_part,
+      value_part: chosen.value_part,
+      price_part: chosen.price_part,
+      loose_numbers: chosen.loose_numbers,
     });
   });
 
@@ -406,6 +446,10 @@ export function tableImportPanel(ctx: Context): Panel {
             rows_per_record: chosen.rows_per_record,
             name_row: chosen.name_row,
             value_row: chosen.value_row,
+            name_part: chosen.name_part,
+            value_part: chosen.value_part,
+            price_part: chosen.price_part,
+            loose_numbers: chosen.loose_numbers,
           },
         },
       })

@@ -105,6 +105,14 @@ pub enum Edit {
         name_row: usize,
         #[serde(default)]
         value_row: usize,
+        #[serde(default)]
+        name_part: Option<usize>,
+        #[serde(default)]
+        value_part: Option<usize>,
+        #[serde(default)]
+        price_part: Option<usize>,
+        #[serde(default)]
+        loose_numbers: bool,
     },
     RemoveImportMapping {
         source: String,
@@ -136,6 +144,9 @@ pub struct HoldingInput {
     pub value: Decimal,
 }
 
+/// How many values one cell can be split into.
+const MAX_PARTS: usize = 20;
+
 fn one_unit() -> u64 {
     1
 }
@@ -163,6 +174,12 @@ impl ImportMapping {
             || self.value_row >= self.rows_per_record
         {
             return Err(invalid("the rows per record"));
+        }
+        if [self.name_part, self.value_part, self.price_part]
+            .iter()
+            .any(|p| p.is_some_and(|p| p >= MAX_PARTS))
+        {
+            return Err(invalid("a part number"));
         }
         if !(1..=MAX_PRICE_UNIT).contains(&self.price_unit) {
             return Err(invalid("the price unit"));
@@ -556,6 +573,10 @@ impl Portfolio {
                 rows_per_record,
                 name_row,
                 value_row,
+                name_part,
+                value_part,
+                price_part,
+                loose_numbers,
             } => {
                 let mapping = ImportMapping {
                     source,
@@ -567,6 +588,10 @@ impl Portfolio {
                     rows_per_record,
                     name_row,
                     value_row,
+                    name_part,
+                    value_part,
+                    price_part,
+                    loose_numbers,
                 }
                 .validated()?;
                 match self

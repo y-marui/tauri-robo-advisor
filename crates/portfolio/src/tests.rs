@@ -688,6 +688,10 @@ fn import_mappings_are_saved_per_source_and_replaced() {
         rows_per_record: 1,
         name_row: 0,
         value_row: 0,
+        name_part: None,
+        value_part: None,
+        price_part: None,
+        loose_numbers: false,
     };
 
     apply(&mut p, set(" SBI ", 0, 5));
@@ -729,6 +733,10 @@ fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
         rows_per_record,
         name_row,
         value_row,
+        name_part: None,
+        value_part: None,
+        price_part: None,
+        loose_numbers: false,
     };
 
     for edit in [
@@ -766,6 +774,10 @@ fn a_two_row_record_may_keep_the_name_and_the_value_in_one_column() {
             rows_per_record: 2,
             name_row: 0,
             value_row: 1,
+            name_part: None,
+            value_part: None,
+            price_part: None,
+            loose_numbers: false,
         },
     );
 
@@ -799,6 +811,10 @@ fn mapping_for(source: &str) -> ImportMapping {
         rows_per_record: 2,
         name_row: 0,
         value_row: 1,
+        name_part: None,
+        value_part: None,
+        price_part: None,
+        loose_numbers: false,
     }
 }
 
@@ -972,6 +988,10 @@ fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
             rows_per_record: 1,
             name_row: 0,
             value_row: 0,
+            name_part: None,
+            value_part: None,
+            price_part: None,
+            loose_numbers: false,
         },
     );
     mappings.validate_integrity().unwrap();
@@ -1022,4 +1042,47 @@ fn a_file_without_a_revision_loads_as_revision_zero() {
     let p: Portfolio = serde_json::from_str(json).unwrap();
 
     assert_eq!(p.revision, 0);
+}
+
+#[test]
+fn the_parts_of_a_mapping_are_limited_and_old_files_get_defaults() {
+    let mut p = Portfolio::default();
+    let mut mapping = mapping_for("SBI");
+    mapping.name_part = Some(1);
+    mapping.value_part = Some(0);
+    mapping.loose_numbers = true;
+    apply(&mut p, set_mapping(mapping.clone()));
+    assert_eq!(p.import_mappings[0].name_part, Some(1));
+    assert!(p.import_mappings[0].loose_numbers);
+
+    mapping.price_part = Some(500);
+    assert!(
+        p.apply(set_mapping(mapping)).is_err(),
+        "a part number that is too large"
+    );
+
+    let old: ImportMapping = serde_json::from_str(
+        r#"{"source":"SBI","name_column":0,"value_column":1,"header_rows":1}"#,
+    )
+    .unwrap();
+    assert_eq!(old.name_part, None);
+    assert!(!old.loose_numbers);
+}
+
+fn set_mapping(m: ImportMapping) -> Edit {
+    Edit::SetImportMapping {
+        source: m.source,
+        name_column: m.name_column,
+        value_column: m.value_column,
+        price_column: m.price_column,
+        price_unit: m.price_unit,
+        header_rows: m.header_rows,
+        rows_per_record: m.rows_per_record,
+        name_row: m.name_row,
+        value_row: m.value_row,
+        name_part: m.name_part,
+        value_part: m.value_part,
+        price_part: m.price_part,
+        loose_numbers: m.loose_numbers,
+    }
 }

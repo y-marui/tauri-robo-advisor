@@ -34,6 +34,19 @@ pub struct ColumnMapping {
     pub name_row: usize,
     #[serde(default)]
     pub value_row: usize,
+    /// A cell that holds several values (separated by line breaks or no-break spaces, like
+    /// "ticker / name" or "quantity / sellable quantity / ordered quantity") is read from its
+    /// n-th value (counted from 0). `None`: the whole cell, with the line breaks as spaces.
+    #[serde(default)]
+    pub name_part: Option<usize>,
+    #[serde(default)]
+    pub value_part: Option<usize>,
+    #[serde(default)]
+    pub price_part: Option<usize>,
+    /// Read the first number in a cell that has other text around it ("123.45US$",
+    /// "150.25（10/15）"). Off: the cell must be only a number.
+    #[serde(default)]
+    pub loose_numbers: bool,
 }
 
 /// A row that was read.
@@ -124,15 +137,24 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 }
             },
         };
-        let name = clean(name);
+        let name = clean(&pick(name, mapping.name_part, true));
         if name.is_empty() {
             skip(&mut skipped, SkipReason::NoName);
             start = record + 1;
             continue;
         }
+        let first = pick(first, mapping.value_part, false);
+        let second = second.map(|cell| pick(cell, mapping.price_part, false));
+        let read = |text: &str| {
+            if mapping.loose_numbers {
+                parse_amount_loose(text)
+            } else {
+                parse_amount(text)
+            }
+        };
         let value = match second {
-            None => parse_amount(first),
-            Some(price) => match (parse_amount(first), parse_amount(price)) {
+            None => read(&first),
+            Some(price) => match (read(&first), read(&price)) {
                 (Some(quantity), Some(price)) => {
                     // An overflowing product is out of range, not a number.
                     match quantity
@@ -163,6 +185,80 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
         }
     }
     Extraction { rows, skipped }
+}
+
+/// The longest a single cell is taken to be, so a long text cannot make a part search slow.
+const MAX_PARTS: usize = 50;
+
+/// The n-th value of a cell, or the whole cell (line breaks as spaces) when `part` is `None`.
+/// Values are separated by line breaks, and, in a name, by no-break spaces (a no-break space
+/// inside a number is a thousands separator, so numbers are split at line breaks only); empty
+/// ones do not count.
+fn pick(cell: &str, part: Option<usize>, split_nbsp: bool) -> String {
+    match part {
+        None => cell
+            .split(['\n', '\r'])
+            .map(|line| clean(&line.replace('\u{a0}', " ")))
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join(" "),
+        Some(n) => cell
+            .split(|c| matches!(c, '\n' | '\r') || (split_nbsp && c == '\u{a0}'))
+            .map(clean)
+            .filter(|p| !p.is_empty())
+            .take(MAX_PARTS)
+            .nth(n)
+            .unwrap_or_default(),
+    }
+}
+
+/// Reads the first number in a text that has other text around it: "123.45US$" and
+/// "150.25（10/15）" give 123.45 and 150.25. A sign directly before the digits counts.
+/// No number in the text gives `None`.
+pub(crate) fn parse_amount_loose(text: &str) -> Option<Decimal> {
+    let text = clean(text);
+    let chars: Vec<char> = text.chars().collect();
+    let digit = |c: char| c.is_ascii_digit() || ('０'..='９').contains(&c);
+    let start = chars.iter().position(|&c| digit(c))?;
+    let mut token = String::new();
+    let mut seen_point = false;
+    // A decimal point directly before the first digit (".5") is part of the number.
+    let mut sign_at = start;
+    if start > 0 && matches!(chars[start - 1], '.' | '．') {
+        seen_point = true;
+        sign_at = start - 1;
+    }
+    if sign_at > 0 && matches!(chars[sign_at - 1], '-' | '−' | '－' | '▲' | '△') {
+        token.push('-');
+    }
+    if seen_point {
+        token.push_str("0.");
+    }
+    let rest = &chars[start..];
+    for (k, &c) in rest.iter().enumerate() {
+        match c {
+            '0'..='9' => token.push(c),
+            '０'..='９' => token.push(char::from_u32(c as u32 - '０' as u32 + '0' as u32)?),
+            ',' | '，' => {}
+            // A space inside a number groups thousands only when exactly three digits follow
+            // ("1 234円"); anything else ends the number.
+            ' ' | '\u{a0}' | '\u{3000}' if !seen_point => {
+                let three = rest
+                    .get(k + 1..k + 4)
+                    .is_some_and(|next| next.iter().all(|&d| digit(d)));
+                let after_is_digit = rest.get(k + 4).is_some_and(|&d| digit(d));
+                if !three || after_is_digit {
+                    break;
+                }
+            }
+            '.' | '．' if !seen_point => {
+                seen_point = true;
+                token.push('.');
+            }
+            _ => break,
+        }
+    }
+    Decimal::from_str(token.trim_end_matches('.')).ok()
 }
 
 /// Trims ordinary, no-break, and full-width spaces.

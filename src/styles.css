@@ -183,6 +183,16 @@ button.danger.armed {
 .field {
   display: grid;
   gap: 2px;
+  min-width: 0;
+}
+
+/* A control fills its grid cell instead of keeping its own width, so it cannot run into the
+   next field (a number input beside a select used to overlap it). */
+.fields .field select,
+.fields .field input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .check {
