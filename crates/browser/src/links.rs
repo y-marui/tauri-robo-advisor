@@ -131,6 +131,15 @@ const VIEW_HREF: &[&str] = &[
     "balance", "status", "detail", "summary", "position", "holding",
 ];
 
+/// Words that count only as a whole word ("add" is an action, "address" is not).
+const ACTION_WHOLE_WORD: &[&str] = &["add", "adds"];
+
+fn has_whole_word(text: &str, words: &[&str]) -> bool {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| words.contains(&word))
+}
+
 fn mentions(haystack: &str, words: &[&str]) -> bool {
     let lower = haystack.to_lowercase();
     words.iter().any(|w| lower.contains(w))
@@ -146,6 +155,7 @@ pub fn link_text_allowed(text: &str) -> Result<(), Error> {
         return Err(Error::LinkRefused);
     }
     if mentions(trimmed, ACTION_TEXT)
+        || has_whole_word(trimmed, ACTION_WHOLE_WORD)
         || (mentions(trimmed, MONEY_TEXT) && !mentions(trimmed, VIEW_TEXT))
     {
         return Err(Error::LinkRefused);
@@ -250,6 +260,7 @@ fn part_looks_read_only(part: &str) -> bool {
         .collect();
     let action = mentions(&lower, ACTION_HREF)
         || mentions(&compact, ACTION_HREF)
+        || has_whole_word(&lower, ACTION_WHOLE_WORD)
         || lower
             .split(|c: char| !c.is_alphanumeric())
             .any(|word| ACTION_HREF_AT_START.iter().any(|w| word.starts_with(w)));

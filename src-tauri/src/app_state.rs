@@ -373,16 +373,17 @@ impl AppState {
         // An account is replaced by what ALL of its recipes read. If one of them has no
         // result (it failed, needs a choice, or was added after the others ran), replacing
         // would delete the holdings that recipe was meant to supply.
-        let missing: Vec<String> = {
+        let (snapshot, missing): (Portfolio, Vec<String>) = {
             let guard = self.lock()?;
             let portfolio = guard.as_ref().map_err(Clone::clone)?;
-            portfolio
+            let missing = portfolio
                 .recipes
                 .iter()
                 .filter(|r| views.iter().any(|v| v.account == r.account))
                 .filter(|r| !views.iter().any(|v| v.name == r.name))
                 .map(|r| r.name.clone())
-                .collect()
+                .collect();
+            (portfolio.clone(), missing)
         };
         if !missing.is_empty() {
             return Err(format!(
@@ -397,17 +398,33 @@ impl AppState {
                 *products.entry(row.product).or_default() += row.value;
             }
         }
-        for (account, products) in per_account {
-            if products.is_empty() {
-                continue;
+        // The plan was made from `snapshot`. Everything is checked and replaced under one
+        // lock and saved once, so an edit made meanwhile (a recipe, an alias, a product)
+        // cannot let stale rows through, and no account is replaced without the others.
+        {
+            let mut guard = self.lock()?;
+            let current = guard.as_ref().map_err(Clone::clone)?;
+            if *current != snapshot {
+                return Err(
+                    "The data changed while the result was waiting. Fetch again.".to_owned(),
+                );
             }
-            self.apply(Edit::ReplaceHoldings {
-                account,
-                holdings: products
-                    .into_iter()
-                    .map(|(product, value)| HoldingInput { product, value })
-                    .collect(),
-            })?;
+            let mut next = current.clone();
+            for (account, products) in per_account {
+                if products.is_empty() {
+                    continue;
+                }
+                next.apply(Edit::ReplaceHoldings {
+                    account,
+                    holdings: products
+                        .into_iter()
+                        .map(|(product, value)| HoldingInput { product, value })
+                        .collect(),
+                })
+                .map_err(|e| e.to_string())?;
+            }
+            store::save(&self.path, &next)?;
+            *guard = Ok(next);
         }
         self.clear_runs()?;
         self.view()
