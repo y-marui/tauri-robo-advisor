@@ -513,3 +513,14 @@ fn a_cell_with_only_text_is_still_skipped_when_numbers_are_loose() {
     assert!(result.rows.is_empty());
     assert_eq!(result.skipped[0].reason, SkipReason::NotANumber);
 }
+
+#[test]
+fn a_no_break_space_inside_a_number_is_a_thousands_separator_not_a_split() {
+    let table = cells(&[&["Alpha", "1\u{a0}234\n0"]]);
+    let by_part = ColumnMapping {
+        value_part: Some(0),
+        ..mapping(0, 1, 0)
+    };
+
+    assert_eq!(extract(&table, &by_part).rows[0].value, dec!(1234));
+}

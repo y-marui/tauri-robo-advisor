@@ -137,14 +137,14 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 }
             },
         };
-        let name = clean(&pick(name, mapping.name_part));
+        let name = clean(&pick(name, mapping.name_part, true));
         if name.is_empty() {
             skip(&mut skipped, SkipReason::NoName);
             start = record + 1;
             continue;
         }
-        let first = pick(first, mapping.value_part);
-        let second = second.map(|cell| pick(cell, mapping.price_part));
+        let first = pick(first, mapping.value_part, false);
+        let second = second.map(|cell| pick(cell, mapping.price_part, false));
         let read = |text: &str| {
             if mapping.loose_numbers {
                 parse_amount_loose(text)
@@ -191,8 +191,10 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
 const MAX_PARTS: usize = 50;
 
 /// The n-th value of a cell, or the whole cell (line breaks as spaces) when `part` is `None`.
-/// Values are separated by line breaks and no-break spaces; empty ones do not count.
-fn pick(cell: &str, part: Option<usize>) -> String {
+/// Values are separated by line breaks, and, in a name, by no-break spaces (a no-break space
+/// inside a number is a thousands separator, so numbers are split at line breaks only); empty
+/// ones do not count.
+fn pick(cell: &str, part: Option<usize>, split_nbsp: bool) -> String {
     match part {
         None => cell
             .split(['\n', '\r'])
@@ -201,7 +203,7 @@ fn pick(cell: &str, part: Option<usize>) -> String {
             .collect::<Vec<_>>()
             .join(" "),
         Some(n) => cell
-            .split(['\n', '\r', '\u{a0}'])
+            .split(|c| matches!(c, '\n' | '\r') || (split_nbsp && c == '\u{a0}'))
             .map(clean)
             .filter(|p| !p.is_empty())
             .take(MAX_PARTS)
