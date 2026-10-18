@@ -227,8 +227,10 @@ impl BrowserSession {
             .and_then(|raw| pick_table(raw, title));
         // Every run ends on the page it started from, so the next recipe starts there too.
         let restored = cdp.go_back(&session, links.len());
-        let table = read?;
+        // A failed restoration takes precedence: the batch must stop before the next recipe
+        // reads the wrong page.
         restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;
+        let table = read?;
         Ok(RecipeRead::Table { table, references })
     }
 
