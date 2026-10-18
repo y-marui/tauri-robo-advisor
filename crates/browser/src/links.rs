@@ -34,6 +34,8 @@ const ACTION_TEXT: &[&str] = &[
     "申込",
     "買う",
     "売る",
+    "換金",
+    "償還",
     "申し込み",
     "cancel",
     "delete",
@@ -63,6 +65,8 @@ const ACTION_TEXT: &[&str] = &[
     "send",
     "buy",
     "sell",
+    "redeem",
+    "redemption",
 ];
 
 /// Order and money words. They can also name a view ("注文照会", "出金履歴", "Payment history"),
@@ -101,6 +105,8 @@ const ACTION_HREF: &[&str] = &[
     "remit",
     "buy",
     "sell",
+    "redeem",
+    "redemption",
     "取消",
     "取り消し",
     "削除",
@@ -118,6 +124,8 @@ const ACTION_HREF: &[&str] = &[
     "申し込み",
     "買う",
     "売る",
+    "換金",
+    "償還",
     "ログアウト",
 ];
 /// Words that must start a word of the address ("edit" is not "credit").
@@ -335,7 +343,7 @@ pub fn normalize_href(href: &str) -> String {
         format!("#{fragment}")
     };
     let (path, query) = href.split_once('?').unwrap_or((href, ""));
-    let mut kept: Vec<(String, String)> = query
+    let kept: Vec<(String, String)> = query
         .split('&')
         .filter(|pair| !pair.is_empty())
         .filter_map(|pair| {
@@ -347,7 +355,7 @@ pub fn normalize_href(href: &str) -> String {
             (!volatile).then(|| (key.to_owned(), value.to_owned()))
         })
         .collect();
-    kept.sort();
+    // The order is kept: with a repeated name a server may take the first or the last value.
     let query: Vec<String> = kept.iter().map(|(k, v)| format!("{k}={v}")).collect();
     if query.is_empty() {
         format!("{path}{fragment}")
@@ -576,8 +584,8 @@ mod tests {
             normalize_href(
                 "/a?b=2&a=1&sessionId=abc&n=0123456789abcdef0123456789abcdef&t=1649728758632"
             ),
-            "/a?a=1&b=2",
-            "sorted, and timestamps, long tokens, and session-like names are dropped",
+            "/a?b=2&a=1",
+            "kept in order, and timestamps, long tokens, and session-like names are dropped",
         );
         assert_ne!(
             normalize_href("/holdings?account=1234567890"),
