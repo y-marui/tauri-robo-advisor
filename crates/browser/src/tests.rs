@@ -292,7 +292,7 @@ fn probe(marker: bool, ready: &str) -> Value {
 }
 
 fn found(href: &str, same_site: bool, scripted: bool) -> Value {
-    json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted}])
+    json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted, "origin": "https://h.example"}])
 }
 
 #[test]
@@ -330,8 +330,8 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
         "the old document is marked first"
     );
     assert!(
-        scripts[2].contains(", 4, \"/account/list\")"),
-        "the position and the accepted address come from the search"
+        scripts[2].contains(", 4, \"/account/list\", \"https://h.example\")"),
+        "the position, the accepted address and the site come from the search"
     );
 }
 
@@ -413,8 +413,8 @@ fn a_missing_link_and_a_link_that_is_gone_are_reported() {
 
 fn two_links(a: &str, b: &str) -> Value {
     json!([
-        {"index": 1, "href": a, "same_site": true, "scripted": false},
-        {"index": 7, "href": b, "same_site": true, "scripted": false},
+        {"index": 1, "href": a, "same_site": true, "scripted": false, "origin": "https://h.example"},
+        {"index": 7, "href": b, "same_site": true, "scripted": false, "origin": "https://h.example"},
     ])
 }
 
@@ -443,7 +443,8 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
         crate::fingerprint("/ETGate/?_ControlID=A")
     );
     assert!(
-        log.lock().unwrap()[2].contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\")"),
+        log.lock().unwrap()[2]
+            .contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\", \"https://h.example\")"),
         "the first one is followed"
     );
 }
@@ -493,7 +494,7 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/b/list")))
         .unwrap();
     assert!(
-        log.lock().unwrap()[2].contains(", 7, \"/b/list\")"),
+        log.lock().unwrap()[2].contains(", 7, \"/b/list\", \"https://h.example\")"),
         "the second link was followed"
     );
 

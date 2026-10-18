@@ -159,6 +159,10 @@ pub(crate) struct Candidate {
     /// The address (path and query) is longer than the safe length, so it was cut and cannot be checked.
     #[serde(default)]
     pub too_long: bool,
+    /// The site the page was on when the link was found; the move is made only if the page
+    /// is still on it (a redirect in between must not carry the link over to another site).
+    #[serde(default)]
+    pub origin: String,
 }
 
 impl Candidate {
@@ -358,7 +362,7 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
     }
     // Every matching link is looked at, but each distinct destination is listed once.
     const key = scripted + '|' + sameSite + '|' + tooLong + '|' + href;
-    if (!seen.has(key) && seen.size < 21) seen.set(key, { index: i, href, same_site: sameSite, scripted, too_long: tooLong });
+    if (!seen.has(key) && seen.size < 21) seen.set(key, { index: i, href, same_site: sameSite, scripted, too_long: tooLong, origin: location.origin });
   });
   return [...seen.values()];
 })"#;
@@ -367,8 +371,9 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
 /// a click would run whatever script the page attached to the link. Everything is
 /// checked again in the page (the text, the site, and the exact path and query that
 /// the Rust side accepted), and anything that differs is not followed.
-pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected) => {
+pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin) => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+  if (!origin || origin !== location.origin) return 'gone';
   const a = document.querySelectorAll('a')[index];
   if (!a || clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
   let url;
@@ -448,6 +453,7 @@ mod tests {
             same_site,
             scripted,
             too_long: false,
+            origin: "https://h.example".to_owned(),
         }
     }
 

@@ -266,9 +266,13 @@ impl Cdp {
             .unwrap_or_default()
             .to_owned();
         let expected = serde_json::to_string(&chosen.href).map_err(|_| Error::Script)?;
+        let origin = serde_json::to_string(&chosen.origin).map_err(|_| Error::Script)?;
         let navigated = self.evaluate(
             session,
-            &format!("({NAVIGATE})({wanted}, {}, {expected})", chosen.index),
+            &format!(
+                "({NAVIGATE})({wanted}, {}, {expected}, {origin})",
+                chosen.index
+            ),
         )?;
         if navigated.as_str() != Some("navigated") {
             return Err(Error::LinkNotFound);
