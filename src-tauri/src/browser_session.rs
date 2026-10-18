@@ -33,6 +33,13 @@ pub struct PageInfo {
     pub title: String,
 }
 
+/// One of several same-named links: what to save to find it again, and where it goes.
+#[derive(Debug, Serialize)]
+pub struct LinkChoiceView {
+    pub reference: String,
+    pub label: String,
+}
+
 /// What reading a recipe's page gave.
 #[derive(Debug)]
 pub enum RecipeRead {
@@ -42,7 +49,10 @@ pub enum RecipeRead {
         references: Vec<String>,
     },
     /// Several different links have this text; the user has to pick one.
-    NeedsChoice { link: usize, choices: Vec<String> },
+    NeedsChoice {
+        link: usize,
+        choices: Vec<LinkChoiceView>,
+    },
     /// A saved link no longer exists: the page has changed.
     LinkChanged { link: usize },
 }
@@ -164,6 +174,13 @@ impl BrowserSession {
             match cdp.follow_link(&session, &link.text, link.reference.as_deref()) {
                 Ok(followed) => references.push(followed.reference),
                 Err(browser::Error::LinkAmbiguous(choices)) => {
+                    let choices = choices
+                        .into_iter()
+                        .map(|c| LinkChoiceView {
+                            reference: c.reference,
+                            label: c.label,
+                        })
+                        .collect();
                     return Ok(RecipeRead::NeedsChoice {
                         link: index,
                         choices,

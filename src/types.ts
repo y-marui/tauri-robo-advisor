@@ -352,5 +352,5 @@ export interface RecipeRun {
 
 export type RecipeOutcome =
   | { status: "ready"; run: RecipeRun }
-  | { status: "needs_choice"; link: number; choices: string[] }
+  | { status: "needs_choice"; link: number; choices: { reference: string; label: string }[] }
   | { status: "link_changed"; link: number };

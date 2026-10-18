@@ -78,7 +78,7 @@ export function recipesPanel(ctx: Context): Panel {
     const select = h(
       "select",
       { "aria-label": t("Where the link goes") },
-      ...outcome.choices.map((c) => h("option", { value: c }, c === "" ? t("(the page handles it)") : c)),
+      ...outcome.choices.map((c) => h("option", { value: c.reference }, c.label === "" ? t("(the page handles it)") : c.label)),
     );
     const use = h("button", { type: "button" }, t("Use this link"));
     use.addEventListener("click", () => void saveReference(select.value));

@@ -239,11 +239,14 @@ impl Cdp {
             None => {
                 // Different destinations are ambiguous; scripted links cannot be
                 // told apart by where they go, so several of them are ambiguous too.
-                let mut places: Vec<String> = Vec::new();
+                let mut places: Vec<crate::LinkChoice> = Vec::new();
                 for candidate in &allowed {
-                    let place = candidate.reference();
-                    if place.is_empty() || !places.contains(&place) {
-                        places.push(place);
+                    let reference = candidate.reference();
+                    if reference.is_empty() || !places.iter().any(|p| p.reference == reference) {
+                        places.push(crate::LinkChoice {
+                            reference,
+                            label: candidate.label(),
+                        });
                     }
                 }
                 if places.len() > 1 {

@@ -25,5 +25,14 @@ pub enum Error {
     #[error("the link has changed since it was saved; choose it again")]
     LinkChanged,
     #[error("several different links have that text; choose one")]
-    LinkAmbiguous(Vec<String>),
+    LinkAmbiguous(Vec<LinkChoice>),
+}
+
+/// One of several links that have the same text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkChoice {
+    /// What to save to find this link again.
+    pub reference: String,
+    /// Where it goes, in words, to show to the user (never saved).
+    pub label: String,
 }

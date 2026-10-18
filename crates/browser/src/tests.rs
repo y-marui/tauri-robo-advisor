@@ -312,7 +312,7 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     let (mut cdp, session) = attached(&endpoint);
 
     let followed = cdp.follow_link(&session, "口座(円建)", None).unwrap();
-    assert_eq!(followed.reference, "/account/list");
+    assert_eq!(followed.reference, crate::fingerprint("/account/list"));
 
     let scripts = log.lock().unwrap().clone();
     assert_eq!(scripts.len(), 5, "find, mark, go, then two checks");
@@ -433,7 +433,10 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
 
     let followed = cdp.follow_link(&session, "ポートフォリオ", None).unwrap();
 
-    assert_eq!(followed.reference, "/ETGate/?_ControlID=A");
+    assert_eq!(
+        followed.reference,
+        crate::fingerprint("/ETGate/?_ControlID=A")
+    );
     assert!(
         log.lock().unwrap()[2].contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\")"),
         "the first one is followed"
@@ -454,7 +457,16 @@ fn links_with_the_same_text_and_different_destinations_are_not_guessed() {
 
     assert_eq!(
         error,
-        Error::LinkAmbiguous(vec!["/a/list".to_owned(), "/b/list".to_owned()])
+        Error::LinkAmbiguous(vec![
+            crate::LinkChoice {
+                reference: crate::fingerprint("/a/list"),
+                label: "/a/list".to_owned(),
+            },
+            crate::LinkChoice {
+                reference: crate::fingerprint("/b/list"),
+                label: "/b/list".to_owned(),
+            },
+        ])
     );
     assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
 }
@@ -473,7 +485,8 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
         Some(log.clone()),
     );
     let (mut cdp, session) = attached(&endpoint);
-    cdp.follow_link(&session, "一覧", Some("/b/list")).unwrap();
+    cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/b/list")))
+        .unwrap();
     assert!(
         log.lock().unwrap()[2].contains(", 7, \"/b/list\")"),
         "the second link was followed"
@@ -487,7 +500,7 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     );
     let (mut cdp, session) = attached(&endpoint);
     assert_eq!(
-        cdp.follow_link(&session, "一覧", Some("/c/list")),
+        cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/c/list"))),
         Err(Error::LinkChanged)
     );
     assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");

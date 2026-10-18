@@ -15,7 +15,7 @@ use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
 use tabular::{ColumnMapping, Skipped, Table};
 
-use crate::browser_session::RecipeRead;
+use crate::browser_session::{LinkChoiceView, RecipeRead};
 
 use crate::store;
 
@@ -86,7 +86,7 @@ pub enum RecipeOutcome {
     /// Several different links have the link's text: the user picks one.
     NeedsChoice {
         link: usize,
-        choices: Vec<String>,
+        choices: Vec<LinkChoiceView>,
     },
     /// A saved link is gone: the page has changed.
     LinkChanged {

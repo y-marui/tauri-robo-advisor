@@ -14,47 +14,25 @@ use crate::Error;
 const MAX_LINK_TEXT_CHARS: usize = 60;
 const MAX_HREF_CHARS: usize = 500;
 
-/// Words that suggest an action that changes something (orders, money, the account, the session).
-const RISKY_TEXT: &[&str] = &[
-    "注文",
-    "発注",
-    "売却",
-    "売付",
-    "買付",
-    "買い",
-    "売り",
-    "購入",
-    "入金",
-    "出金",
-    "送金",
-    "振替",
-    "振込",
-    "解約",
-    "申込",
-    "申し込み",
+/// Words that name an action that changes something. A view word never excuses them:
+/// "Cancel order history" is still a cancel.
+const ACTION_TEXT: &[&str] = &[
+    "ログアウト",
     "取消",
-    "訂正",
-    "変更",
     "削除",
+    "変更",
     "登録",
     "承認",
     "確定",
     "実行",
-    "約定",
-    "ログアウト",
+    "解約",
+    "解除",
+    "送信",
     "保存",
     "追加",
-    "送信",
-    "解除",
-    "order",
-    "buy",
-    "sell",
-    "purchase",
-    "deposit",
-    "withdraw",
-    "transfer",
-    "trade",
-    "payment",
+    "訂正",
+    "申込",
+    "申し込み",
     "cancel",
     "delete",
     "submit",
@@ -73,6 +51,15 @@ const RISKY_TEXT: &[&str] = &[
     "remove",
     "create",
     "send",
+    "buy",
+    "sell",
+];
+
+/// Order and money words. They can also name a view ("注文照会", "出金履歴", "Payment history"),
+/// so a view word in the same text excuses them.
+const MONEY_TEXT: &[&str] = &[
+    "注文", "発注", "売却", "売付", "買付", "買い", "売り", "購入", "入金", "出金", "送金", "振替",
+    "振込", "約定", "order", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
 ];
 
 /// Words that show a link only displays something (so "注文照会" or "買付余力" may be followed).
@@ -81,12 +68,15 @@ const VIEW_TEXT: &[&str] = &[
     "balance", "status", "detail", "summary", "position", "holding",
 ];
 
-/// The same idea for the address, which is English-ish and lower case.
-const RISKY_HREF: &[&str] = &[
-    "order", "buy", "sell", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
+/// The same for the address, whose parts (path segments and query pairs) are judged one by one.
+const ACTION_HREF: &[&str] = &[
     "cancel", "delete", "submit", "confirm", "logout", "signout", "change", "update", "save",
-    "edit", "modify", "regist", "apply", "execute", "approve", "remove", "create", "send",
-    "settle", "remit",
+    "modify", "regist", "execute", "approve", "remove", "create", "settle", "remit", "buy", "sell",
+];
+/// Words that must start a word of the address ("edit" is not "credit").
+const ACTION_HREF_AT_START: &[&str] = &["edit", "apply", "send"];
+const MONEY_HREF: &[&str] = &[
+    "order", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
 ];
 const VIEW_HREF: &[&str] = &[
     "inquiry", "history", "list", "balance", "status", "detail", "summary", "position", "holding",
@@ -106,7 +96,9 @@ pub fn link_text_allowed(text: &str) -> Result<(), Error> {
     {
         return Err(Error::LinkRefused);
     }
-    if mentions(trimmed, RISKY_TEXT) && !mentions(trimmed, VIEW_TEXT) {
+    if mentions(trimmed, ACTION_TEXT)
+        || (mentions(trimmed, MONEY_TEXT) && !mentions(trimmed, VIEW_TEXT))
+    {
         return Err(Error::LinkRefused);
     }
     Ok(())
@@ -138,8 +130,14 @@ impl Candidate {
         if self.scripted {
             String::new()
         } else {
-            normalize_href(&self.href)
+            fingerprint(&normalize_href(&self.href))
         }
+    }
+
+    /// The readable form of the destination, to show while the user chooses. It is
+    /// never saved: only the fingerprint is, so nothing a link carries ends up in the data.
+    pub fn label(&self) -> String {
+        normalize_href(&self.href)
     }
 
     pub(crate) fn allowed(&self) -> bool {
@@ -188,6 +186,17 @@ fn percent_decoded(text: &str) -> String {
     current
 }
 
+/// One path segment, query pair, or fragment part. An action word refuses it whatever
+/// else it says; an order or money word is excused only by a view word in the same part.
+fn part_looks_read_only(part: &str) -> bool {
+    let lower = part.to_lowercase();
+    let action = mentions(&lower, ACTION_HREF)
+        || lower
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|word| ACTION_HREF_AT_START.iter().any(|w| word.starts_with(w)));
+    !action && (!mentions(&lower, MONEY_HREF) || mentions(&lower, VIEW_HREF))
+}
+
 /// Whether an address (path and query) looks like it only shows something. Every
 /// part is judged on its own: a path segment or a query pair with an action word
 /// is refused unless the same part also says it is a view (so `orderhistory` is
@@ -202,12 +211,39 @@ fn address_looks_read_only(href: &str) -> bool {
         .split('/')
         .chain(query.split('&'))
         .chain(fragment.split(['/', '&', '?']))
-        .all(|part| !mentions(part, RISKY_HREF) || mentions(part, VIEW_HREF))
+        .all(part_looks_read_only)
+}
+
+/// A short, stable fingerprint (FNV-1a) of a destination. Saved instead of the address
+/// itself, so a token or an identifier in a link never reaches the data file; a link that
+/// changes from visit to visit in a way the normalization misses simply stops matching,
+/// and the user is asked again.
+pub fn fingerprint(text: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("h:{hash:016x}")
 }
 
 /// Words in a query name that mean the value belongs to one visit.
 const VOLATILE_KEYS: &[&str] = &[
-    "seq", "token", "session", "sid", "time", "stamp", "nonce", "rand", "csrf",
+    "seq",
+    "token",
+    "session",
+    "sid",
+    "time",
+    "stamp",
+    "nonce",
+    "rand",
+    "csrf",
+    "ticket",
+    "auth",
+    "otp",
+    "signature",
+    "secret",
+    "password",
 ];
 
 /// A value that is a timestamp (13 digits or more, like a time in milliseconds) or a long
@@ -345,6 +381,20 @@ mod tests {
         ] {
             assert_eq!(link_text_allowed(bad), Err(Error::LinkRefused), "{bad:?}");
         }
+        for mixed in [
+            "Cancel order history",
+            "Delete history",
+            "注文取消履歴",
+            "変更履歴",
+            "Save balance",
+            "Buy list",
+        ] {
+            assert_eq!(
+                link_text_allowed(mixed),
+                Err(Error::LinkRefused),
+                "an action word is not excused by a view word: {mixed}"
+            );
+        }
         assert_eq!(link_text_allowed(&"あ".repeat(61)), Err(Error::LinkRefused));
         assert_eq!(link_text_allowed("a\nb"), Err(Error::LinkRefused));
     }
@@ -363,6 +413,16 @@ mod tests {
     fn only_same_site_links_that_do_not_act_are_followed() {
         assert!(candidate("/ETGate/?_ControlID=WPLETacR001Control", true, false).allowed());
         assert!(candidate("/orderhistory/list", true, false).allowed());
+        assert!(
+            !candidate("/deletehistory", true, false).allowed(),
+            "delete in the same part"
+        );
+        assert!(!candidate("/page?savelist=1", true, false).allowed());
+        assert!(
+            candidate("/credit/list", true, false).allowed(),
+            "edit is not credit"
+        );
+        assert!(!candidate("/profile/editor", true, false).allowed());
         assert!(!candidate("/trade/order/confirm", true, false).allowed());
         assert!(!candidate("/transfer", true, false).allowed());
         assert!(
@@ -453,6 +513,10 @@ mod tests {
             "/a?b=2",
             "escaped names and values are judged as the server reads them"
         );
+        assert_eq!(normalize_href("/a?ticket=xyz&b=2&auth=q"), "/a?b=2");
+        assert!(fingerprint("/a?b=2").starts_with("h:") && fingerprint("/a?b=2").len() == 18);
+        assert_ne!(fingerprint("/a"), fingerprint("/b"));
+        assert_eq!(fingerprint("/a"), fingerprint("/a"));
         assert_eq!(normalize_href("/x?"), "/x");
     }
 
