@@ -234,8 +234,10 @@ pub fn normalize_href(href: &str) -> String {
         .filter(|pair| !pair.is_empty())
         .filter_map(|pair| {
             let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-            let lower = key.to_lowercase();
-            let volatile = VOLATILE_KEYS.iter().any(|k| lower.contains(k)) || volatile_value(value);
+            // A name or value written with escapes (`%73ession`) is judged as the server reads it.
+            let lower = percent_decoded(key).to_lowercase();
+            let volatile = VOLATILE_KEYS.iter().any(|k| lower.contains(k))
+                || volatile_value(&percent_decoded(value));
             (!volatile).then(|| (key.to_owned(), value.to_owned()))
         })
         .collect();
@@ -273,7 +275,7 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
     if (!scripted) {
       try {
         const url = new URL(raw, location.href);
-        sameSite = (url.protocol === 'https:' || url.protocol === 'http:') && url.host === location.host;
+        sameSite = (url.protocol === 'https:' || url.protocol === 'http:') && url.origin === location.origin;
         const full = url.pathname + url.search + url.hash;
         tooLong = full.length > 500;
         href = full.slice(0, 500);
@@ -296,7 +298,7 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected) => {
   if (!a || clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
   let url;
   try { url = new URL(a.getAttribute('href') ?? '', location.href); } catch (e) { return 'gone'; }
-  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.host !== location.host) return 'gone';
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.origin !== location.origin) return 'gone';
   if (url.pathname + url.search + url.hash !== expected) return 'gone';
   location.assign(url.href);
   return 'navigated';
@@ -444,6 +446,13 @@ mod tests {
             "the part after # is kept"
         );
         assert_ne!(normalize_href("/app#/a"), normalize_href("/app#/b"));
+        assert_eq!(
+            normalize_href(
+                "/a?%73ession=secret&b=2&%74oken=abc&c=%31%32%33%34%35%36%37%38%39%30%31%32%33"
+            ),
+            "/a?b=2",
+            "escaped names and values are judged as the server reads them"
+        );
         assert_eq!(normalize_href("/x?"), "/x");
     }
 
