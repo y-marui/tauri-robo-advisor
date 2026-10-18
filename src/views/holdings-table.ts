@@ -50,8 +50,14 @@ export function holdingsTablePanel(ctx: Context): Panel {
       }
 
       let current: PortfolioView = view;
+      // The quantity and price cells follow every refresh (an import or an edit changes them
+      // without changing which holdings there are).
+      const refreshers: (() => void)[] = [];
       bind((v) => {
         current = v;
+        for (const refresh of refreshers) {
+          refresh();
+        }
       });
       const holdingOf = (v: PortfolioView, account: number, product: number) =>
         v.portfolio.holdings.find((x) => x.account === account && x.product === product);
@@ -91,6 +97,15 @@ export function holdingsTablePanel(ctx: Context): Panel {
           }
           const cells = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
           holdingCells.set(`${record.account}:${record.product}`, cells);
+          const quantityCell = h("td", { class: "num" });
+          const priceCell = h("td", { class: "num" });
+          const showQuantityAndPrice = (): void => {
+            const held = holdingOf(current, record.account, record.product);
+            quantityCell.textContent = held?.quantity ?? "";
+            priceCell.textContent = priceText(held);
+          };
+          showQuantityAndPrice();
+          refreshers.push(showQuantityAndPrice);
           rows.push(
             h(
               "tr",
@@ -124,8 +139,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 }),
                 h("span", { class: "muted" }, ` ${product.currency}`),
               ),
-              h("td", { class: "num" }, holdingOf(current, record.account, record.product)?.quantity ?? ""),
-              h("td", { class: "num" }, priceText(holdingOf(current, record.account, record.product))),
+              quantityCell,
+              priceCell,
               cells.value,
               cells.share,
               h("td", {}),
