@@ -195,8 +195,12 @@ window.addEventListener("focus", () => {
   if (!view) {
     return;
   }
+  const asked = view;
   getPortfolio()
     .then((next) => {
+      if (view !== asked) {
+        return; // an edit (or another refresh) replaced the view while this one was on its way
+      }
       if (next.portfolio.revision !== view?.portfolio.revision || JSON.stringify(next.data) !== JSON.stringify(view?.data)) {
         view = next;
         renderAll();

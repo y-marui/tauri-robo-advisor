@@ -301,12 +301,15 @@ impl AppState {
         {
             return Err("The data file is still being downloaded from the synced folder. Wait a moment, then try again.".to_owned());
         }
-        if !store::save_unless_newer(&disk.path, &next, base_revision, disk.hash)? {
+        let Some(written) = store::save_unless_newer(&disk.path, &next, base_revision, disk.hash)?
+        else {
             disk.seen = None; // read the newer file on the next look
             return Err(CHANGED_ELSEWHERE.to_owned());
-        }
+        };
         disk.seen = store::fingerprint(&disk.path);
-        disk.hash = store::content_hash(&disk.path);
+        // The hash of what was written: if a sync client replaced the file after the write, the
+        // next save sees that the content is not this one and is refused.
+        disk.hash = Some(written);
         disk.warning = None;
         let view = PortfolioView::new(&next, self.data_info(disk));
         *guard = Ok(next);
@@ -345,6 +348,7 @@ impl AppState {
             // The fingerprint is taken before the file is read, so a change made after the read
             // shows up as a change on the next look.
             let seen_before = store::fingerprint(&target);
+            let mut created = None;
             let adopted = if seen_before.is_some() {
                 if !use_existing {
                     return Err(FOLDER_HAS_DATA.to_owned());
@@ -353,9 +357,12 @@ impl AppState {
             } else {
                 // Created only if still absent (checked under the lock): a file that arrived
                 // meanwhile is not replaced without the confirmation.
-                if !store::save_if_absent(&target, guard.as_ref().map_err(Clone::clone)?)? {
+                let Some(written) =
+                    store::save_if_absent(&target, guard.as_ref().map_err(Clone::clone)?)?
+                else {
                     return Err(FOLDER_HAS_DATA.to_owned());
-                }
+                };
+                created = Some(written);
                 None
             };
             data_folder::write_pointer(&self.app_data, folder.as_deref())?;
@@ -367,7 +374,7 @@ impl AppState {
                 }
                 None => {
                     disk.seen = store::fingerprint(&target);
-                    disk.hash = store::content_hash(&target);
+                    disk.hash = created;
                 }
             }
             disk.path = target;

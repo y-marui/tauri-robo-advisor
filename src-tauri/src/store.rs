@@ -95,21 +95,21 @@ pub fn save_unless_newer(
     portfolio: &Portfolio,
     base_revision: u64,
     known_hash: Option<u64>,
-) -> Result<bool, String> {
+) -> Result<Option<u64>, String> {
     let lock_path = path.with_extension("json.lock");
     let lock = create_private(&lock_path)
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
     lock.lock()
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
     match peek_revision(path) {
-        Some(on_disk) if on_disk > base_revision => return Ok(false),
+        Some(on_disk) if on_disk > base_revision => return Ok(None),
         // The same revision but not the content that was last read or written here: another
         // computer saved its own version, so this save would overwrite it.
         Some(on_disk)
             if on_disk == base_revision
                 && known_hash.is_some_and(|known| content_hash(path) != Some(known)) =>
         {
-            return Ok(false);
+            return Ok(None);
         }
         None if path.exists() => {
             // The file is there but cannot be read (malformed, too large, or from a newer
@@ -118,30 +118,28 @@ pub fn save_unless_newer(
         }
         _ => {}
     }
-    save(path, portfolio)?;
-    Ok(true)
+    Ok(Some(save(path, portfolio)?))
     // The lock is released when `lock` is dropped.
 }
 
 /// Saves only if there is no data file yet, checked under the same lock; returns `Ok(false)`
 /// when one has appeared (for example from another computer), leaving it untouched.
-pub fn save_if_absent(path: &Path, portfolio: &Portfolio) -> Result<bool, String> {
+pub fn save_if_absent(path: &Path, portfolio: &Portfolio) -> Result<Option<u64>, String> {
     let lock_path = path.with_extension("json.lock");
     let lock = create_private(&lock_path)
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
     lock.lock()
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
     if path.exists() {
-        return Ok(false);
+        return Ok(None);
     }
-    save(path, portfolio)?;
-    Ok(true)
+    Ok(Some(save(path, portfolio)?))
 }
 
 /// Writes the portfolio atomically: the data goes to a temporary file in the
 /// same directory, is flushed to disk, and then replaces the real file, so a
 /// crash never leaves a half-written file behind.
-pub fn save(path: &Path, portfolio: &Portfolio) -> Result<(), String> {
+pub fn save(path: &Path, portfolio: &Portfolio) -> Result<u64, String> {
     portfolio
         .validate_integrity()
         .map_err(|e| format!("Refusing to save inconsistent data: {e}"))?;
@@ -160,7 +158,9 @@ pub fn save(path: &Path, portfolio: &Portfolio) -> Result<(), String> {
     write().map_err(|e| {
         let _ = fs::remove_file(&temporary);
         format!("Could not save the data file ({}).", e.kind())
-    })
+    })?;
+    // The hash of the bytes that were written, not of whatever is in the file afterwards.
+    Ok(hash_bytes(&json))
 }
 
 #[cfg(unix)]
@@ -372,9 +372,9 @@ mod tests {
             revision: 3,
             ..Portfolio::default()
         };
-        assert_eq!(save_unless_newer(&path, &stale, 2, None), Ok(false));
+        assert_eq!(save_unless_newer(&path, &stale, 2, None), Ok(None));
         assert_eq!(peek_revision(&path), Some(5), "the newer file is kept");
-        assert_eq!(save_unless_newer(&path, &newer, 5, None), Ok(true));
+        assert!(save_unless_newer(&path, &newer, 5, None).unwrap().is_some());
     }
 
     #[test]
@@ -410,10 +410,11 @@ mod tests {
         };
         save(&path, &other).unwrap();
 
-        assert_eq!(save_unless_newer(&path, &mine, 2, known), Ok(false));
-        assert_eq!(
-            save_unless_newer(&path, &mine, 2, content_hash(&path)),
-            Ok(true)
+        assert_eq!(save_unless_newer(&path, &mine, 2, known), Ok(None));
+        assert!(
+            save_unless_newer(&path, &mine, 2, content_hash(&path))
+                .unwrap()
+                .is_some()
         );
     }
 }
