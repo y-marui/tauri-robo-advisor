@@ -362,8 +362,8 @@ impl Cdp {
 /// that the content of a page that renders after loading is there before it is read.
 const SETTLE: &str = "new Promise(resolve => { \
     const done = () => { observer.disconnect(); resolve(true); }; \
-    let timer = setTimeout(done, 600); \
-    const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 600); }); \
+    let timer = setTimeout(done, 1500); \
+    const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 1500); }); \
     observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true }); \
     setTimeout(done, 8000); \
 })";

@@ -406,21 +406,25 @@ impl AppState {
     /// recipes that feed it (products that appear twice are added up). An account
     /// with no linked row is left alone, so an unlinked first run never empties it.
     pub fn apply_fetch_all(&self) -> Result<PortfolioView, String> {
+        // The snapshot is taken BEFORE the plan is made, so an edit made at any time after it
+        // is seen by the comparison at the end, whether or not the plan already used it.
+        let snapshot: Portfolio = {
+            let guard = self.lock()?;
+            guard.as_ref().map_err(Clone::clone)?.clone()
+        };
         let views = self.fetch_all_plan()?;
         // An account is replaced by what ALL of its recipes read. If one of them has no
         // result (it failed, needs a choice, or was added after the others ran), replacing
         // would delete the holdings that recipe was meant to supply.
-        let (snapshot, missing): (Portfolio, Vec<String>) = {
-            let guard = self.lock()?;
-            let portfolio = guard.as_ref().map_err(Clone::clone)?;
-            let missing = portfolio
+        let missing: Vec<String> = {
+            let portfolio = &snapshot;
+            portfolio
                 .recipes
                 .iter()
                 .filter(|r| views.iter().any(|v| v.account == r.account))
                 .filter(|r| !views.iter().any(|v| v.name == r.name))
                 .map(|r| r.name.clone())
-                .collect();
-            (portfolio.clone(), missing)
+                .collect()
         };
         if !missing.is_empty() {
             return Err(format!(
