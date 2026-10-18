@@ -22,7 +22,8 @@ const MAX_CELL_CHARS: usize = 1_000;
 /// The one script that is ever run in a page. Tables that contain other tables
 /// are layout, not data, and are left out.
 pub(crate) const READ_TABLES: &str = r#"(() => {
-  const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 1000);
+  // Line breaks and no-break spaces inside a cell are kept: they separate its values.
+  const clean = (t) => String(t ?? '').split('\n').map((l) => l.replace(/[ \t\r\f\v\u2000-\u200a\u3000]+/g, ' ').trim()).filter((l) => l !== '').join('\n').slice(0, 1000);
   const shown = (e) => {
     if (e.getClientRects().length === 0) return false;
     for (let n = e; n; n = n.parentElement) {

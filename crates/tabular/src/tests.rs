@@ -14,6 +14,10 @@ fn mapping(name: usize, value: usize, header_rows: usize) -> ColumnMapping {
         rows_per_record: 1,
         name_row: 0,
         value_row: 0,
+        name_part: None,
+        value_part: None,
+        price_part: None,
+        loose_numbers: false,
     }
 }
 
@@ -406,4 +410,106 @@ fn rows_from_a_page_follow_the_same_limits() {
         from_rows(vec![vec!["a".to_owned(); MAX_COLUMNS + 1]]),
         Err(Error::TooLarge)
     );
+}
+
+fn cells(rows: &[&[&str]]) -> Vec<Vec<String>> {
+    rows.iter()
+        .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
+        .collect()
+}
+
+#[test]
+fn a_cell_with_several_values_is_read_by_part() {
+    // "ticker / name", "quantity / sellable / ordered", "price and its date" in one cell each.
+    let table = cells(&[
+        &["Name", "Quantity", "Price"],
+        &["AAA\nAlpha Co", "10\n10\n0", "12.50US$\n10/15"],
+        &["BBB\nBeta Co", "3\n3\n0", "100US$\n10/15"],
+    ]);
+    let mapping = ColumnMapping {
+        price: Some(2),
+        header_rows: 1,
+        name_part: Some(1),
+        value_part: Some(0),
+        price_part: Some(0),
+        loose_numbers: true,
+        ..mapping(0, 1, 1)
+    };
+
+    let result = extract(&table, &mapping);
+
+    assert_eq!(result.skipped, vec![]);
+    let got: Vec<(&str, rust_decimal::Decimal)> = result
+        .rows
+        .iter()
+        .map(|r| (r.name.as_str(), r.value))
+        .collect();
+    assert_eq!(
+        got,
+        vec![("Alpha Co", dec!(125.00)), ("Beta Co", dec!(300))]
+    );
+}
+
+#[test]
+fn a_no_break_space_separates_parts_too() {
+    let table = cells(&[&["1234\u{a0}Some Company", "50"]]);
+    let by_name = ColumnMapping {
+        name_part: Some(1),
+        ..mapping(0, 1, 0)
+    };
+    assert_eq!(extract(&table, &by_name).rows[0].name, "Some Company");
+    let by_ticker = ColumnMapping {
+        name_part: Some(0),
+        ..mapping(0, 1, 0)
+    };
+    assert_eq!(extract(&table, &by_ticker).rows[0].name, "1234");
+}
+
+#[test]
+fn without_a_part_the_line_breaks_of_a_cell_become_spaces() {
+    let table = cells(&[&["Alpha\nCo", "7"]]);
+    assert_eq!(extract(&table, &mapping(0, 1, 0)).rows[0].name, "Alpha Co");
+}
+
+#[test]
+fn a_part_that_does_not_exist_gives_no_name() {
+    let table = cells(&[&["only one value", "7"]]);
+    let by_second = ColumnMapping {
+        name_part: Some(1),
+        ..mapping(0, 1, 0)
+    };
+    let result = extract(&table, &by_second);
+    assert!(result.rows.is_empty());
+    assert_eq!(result.skipped[0].reason, SkipReason::NoName);
+}
+
+#[test]
+fn loose_numbers_read_the_first_number_and_strict_ones_do_not() {
+    assert_eq!(mapping::parse_amount_loose("123.45US$"), Some(dec!(123.45)));
+    assert_eq!(
+        mapping::parse_amount_loose("150.25（10/15）"),
+        Some(dec!(150.25))
+    );
+    assert_eq!(
+        mapping::parse_amount_loose("1,234,567円"),
+        Some(dec!(1234567))
+    );
+    assert_eq!(mapping::parse_amount_loose("▲500円"), Some(dec!(-500)));
+    assert_eq!(mapping::parse_amount_loose("１２．５US$"), Some(dec!(12.5)));
+    assert_eq!(mapping::parse_amount_loose("12.5.6"), Some(dec!(12.5)));
+    assert_eq!(mapping::parse_amount_loose("no number"), None);
+    assert_eq!(mapping::parse_amount_loose(""), None);
+    assert_eq!(mapping::parse_amount("123.45US$"), None);
+}
+
+#[test]
+fn a_cell_with_only_text_is_still_skipped_when_numbers_are_loose() {
+    let table = cells(&[&["Alpha", "n/a"]]);
+    let loose = ColumnMapping {
+        loose_numbers: true,
+        ..mapping(0, 1, 0)
+    };
+    let result = extract(&table, &loose);
+    assert!(result.rows.is_empty());
+    assert_eq!(result.skipped[0].reason, SkipReason::NotANumber);
 }

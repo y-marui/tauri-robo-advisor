@@ -159,6 +159,16 @@ pub struct ImportMapping {
     pub name_row: usize,
     #[serde(default)]
     pub value_row: usize,
+    /// Which value of a cell that holds several (counted from 0); `None`: the whole cell.
+    #[serde(default)]
+    pub name_part: Option<usize>,
+    #[serde(default)]
+    pub value_part: Option<usize>,
+    #[serde(default)]
+    pub price_part: Option<usize>,
+    /// Read the first number of a cell that has other text around it ("123.45US$").
+    #[serde(default)]
+    pub loose_numbers: bool,
 }
 
 /// One link to follow, by its visible text. `reference` says which of several

@@ -183,6 +183,10 @@ fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
         rows_per_record: mapping.rows_per_record,
         name_row: mapping.name_row,
         value_row: mapping.value_row,
+        name_part: mapping.name_part,
+        value_part: mapping.value_part,
+        price_part: mapping.price_part,
+        loose_numbers: mapping.loose_numbers,
     }
 }
 
@@ -937,6 +941,10 @@ mod tests {
             rows_per_record: 1,
             name_row: 0,
             value_row: 0,
+            name_part: None,
+            value_part: None,
+            price_part: None,
+            loose_numbers: false,
         };
         let result = state.plan_table_import("Test", "JPY", &mapping).unwrap();
 
@@ -1253,6 +1261,10 @@ mod tests {
                         rows_per_record: 1,
                         name_row: 0,
                         value_row: 0,
+                        name_part: None,
+                        value_part: None,
+                        price_part: None,
+                        loose_numbers: false,
                     },
                 },
             })
@@ -1311,6 +1323,10 @@ mod tests {
                 rows_per_record: 1,
                 name_row: 0,
                 value_row: 0,
+                name_part: None,
+                value_part: None,
+                price_part: None,
+                loose_numbers: false,
             },
         }
     }

@@ -59,6 +59,12 @@ export interface ImportMapping {
   rows_per_record: number;
   name_row: number;
   value_row: number;
+  /** Which value of a cell that holds several (counted from 0); null: the whole cell. */
+  name_part?: number | null;
+  value_part?: number | null;
+  price_part?: number | null;
+  /** Read the first number of a cell that has other text around it ("123.45US$"). */
+  loose_numbers?: boolean;
 }
 
 /** One link of a recipe, by its visible text. */
@@ -176,6 +182,10 @@ export type Edit =
       rows_per_record: number;
       name_row: number;
       value_row: number;
+      name_part?: number | null;
+      value_part?: number | null;
+      price_part?: number | null;
+      loose_numbers?: boolean;
     }
   | { type: "remove_import_mapping"; source: string }
   | { type: "set_recipe"; recipe: Recipe }
@@ -318,6 +328,10 @@ export interface ColumnMapping {
   rows_per_record: number;
   name_row: number;
   value_row: number;
+  name_part?: number | null;
+  value_part?: number | null;
+  price_part?: number | null;
+  loose_numbers?: boolean;
 }
 
 export type SkipReason = "missing_column" | "no_name" | "not_a_number" | "out_of_range";

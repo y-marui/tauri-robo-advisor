@@ -289,7 +289,9 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
 /// The one table whose first cell starts with `title`. More than one (or none)
 /// is an error: the recipe should name the table clearly.
 fn pick_table(raw: Vec<Vec<Vec<String>>>, title: &str) -> Result<Table, String> {
-    let title = title.trim();
+    // Cells keep their line breaks and no-break spaces; the title is compared as plain words.
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let title = words(title);
     let mut matching: Vec<Table> = raw
         .into_iter()
         .filter_map(|rows| tabular::from_rows(rows).ok())
@@ -298,7 +300,7 @@ fn pick_table(raw: Vec<Vec<Vec<String>>>, title: &str) -> Result<Table, String> 
                 .rows
                 .first()
                 .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
-                .is_some_and(|cell| cell.trim().starts_with(title))
+                .is_some_and(|cell| words(cell).starts_with(&title))
         })
         .collect();
     match matching.len() {
@@ -367,6 +369,15 @@ mod tests {
         let table = pick_table(raw, " Stocks (").unwrap();
 
         assert_eq!(table.rows[0][0], "Stocks (cash/taxable)");
+    }
+
+    #[test]
+    fn line_breaks_and_no_break_spaces_in_the_first_cell_do_not_hide_the_title() {
+        let raw = vec![rows("Menu"), rows("Stocks\n(cash/\u{a0}taxable)")];
+
+        let table = pick_table(raw, "Stocks (cash/ taxable)").unwrap();
+
+        assert_eq!(table.rows[0][0], "Stocks\n(cash/\u{a0}taxable)");
     }
 
     #[test]
