@@ -36,6 +36,9 @@ const ACTION_TEXT: &[&str] = &[
     "売る",
     "換金",
     "償還",
+    "閉鎖",
+    "廃止",
+    "退会",
     "申し込み",
     "cancel",
     "delete",
@@ -126,6 +129,9 @@ const ACTION_HREF: &[&str] = &[
     "売る",
     "換金",
     "償還",
+    "閉鎖",
+    "廃止",
+    "退会",
     "ログアウト",
 ];
 /// Words that must start a word of the address ("edit" is not "credit").
@@ -140,7 +146,7 @@ const VIEW_HREF: &[&str] = &[
 ];
 
 /// Words that count only as a whole word ("add" is an action, "address" is not).
-const ACTION_WHOLE_WORD: &[&str] = &["add", "adds"];
+const ACTION_WHOLE_WORD: &[&str] = &["add", "adds", "close", "closing", "closure"];
 
 fn has_whole_word(text: &str, words: &[&str]) -> bool {
     tokens(text).iter().any(|t| words.contains(&t.as_str()))

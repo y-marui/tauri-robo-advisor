@@ -23,6 +23,7 @@ export function recipesPanel(ctx: Context): Panel {
   let current: PortfolioView | null = null;
   let hasRuns = false;
   let sequence = 0;
+  let applyButton: HTMLButtonElement | null = null;
   // Only one run drives the browser tab at a time; a retry waits for the one before it.
   let running: Promise<void> = Promise.resolve();
 
@@ -170,6 +171,7 @@ export function recipesPanel(ctx: Context): Panel {
     });
     const accounts = [...new Set(runs.map((r) => accountName(r.account)))].join(", ");
     const apply = h("button", { type: "button" }, t("Apply to the accounts"));
+    applyButton = apply;
     let armed: number | undefined;
     apply.addEventListener("click", () => {
       if (armed === undefined) {
@@ -263,6 +265,10 @@ export function recipesPanel(ctx: Context): Panel {
       renderList(view);
       // An alias was linked or removed, or a recipe changed: show the plans again.
       if (hasRuns) {
+        // The result on screen is out of date until the plans are made again: it cannot be applied.
+        if (applyButton) {
+          applyButton.disabled = true;
+        }
         void showResults().catch((error) => fail(String(error)));
       }
     },

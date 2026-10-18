@@ -194,12 +194,24 @@ impl BrowserSession {
                         .map_err(|e| format!("Could not return to the starting page: {e}"))?;
                     return Ok(RecipeRead::LinkChanged { link: index });
                 }
-                Err(error) => return Err(format!("Link {}: {error}", index + 1)),
+                Err(error) => {
+                    // Best effort: back to the start, unless it is unknown whether the page moved.
+                    if error != browser::Error::Timeout {
+                        let _ = cdp.go_back(&session, index);
+                    }
+                    return Err(format!("Link {}: {error}", index + 1));
+                }
             }
         }
 
-        let raw = cdp.read_tables(&session).map_err(|e| e.to_string())?;
-        let table = pick_table(raw, title)?;
+        let read = cdp
+            .read_tables(&session)
+            .map_err(|e| e.to_string())
+            .and_then(|raw| pick_table(raw, title));
+        // Every run ends on the page it started from, so the next recipe starts there too.
+        let restored = cdp.go_back(&session, links.len());
+        let table = read?;
+        restored.map_err(|e| format!("Could not return to the starting page: {e}"))?;
         Ok(RecipeRead::Table { table, references })
     }
 
