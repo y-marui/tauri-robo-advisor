@@ -497,6 +497,17 @@ fn loose_numbers_read_the_first_number_and_strict_ones_do_not() {
     assert_eq!(mapping::parse_amount_loose("▲500円"), Some(dec!(-500)));
     assert_eq!(mapping::parse_amount_loose("１２．５US$"), Some(dec!(12.5)));
     assert_eq!(mapping::parse_amount_loose("12.5.6"), Some(dec!(12.5)));
+    assert_eq!(mapping::parse_amount_loose("1 234US$"), Some(dec!(1234)));
+    assert_eq!(
+        mapping::parse_amount_loose("1\u{a0}234円"),
+        Some(dec!(1234))
+    );
+    assert_eq!(
+        mapping::parse_amount_loose("12 3456"),
+        Some(dec!(12)),
+        "not a grouping"
+    );
+    assert_eq!(mapping::parse_amount_loose("5 items"), Some(dec!(5)));
     assert_eq!(mapping::parse_amount_loose("no number"), None);
     assert_eq!(mapping::parse_amount_loose(""), None);
     assert_eq!(mapping::parse_amount("123.45US$"), None);

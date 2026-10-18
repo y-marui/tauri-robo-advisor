@@ -216,6 +216,11 @@ export const MESSAGES = {
   "10,000 units": { ja: "1 万単位（投信の基準価額など）" },
   "Rows per record": { ja: "1件あたりの行数" },
   "Row with the name": { ja: "名前がある行" },
+  "Value of the name cell": { ja: "名前のセルの何番目の値か（0から）" },
+  "Value of the number cell": { ja: "数値のセルの何番目の値か（0から）" },
+  "Value of the price cell": { ja: "価格のセルの何番目の値か（0から）" },
+  "whole cell": { ja: "セル全体" },
+  "Allow text around numbers": { ja: "数値の前後の文字を許す" },
   "Row with the numbers": { ja: "数値がある行" },
   "Fetch with the browser (optional)": { ja: "ブラウザで取得（任意）" },
   "Opens Chrome, Edge, or Brave with a profile of its own. You log in yourself; the app only reads the tables on the page you open.": {

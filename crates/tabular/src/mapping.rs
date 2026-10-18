@@ -225,11 +225,23 @@ pub(crate) fn parse_amount_loose(text: &str) -> Option<Decimal> {
         token.push('-');
     }
     let mut seen_point = false;
-    for &c in &chars[start..] {
+    let rest = &chars[start..];
+    for (k, &c) in rest.iter().enumerate() {
         match c {
             '0'..='9' => token.push(c),
             '０'..='９' => token.push(char::from_u32(c as u32 - '０' as u32 + '0' as u32)?),
             ',' | '，' => {}
+            // A space inside a number groups thousands only when exactly three digits follow
+            // ("1 234円"); anything else ends the number.
+            ' ' | '\u{a0}' | '\u{3000}' if !seen_point => {
+                let three = rest
+                    .get(k + 1..k + 4)
+                    .is_some_and(|next| next.iter().all(|&d| digit(d)));
+                let after_is_digit = rest.get(k + 4).is_some_and(|&d| digit(d));
+                if !three || after_is_digit {
+                    break;
+                }
+            }
             '.' | '．' if !seen_point => {
                 seen_point = true;
                 token.push('.');
