@@ -414,9 +414,10 @@ pub(crate) fn parse_candidates(value: &serde_json::Value) -> Result<Vec<Candidat
 /// Finds the links with exactly this visible text and says where each one goes.
 /// It only reads. The text is passed in as data, JSON-encoded.
 pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
+  const rendered = (a) => { if (a.getClientRects().length === 0) return false; for (let e = a; e; e = e.parentElement) { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false; } return true; };
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
   const seen = new Map();
-  const shown = (a) => a.getClientRects().length > 0 && getComputedStyle(a).visibility !== 'hidden';
+  const shown = rendered;
   [...document.querySelectorAll('a')].forEach((a, i) => {
     if (!shown(a) || clean(a.innerText ?? a.textContent) !== wanted) return;
     const raw = a.getAttribute('href') ?? '';
@@ -445,10 +446,11 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
 /// checked again in the page (the text, the site, and the exact path and query that
 /// the Rust side accepted), and anything that differs is not followed.
 pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin) => {
+  const rendered = (a) => { if (a.getClientRects().length === 0) return false; for (let e = a; e; e = e.parentElement) { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false; } return true; };
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
   if (!origin || origin !== location.origin) return 'gone';
   const a = document.querySelectorAll('a')[index];
-  if (!a || a.getClientRects().length === 0 || getComputedStyle(a).visibility === 'hidden') return 'gone';
+  if (!a || !rendered(a)) return 'gone';
   if (clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
   let url;
   try { url = new URL(a.getAttribute('href') ?? '', location.href); } catch (e) { return 'gone'; }

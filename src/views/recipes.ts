@@ -24,6 +24,7 @@ export function recipesPanel(ctx: Context): Panel {
   let hasRuns = false;
   let sequence = 0;
   let applyButton: HTMLButtonElement | null = null;
+  let refresh = 0;
   // Only one run drives the browser tab at a time; a retry waits for the one before it.
   let running: Promise<void> = Promise.resolve();
 
@@ -129,9 +130,14 @@ export function recipesPanel(ctx: Context): Panel {
             attention.append(note);
           }
         } catch (error) {
+          const reason = String(error);
           attention.append(
-            h("p", { class: "note error" }, t("“{recipe}” failed: {reason}", { recipe: recipe.name, reason: String(error) })),
+            h("p", { class: "note error" }, t("“{recipe}” failed: {reason}", { recipe: recipe.name, reason: reason.replace("[stop] ", "") })),
           );
+          if (reason.includes("[stop] ")) {
+            // The tab is not where the recipes expect it: the next one would read the wrong page.
+            break;
+          }
         }
       }
       await showResults();
@@ -146,7 +152,11 @@ export function recipesPanel(ctx: Context): Panel {
     if (!view) {
       return;
     }
+    const mine = ++refresh;
     const runs: RecipeRun[] = await fetchAllPlan();
+    if (mine !== refresh) {
+      return; // a newer refresh has started; only the last one may show a result
+    }
     hasRuns = runs.length > 0;
     if (runs.length === 0) {
       results.replaceChildren();

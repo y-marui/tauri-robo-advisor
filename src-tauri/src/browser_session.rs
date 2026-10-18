@@ -66,6 +66,10 @@ pub struct TableSummary {
     pub label: String,
 }
 
+/// Starts an error message that means the browser tab is no longer where the recipes expect it:
+/// the rest of the batch must not run.
+pub const STOP_BATCH: &str = "[stop] ";
+
 #[derive(Default)]
 pub struct BrowserSession {
     endpoint: Mutex<Option<Endpoint>>,
@@ -175,8 +179,9 @@ impl BrowserSession {
                 Ok(followed) => references.push(followed.reference),
                 Err(browser::Error::LinkAmbiguous(choices)) => {
                     // Back to the page the recipe started from, so it can be run again.
-                    cdp.go_back(&session, index)
-                        .map_err(|e| format!("Could not return to the starting page: {e}"))?;
+                    cdp.go_back(&session, index).map_err(|e| {
+                        format!("{STOP_BATCH}Could not return to the starting page: {e}")
+                    })?;
                     let choices = choices
                         .into_iter()
                         .map(|c| LinkChoiceView {
@@ -190,16 +195,28 @@ impl BrowserSession {
                     });
                 }
                 Err(browser::Error::LinkChanged) => {
-                    cdp.go_back(&session, index)
-                        .map_err(|e| format!("Could not return to the starting page: {e}"))?;
+                    cdp.go_back(&session, index).map_err(|e| {
+                        format!("{STOP_BATCH}Could not return to the starting page: {e}")
+                    })?;
                     return Ok(RecipeRead::LinkChanged { link: index });
                 }
                 Err(error) => {
-                    // Best effort: back to the start, unless it is unknown whether the page moved.
-                    if error != browser::Error::Timeout {
-                        let _ = cdp.go_back(&session, index);
+                    // A timeout leaves it unknown whether the page moved, so the way back cannot
+                    // be told: the whole batch stops. Otherwise go back to the start; if that
+                    // fails the batch stops too, since the next recipe would read the wrong page.
+                    if error == browser::Error::Timeout {
+                        return Err(format!(
+                            "{STOP_BATCH}Link {}: {error}; the page may have moved, so the remaining recipes were not run.",
+                            index + 1
+                        ));
                     }
-                    return Err(format!("Link {}: {error}", index + 1));
+                    return match cdp.go_back(&session, index) {
+                        Ok(()) => Err(format!("Link {}: {error}", index + 1)),
+                        Err(back) => Err(format!(
+                            "{STOP_BATCH}Link {}: {error}; could not return to the starting page: {back}",
+                            index + 1
+                        )),
+                    };
                 }
             }
         }
@@ -211,7 +228,7 @@ impl BrowserSession {
         // Every run ends on the page it started from, so the next recipe starts there too.
         let restored = cdp.go_back(&session, links.len());
         let table = read?;
-        restored.map_err(|e| format!("Could not return to the starting page: {e}"))?;
+        restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;
         Ok(RecipeRead::Table { table, references })
     }
 
