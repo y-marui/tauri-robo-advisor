@@ -983,3 +983,43 @@ fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
         "two mappings for one source"
     );
 }
+
+#[test]
+fn every_accepted_edit_raises_the_revision_and_a_rejected_one_does_not() {
+    let mut p = Portfolio::default();
+    assert_eq!(p.revision, 0);
+
+    apply(
+        &mut p,
+        Edit::AddAccount {
+            name: "A".to_owned(),
+            kind: AccountKind::Taxable,
+        },
+    );
+    apply(
+        &mut p,
+        Edit::AddAccount {
+            name: "B".to_owned(),
+            kind: AccountKind::Taxable,
+        },
+    );
+    assert_eq!(p.revision, 2);
+
+    assert!(
+        p.apply(Edit::AddAccount {
+            name: "A".to_owned(),
+            kind: AccountKind::Taxable
+        })
+        .is_err()
+    );
+    assert_eq!(p.revision, 2);
+}
+
+#[test]
+fn a_file_without_a_revision_loads_as_revision_zero() {
+    let json = r#"{"schema_version":1,"next_id":1}"#;
+
+    let p: Portfolio = serde_json::from_str(json).unwrap();
+
+    assert_eq!(p.revision, 0);
+}

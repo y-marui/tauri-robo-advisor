@@ -248,6 +248,34 @@ export const MESSAGES = {
   "No table was found on that page.": { ja: "そのページには、表が見つかりませんでした。" },
   "Choose the table with the holdings, then use it.": { ja: "保有が載っている表を選んで、使ってください。" },
   "The browser was closed.": { ja: "ブラウザを閉じました。" },
+  "Data folder": { ja: "データの保存場所" },
+  "Full path of a folder": { ja: "フォルダのフルパス" },
+  "Use this folder": { ja: "このフォルダを使う" },
+  "Use the iCloud Drive folder": { ja: "iCloud Drive のフォルダを使う" },
+  "Use the local folder": { ja: "このコンピューターのフォルダに戻す" },
+  "Use the data in that folder": { ja: "そのフォルダのデータを使う" },
+  "Cancel": { ja: "キャンセル" },
+  "That folder already has data. Use it as it is? The data on this computer stays where it is, as a backup.": {
+    ja: "そのフォルダには、すでにデータがあります。そのまま使いますか？ このコンピューターのデータは、バックアップとしてそのまま残ります。",
+  },
+  "The data folder was changed.": { ja: "データの保存場所を変更しました。" },
+  "Could not change the data folder: {reason}": { ja: "保存場所を変更できませんでした: {reason}" },
+  "Enter the full path of a folder.": { ja: "フォルダのフルパスを入力してください。" },
+  "The data is kept on this computer only: {folder}": { ja: "データはこのコンピューターだけに保存しています: {folder}" },
+  "The data is kept in: {folder}": { ja: "データの保存場所: {folder}" },
+  "A folder that your computer syncs (for example iCloud Drive) shares the data between your computers. The app sends nothing itself. The file holds your holdings, so choose a place you trust.": {
+    ja: "コンピューターが同期するフォルダ（iCloud Drive など）を選ぶと、複数のコンピューターでデータを共有できます。アプリ自身は何も送りません。ファイルには保有資産が入るので、信頼できる場所を選んでください。",
+  },
+  "The data file is still being downloaded from the synced folder. Wait a moment, then come back to this window.": {
+    ja: "データファイルが、同期フォルダからまだダウンロードされていません。しばらく待ってから、このウィンドウに戻ってください。",
+  },
+  "Other copies of the data file were found: {names}. Two computers saved at the same time; compare them and remove the ones you do not need.": {
+    ja: "データファイルの別のコピーが見つかりました: {names}。2台が同時に保存したためです。内容を比べて、不要なものを削除してください。",
+  },
+  "A newer data file could not be used: {reason}": { ja: "新しいデータファイルを使えませんでした: {reason}" },
+  "The data file was changed on another computer. It has been reloaded; please try again.": {
+    ja: "データファイルが、別のコンピューターで変更されました。読み込み直したので、もう一度操作してください。",
+  },
   "Fetch recipes": { ja: "取得レシピ" },
   "The recipe was changed or removed in the meantime. Fetch again.": {
     ja: "その間に、レシピが変更または削除されました。もう一度取得してください。",

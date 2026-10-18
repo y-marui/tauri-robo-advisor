@@ -1,5 +1,6 @@
 mod app_state;
 mod browser_session;
+mod data_folder;
 mod exporter;
 mod secrets;
 mod store;
@@ -279,6 +280,28 @@ async fn clear_fetch_runs(state: State<'_, Arc<AppState>>) -> Result<(), String>
         .map_err(|e| e.to_string())?
 }
 
+// Where the data file lives. The folder is chosen by the user on their own
+// computer (for example one that iCloud Drive syncs); the app sends nothing.
+#[tauri::command]
+async fn set_data_folder(
+    state: State<'_, Arc<AppState>>,
+    folder: Option<String>,
+    use_existing: bool,
+) -> Result<PortfolioView, String> {
+    let state = Arc::clone(&state);
+    let folder = folder
+        .filter(|f| !f.trim().is_empty())
+        .map(|f| std::path::PathBuf::from(f.trim()));
+    tauri::async_runtime::spawn_blocking(move || state.set_data_folder(folder, use_existing))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn icloud_data_folder() -> Option<String> {
+    data_folder::icloud_folder().map(|p| p.display().to_string())
+}
+
 // A read-only valuation for the balance charts.
 #[tauri::command]
 async fn get_overview(state: State<'_, Arc<AppState>>) -> Result<Overview, String> {
@@ -349,7 +372,7 @@ pub fn run() {
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
-            app.manage(Arc::new(AppState::load(directory.join("portfolio.json"))));
+            app.manage(Arc::new(AppState::open(directory)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -366,6 +389,8 @@ pub fn run() {
             load_table_text,
             clear_table,
             plan_table_import,
+            set_data_folder,
+            icloud_data_folder,
             run_recipe,
             fetch_all_plan,
             set_link_reference,

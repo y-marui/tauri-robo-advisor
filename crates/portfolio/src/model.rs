@@ -211,6 +211,11 @@ pub struct Portfolio {
     pub settings: Settings,
     #[serde(default)]
     pub import_mappings: Vec<ImportMapping>,
+    /// Counts the accepted edits. When the file is shared between computers
+    /// (a synced folder), a copy with a lower revision is stale and must not
+    /// overwrite a newer one.
+    #[serde(default)]
+    pub revision: u64,
     #[serde(default)]
     pub recipes: Vec<Recipe>,
 }
@@ -226,6 +231,7 @@ impl Default for Portfolio {
             holdings: Vec::new(),
             settings: Settings::default(),
             import_mappings: Vec::new(),
+            revision: 0,
             recipes: Vec::new(),
         }
     }

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::SystemTime;
 
 use portfolio::{
     AccountId, Edit, HoldingInput, ImportMapping, ImportPlan, ImportRow, Issue, Portfolio,
@@ -17,27 +18,98 @@ use suggest::{AccountBalance, Overview, Request, Suggestion};
 use tabular::{ColumnMapping, Skipped, Table};
 
 use crate::browser_session::{LinkChoiceView, RecipeRead};
-
+use crate::data_folder::{self, DATA_FILE, SyncNotes};
 use crate::store;
+
+/// Where the data lives and what the folder shows, for the settings card.
+#[derive(Debug, Serialize)]
+pub struct DataInfo {
+    /// The folder with the data file.
+    pub folder: String,
+    /// `true` when it is the app's own local folder (no folder was chosen).
+    pub is_local: bool,
+    #[serde(flatten)]
+    pub notes: SyncNotes,
+    /// Why a newer file on disk could not be used (never its contents).
+    pub warning: Option<String>,
+}
 
 /// The portfolio plus the problems that block suggestions.
 #[derive(Debug, Serialize)]
 pub struct PortfolioView {
     pub portfolio: Portfolio,
     pub issues: Vec<Issue>,
+    pub data: DataInfo,
 }
 
 impl PortfolioView {
-    fn new(portfolio: &Portfolio) -> Self {
+    fn new(portfolio: &Portfolio, data: DataInfo) -> Self {
         Self {
             portfolio: portfolio.clone(),
             issues: portfolio.issues(),
+            data,
         }
     }
 }
 
-pub struct AppState {
+type Fingerprint = (SystemTime, u64);
+
+/// The data file on disk, and what was last seen of it.
+struct Disk {
     path: PathBuf,
+    seen: Option<Fingerprint>,
+    /// A hash of the file's content as last read or written by this app.
+    hash: Option<u64>,
+    warning: Option<String>,
+}
+
+/// The message when another computer saved first; the frontend shows it as is.
+const CHANGED_ELSEWHERE: &str =
+    "The data file was changed on another computer. It has been reloaded; please try again.";
+/// The message that asks the user to confirm using data that is already in the chosen folder.
+pub const FOLDER_HAS_DATA: &str = "FOLDER_HAS_DATA";
+
+/// Adopts the file on disk when it is newer than what is in memory (another
+/// computer saved it). A file that cannot be read is reported and left alone.
+fn refresh(portfolio: &mut Result<Portfolio, String>, disk: &mut Disk) {
+    let now = store::fingerprint(&disk.path);
+    if now == disk.seen {
+        return;
+    }
+    disk.seen = now;
+    if now.is_none() {
+        disk.hash = None;
+        disk.warning = None; // the bad file is gone
+        return;
+    }
+    match store::load_hashed(&disk.path) {
+        Ok((on_disk, hash)) => {
+            disk.hash = hash;
+            disk.warning = None;
+            match portfolio {
+                Ok(current) if on_disk.revision > current.revision => *portfolio = Ok(on_disk),
+                // Two computers saved the same revision before their files were exchanged:
+                // the file that arrived is taken (what is in memory was already saved by
+                // this computer, so nothing is unsaved), and the user is told.
+                Ok(current) if on_disk.revision == current.revision && on_disk != *current => {
+                    *portfolio = Ok(on_disk);
+                    disk.warning = Some(
+                        "two computers saved at the same time; the other version was loaded, so please check your latest change"
+                            .to_owned(),
+                    );
+                }
+                Ok(_) => {}
+                Err(_) => *portfolio = Ok(on_disk),
+            }
+        }
+        Err(error) => disk.warning = Some(error),
+    }
+}
+
+pub struct AppState {
+    /// The fixed local folder: the pointer to the chosen data folder lives here.
+    app_data: PathBuf,
+    disk: Mutex<Disk>,
     /// `Err` holds why the stored file could not be loaded. While it is an
     /// error nothing is written, so the unreadable file is never overwritten.
     portfolio: Mutex<Result<Portfolio, String>>,
@@ -138,10 +210,34 @@ pub struct TableImportPlan {
 }
 
 impl AppState {
+    /// Opens the data in the folder the user chose, or in the local app folder.
+    pub fn open(app_data: PathBuf) -> Self {
+        let path = data_folder::resolve(&app_data).join(DATA_FILE);
+        Self::with_paths(app_data, path)
+    }
+
+    /// Opens one data file; the pointer folder is the file's own folder.
+    #[cfg(test)]
     pub fn load(path: PathBuf) -> Self {
-        let portfolio = Mutex::new(store::load(&path));
+        let app_data = path.parent().map(PathBuf::from).unwrap_or_default();
+        Self::with_paths(app_data, path)
+    }
+
+    fn with_paths(app_data: PathBuf, path: PathBuf) -> Self {
+        let seen = store::fingerprint(&path);
+        let (loaded, hash) = match store::load_hashed(&path) {
+            Ok((portfolio, hash)) => (Ok(portfolio), hash),
+            Err(error) => (Err(error), None),
+        };
+        let portfolio = Mutex::new(loaded);
         Self {
-            path,
+            app_data,
+            disk: Mutex::new(Disk {
+                path,
+                seen,
+                hash,
+                warning: None,
+            }),
             portfolio,
             table: Mutex::new(None),
             runs: Mutex::new(Vec::new()),
@@ -151,21 +247,141 @@ impl AppState {
         }
     }
 
+    fn data_info(&self, disk: &Disk) -> DataInfo {
+        let folder = disk.path.parent().map(PathBuf::from).unwrap_or_default();
+        DataInfo {
+            is_local: folder == self.app_data,
+            notes: data_folder::scan(&folder),
+            folder: folder.display().to_string(),
+            warning: disk.warning.clone(),
+        }
+    }
+
     pub fn view(&self) -> Result<PortfolioView, String> {
         let guard = self.lock()?;
-        guard.as_ref().map(PortfolioView::new).map_err(Clone::clone)
+        let disk = self.lock_disk()?;
+        guard
+            .as_ref()
+            .map(|p| PortfolioView::new(p, self.data_info(&disk)))
+            .map_err(Clone::clone)
     }
 
     /// Applies one edit and saves it. The change takes effect in memory only
-    /// after the file was written, so memory and disk never disagree.
+    /// after the file was written, so memory and disk never disagree. A newer
+    /// file from another computer is adopted first, and the edit is refused if
+    /// the file turns out to have changed while it was being applied, so an
+    /// accepted edit is never lost to a stale copy.
     pub fn apply(&self, edit: Edit) -> Result<PortfolioView, String> {
         let mut guard = self.lock()?;
+        let mut disk = self.lock_disk()?;
         let mut next = guard.as_ref().map_err(Clone::clone)?.clone();
         next.apply(edit).map_err(|e| e.to_string())?;
-        store::save(&self.path, &next)?;
-        let view = PortfolioView::new(&next);
+        self.commit(&mut guard, &mut disk, next)
+    }
+
+    /// Makes `next` the state: refused if the file on disk has a newer revision than the
+    /// state `next` was made from (another computer saved first); otherwise written, and
+    /// only then taken over in memory. Every write of the portfolio goes through here.
+    fn commit(
+        &self,
+        guard: &mut Result<Portfolio, String>,
+        disk: &mut Disk,
+        next: Portfolio,
+    ) -> Result<PortfolioView, String> {
+        let base_revision = guard.as_ref().map_err(Clone::clone)?.revision;
+        // The check and the replacement happen under a lock on the folder, so two instances
+        // cannot both pass the check and then overwrite each other.
+        // A data file that exists only as an iCloud placeholder is not downloaded yet: creating
+        // a new file next to it could clash with the real one once it arrives.
+        if !disk.path.exists()
+            && disk
+                .path
+                .parent()
+                .is_some_and(data_folder::is_waiting_for_download)
+        {
+            return Err("The data file is still being downloaded from the synced folder. Wait a moment, then try again.".to_owned());
+        }
+        let Some(written) = store::save_unless_newer(&disk.path, &next, base_revision, disk.hash)?
+        else {
+            disk.seen = None; // read the newer file on the next look
+            return Err(CHANGED_ELSEWHERE.to_owned());
+        };
+        disk.seen = store::fingerprint(&disk.path);
+        // The hash of what was written: if a sync client replaced the file after the write, the
+        // next save sees that the content is not this one and is refused.
+        disk.hash = Some(written);
+        disk.warning = None;
+        let view = PortfolioView::new(&next, self.data_info(disk));
         *guard = Ok(next);
         Ok(view)
+    }
+
+    /// Moves the data to another folder (or back to the local one with `None`).
+    /// If the folder already has a data file, the caller must confirm with
+    /// `use_existing`; that file is then used as it is. Otherwise the current
+    /// data is copied there. The old file is left where it was, as a backup.
+    pub fn set_data_folder(
+        &self,
+        folder: Option<PathBuf>,
+        use_existing: bool,
+    ) -> Result<PortfolioView, String> {
+        let mut guard = self.lock()?;
+        let mut disk = self.lock_disk()?;
+        let target_dir = match &folder {
+            Some(folder) => {
+                data_folder::check_folder(folder)?;
+                std::fs::create_dir_all(folder)
+                    .map_err(|e| format!("Could not use that folder ({}).", e.kind()))?;
+                folder.clone()
+            }
+            None => self.app_data.clone(),
+        };
+        let target = target_dir.join(DATA_FILE);
+        if target != disk.path {
+            // The data in memory is replaced only after the pointer is written, so a failure
+            // leaves the old file and the old data exactly as they were.
+            if store::fingerprint(&target).is_none()
+                && data_folder::is_waiting_for_download(&target_dir)
+            {
+                return Err("The data file in that folder is still being downloaded. Wait a moment and try again.".to_owned());
+            }
+            // The fingerprint is taken before the file is read, so a change made after the read
+            // shows up as a change on the next look.
+            let seen_before = store::fingerprint(&target);
+            let mut created = None;
+            let adopted = if seen_before.is_some() {
+                if !use_existing {
+                    return Err(FOLDER_HAS_DATA.to_owned());
+                }
+                Some(store::load_hashed(&target)?)
+            } else {
+                // Created only if still absent (checked under the lock): a file that arrived
+                // meanwhile is not replaced without the confirmation.
+                let Some(written) =
+                    store::save_if_absent(&target, guard.as_ref().map_err(Clone::clone)?)?
+                else {
+                    return Err(FOLDER_HAS_DATA.to_owned());
+                };
+                created = Some(written);
+                None
+            };
+            data_folder::write_pointer(&self.app_data, folder.as_deref())?;
+            match adopted {
+                Some((portfolio, hash)) => {
+                    *guard = Ok(portfolio);
+                    disk.seen = seen_before;
+                    disk.hash = hash;
+                }
+                None => {
+                    disk.seen = store::fingerprint(&target);
+                    disk.hash = created;
+                }
+            }
+            disk.path = target;
+            disk.warning = None;
+        }
+        let portfolio = guard.as_ref().map_err(Clone::clone)?;
+        Ok(PortfolioView::new(portfolio, self.data_info(&disk)))
     }
 
     /// Builds the full-record export from the current portfolio.
@@ -288,6 +504,7 @@ impl AppState {
         new: Recipe,
     ) -> Result<PortfolioView, String> {
         let mut guard = self.lock()?;
+        let mut disk = self.lock_disk()?;
         let mut next = guard.as_ref().map_err(Clone::clone)?.clone();
         if !next.recipes.iter().any(|r| r == expected) {
             return Err(
@@ -296,10 +513,7 @@ impl AppState {
         }
         next.apply(Edit::SetRecipe { recipe: new })
             .map_err(|e| e.to_string())?;
-        store::save(&self.path, &next)?;
-        let view = PortfolioView::new(&next);
-        *guard = Ok(next);
-        Ok(view)
+        self.commit(&mut guard, &mut disk, next)
     }
 
     /// Sets (or clears) the saved reference of one link of a recipe, if the recipe is still
@@ -505,6 +719,7 @@ impl AppState {
                 return Err("The results changed while they were shown. Fetch again.".to_owned());
             }
             let mut guard = self.lock()?;
+            let mut disk = self.lock_disk()?;
             let current = guard.as_ref().map_err(Clone::clone)?;
             if *current != snapshot {
                 return Err(
@@ -525,8 +740,7 @@ impl AppState {
                 })
                 .map_err(|e| e.to_string())?;
             }
-            store::save(&self.path, &next)?;
-            *guard = Ok(next);
+            self.commit(&mut guard, &mut disk, next)?;
             runs.clear();
             self.runs_generation.fetch_add(1, Ordering::SeqCst);
         }
@@ -546,8 +760,21 @@ impl AppState {
             .map_err(|_| "The data is temporarily unavailable.".to_owned())
     }
 
+    /// Locks the portfolio after taking in a newer file from disk, if there is one.
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Result<Portfolio, String>>, String> {
-        self.portfolio
+        let mut guard = self
+            .portfolio
+            .lock()
+            .map_err(|_| "The data is temporarily unavailable.".to_owned())?;
+        {
+            let mut disk = self.lock_disk()?;
+            refresh(&mut guard, &mut disk);
+        }
+        Ok(guard)
+    }
+
+    fn lock_disk(&self) -> Result<std::sync::MutexGuard<'_, Disk>, String> {
+        self.disk
             .lock()
             .map_err(|_| "The data is temporarily unavailable.".to_owned())
     }
@@ -720,6 +947,133 @@ mod tests {
 
         state.clear_table().unwrap();
         assert!(state.plan_table_import("Test", "JPY", &mapping).is_err());
+    }
+
+    fn account_names(state: &AppState) -> Vec<String> {
+        state
+            .view()
+            .unwrap()
+            .portfolio
+            .accounts
+            .iter()
+            .map(|a| a.name.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_newer_file_saved_by_another_computer_is_picked_up() {
+        let path = temp_path("newer");
+        let a = AppState::load(path.clone());
+        let b = AppState::load(path);
+        a.apply(add_account("From A")).unwrap();
+
+        assert_eq!(account_names(&b), vec!["From A"]);
+        assert_eq!(b.view().unwrap().portfolio.revision, 1);
+    }
+
+    #[test]
+    fn an_edit_on_a_stale_copy_adopts_the_newer_file_first_and_loses_nothing() {
+        let path = temp_path("stale");
+        let a = AppState::load(path.clone());
+        let b = AppState::load(path);
+        a.apply(add_account("From A")).unwrap();
+
+        b.apply(add_account("From B")).unwrap();
+
+        assert_eq!(account_names(&b), vec!["From A", "From B"]);
+        assert_eq!(account_names(&a), vec!["From A", "From B"]);
+        assert_eq!(a.view().unwrap().portfolio.revision, 2);
+    }
+
+    #[test]
+    fn a_save_that_lost_the_race_is_refused_and_the_newer_file_is_kept() {
+        let path = temp_path("race");
+        let a = AppState::load(path.clone());
+        let b = AppState::load(path.clone());
+        a.apply(add_account("From A")).unwrap();
+        // B has not looked at the disk yet and wrongly believes it is up to date.
+        b.disk.lock().unwrap().seen = store::fingerprint(&path);
+
+        let error = b.apply(add_account("From B")).unwrap_err();
+
+        assert!(error.contains("changed on another computer"));
+        assert_eq!(store::peek_revision(&path), Some(1));
+        // The next look reads the newer file, and the edit can be made again.
+        b.apply(add_account("From B")).unwrap();
+        assert_eq!(account_names(&b), vec!["From A", "From B"]);
+    }
+
+    #[test]
+    fn moving_the_data_folder_copies_the_data_and_keeps_the_old_file() {
+        let local = temp_path("move-local");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local.clone());
+        state.apply(add_account("Kept")).unwrap();
+        let shared = local_dir.join("shared-folder");
+
+        let view = state.set_data_folder(Some(shared.clone()), false).unwrap();
+
+        assert_eq!(view.portfolio.accounts.len(), 1);
+        assert!(!view.data.is_local);
+        assert!(shared.join(DATA_FILE).is_file());
+        assert!(local.is_file(), "the old file stays as a backup");
+        assert_eq!(data_folder::resolve(&local_dir), shared);
+        // Edits now go to the new folder only.
+        state.apply(add_account("New place")).unwrap();
+        assert_eq!(store::peek_revision(&shared.join(DATA_FILE)), Some(2));
+        assert_eq!(store::peek_revision(&local), Some(1));
+    }
+
+    #[test]
+    fn a_folder_that_already_has_data_needs_confirmation_and_is_then_used_as_it_is() {
+        let local = temp_path("existing-local");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local);
+        state.apply(add_account("Local")).unwrap();
+        let shared = local_dir.join("shared-with-data");
+        let other = AppState::load(shared.join(DATA_FILE));
+        std::fs::create_dir_all(&shared).unwrap();
+        other.apply(add_account("Other computer")).unwrap();
+
+        let error = state
+            .set_data_folder(Some(shared.clone()), false)
+            .unwrap_err();
+        assert_eq!(error, FOLDER_HAS_DATA);
+        assert_eq!(account_names(&state), vec!["Local"], "nothing changed");
+
+        state.set_data_folder(Some(shared), true).unwrap();
+        assert_eq!(account_names(&state), vec!["Other computer"]);
+    }
+
+    #[test]
+    fn going_back_to_the_local_folder_and_bad_folders() {
+        let local = temp_path("back-local");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local);
+        let shared = local_dir.join("shared-back");
+        state.set_data_folder(Some(shared), false).unwrap();
+
+        let view = state.set_data_folder(None, true).unwrap();
+
+        assert!(view.data.is_local);
+        assert_eq!(data_folder::resolve(&local_dir), local_dir);
+        assert!(
+            state
+                .set_data_folder(Some(PathBuf::from("relative")), false)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn conflict_copies_in_the_folder_are_reported() {
+        let path = temp_path("conflict");
+        let state = AppState::load(path.clone());
+        state.apply(add_account("A")).unwrap();
+        std::fs::write(path.with_file_name("portfolio 2.json"), b"{}").unwrap();
+
+        let view = state.view().unwrap();
+
+        assert_eq!(view.data.notes.conflict_copies, vec!["portfolio 2.json"]);
     }
 
     // ---- recipe runs ------------------------------------------------------------
@@ -1108,5 +1462,22 @@ mod tests {
             .unwrap();
         assert!(state.apply_fetch_all().is_err());
         assert!(held(&state, main).is_empty());
+    }
+
+    #[test]
+    fn a_file_with_the_same_revision_but_other_content_is_taken_and_reported() {
+        let path = temp_path("divergent");
+        let a = AppState::load(path.clone());
+        a.apply(add_account("From A")).unwrap();
+        // Another computer saved its own revision 1, and that file replaces this one (a sync).
+        let other = temp_path("divergent-other");
+        let c = AppState::load(other.clone());
+        c.apply(add_account("From C")).unwrap();
+        std::fs::copy(&other, &path).unwrap();
+
+        let view = a.view().unwrap();
+
+        assert_eq!(account_names(&a), vec!["From C"]);
+        assert!(view.data.warning.is_some());
     }
 }

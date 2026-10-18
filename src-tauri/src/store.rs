@@ -6,6 +6,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
+use std::time::SystemTime;
 
 use portfolio::Portfolio;
 
@@ -16,10 +17,17 @@ const MAX_FILE_BYTES: u64 = 10 * 1024 * 1024;
 ///
 /// A file that exists but cannot be understood is an error. The caller must not
 /// overwrite it, so a bad file is never silently replaced by an empty one.
+#[cfg(test)]
 pub fn load(path: &Path) -> Result<Portfolio, String> {
+    load_hashed(path).map(|(portfolio, _)| portfolio)
+}
+
+/// Like `load`, and also the hash of the very bytes that were parsed (`None` when there is no
+/// file yet), so the portfolio and the hash recorded for it can never come from two versions.
+pub fn load_hashed(path: &Path) -> Result<(Portfolio, Option<u64>), String> {
     let length = match fs::metadata(path) {
         Ok(metadata) => metadata.len(),
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Portfolio::default()),
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok((Portfolio::default(), None)),
         Err(e) => return Err(format!("Could not read the data file ({}).", e.kind())),
     };
     if length > MAX_FILE_BYTES {
@@ -27,6 +35,7 @@ pub fn load(path: &Path) -> Result<Portfolio, String> {
     }
     let bytes =
         fs::read(path).map_err(|e| format!("Could not read the data file ({}).", e.kind()))?;
+    let hash = hash_bytes(&bytes);
     let mut portfolio: Portfolio = serde_json::from_slice(&bytes)
         .map_err(|_| "The data file is not valid; it was left untouched.".to_owned())?;
     portfolio
@@ -34,13 +43,103 @@ pub fn load(path: &Path) -> Result<Portfolio, String> {
         .map_err(|e| format!("{e}; the data file was left untouched."))?;
     // An older file is read as it is and saved as the current version.
     portfolio.schema_version = portfolio.schema_version.max(portfolio::SCHEMA_VERSION);
-    Ok(portfolio)
+    Ok((portfolio, Some(hash)))
+}
+
+fn hash_bytes(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// Cheap check for "did the file change?": its modification time and size.
+pub fn fingerprint(path: &Path) -> Option<(SystemTime, u64)> {
+    let metadata = fs::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+/// The revision stored in the file, without keeping the rest. `None` when the
+/// file is missing or unreadable.
+pub fn peek_revision(path: &Path) -> Option<u64> {
+    #[derive(serde::Deserialize)]
+    struct Revision {
+        #[serde(default)]
+        revision: u64,
+    }
+    if fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
+        return None;
+    }
+    let bytes = fs::read(path).ok()?;
+    serde_json::from_slice::<Revision>(&bytes)
+        .ok()
+        .map(|r| r.revision)
+}
+
+/// A hash of the file's bytes (not for security: it tells whether the content is the one
+/// that was last read or written). `None` when the file cannot be read.
+pub fn content_hash(path: &Path) -> Option<u64> {
+    if fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
+        return None;
+    }
+    Some(hash_bytes(&fs::read(path).ok()?))
+}
+
+/// Saves like `save`, but only if the file on disk is not newer than `base_revision`, and the
+/// check and the write are made while holding an exclusive lock on a lock file next to the data
+/// file. Returns `Ok(false)` (and writes nothing) when a newer file is already there.
+pub fn save_unless_newer(
+    path: &Path,
+    portfolio: &Portfolio,
+    base_revision: u64,
+    known_hash: Option<u64>,
+) -> Result<Option<u64>, String> {
+    let lock_path = path.with_extension("json.lock");
+    let lock = create_private(&lock_path)
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    lock.lock()
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    match peek_revision(path) {
+        Some(on_disk) if on_disk > base_revision => return Ok(None),
+        // The same revision but not the content that was last read or written here: another
+        // computer saved its own version, so this save would overwrite it.
+        Some(on_disk)
+            if on_disk == base_revision
+                && known_hash.is_some_and(|known| content_hash(path) != Some(known)) =>
+        {
+            return Ok(None);
+        }
+        None if path.exists() => {
+            // The file is there but cannot be read (malformed, too large, or from a newer
+            // version): it is left as it is, never replaced.
+            return Err("The data file on disk cannot be read, so it was left untouched. Fix or remove it, then try again.".to_owned());
+        }
+        _ => {}
+    }
+    Ok(Some(save(path, portfolio)?))
+    // The lock is released when `lock` is dropped.
+}
+
+/// Saves only if there is no data file yet, checked under the same lock; returns `Ok(false)`
+/// when one has appeared (for example from another computer), leaving it untouched.
+pub fn save_if_absent(path: &Path, portfolio: &Portfolio) -> Result<Option<u64>, String> {
+    let lock_path = path.with_extension("json.lock");
+    let lock = create_private(&lock_path)
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    lock.lock()
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    if path.exists() {
+        return Ok(None);
+    }
+    Ok(Some(save(path, portfolio)?))
 }
 
 /// Writes the portfolio atomically: the data goes to a temporary file in the
 /// same directory, is flushed to disk, and then replaces the real file, so a
 /// crash never leaves a half-written file behind.
-pub fn save(path: &Path, portfolio: &Portfolio) -> Result<(), String> {
+pub fn save(path: &Path, portfolio: &Portfolio) -> Result<u64, String> {
     portfolio
         .validate_integrity()
         .map_err(|e| format!("Refusing to save inconsistent data: {e}"))?;
@@ -59,7 +158,9 @@ pub fn save(path: &Path, portfolio: &Portfolio) -> Result<(), String> {
     write().map_err(|e| {
         let _ = fs::remove_file(&temporary);
         format!("Could not save the data file ({}).", e.kind())
-    })
+    })?;
+    // The hash of the bytes that were written, not of whatever is in the file afterwards.
+    Ok(hash_bytes(&json))
 }
 
 #[cfg(unix)]
@@ -256,5 +357,64 @@ mod tests {
 
         assert!(load(&path).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), newer);
+    }
+
+    #[test]
+    fn a_save_is_refused_when_the_file_on_disk_is_newer() {
+        let path = temp_dir("newer-lock").join("portfolio.json");
+        let newer = Portfolio {
+            revision: 5,
+            ..Portfolio::default()
+        };
+        save(&path, &newer).unwrap();
+
+        let stale = Portfolio {
+            revision: 3,
+            ..Portfolio::default()
+        };
+        assert_eq!(save_unless_newer(&path, &stale, 2, None), Ok(None));
+        assert_eq!(peek_revision(&path), Some(5), "the newer file is kept");
+        assert!(save_unless_newer(&path, &newer, 5, None).unwrap().is_some());
+    }
+
+    #[test]
+    fn an_unreadable_file_on_disk_is_never_replaced() {
+        let path = temp_dir("unreadable").join("portfolio.json");
+        std::fs::write(&path, b"{ not json").unwrap();
+
+        let error = save_unless_newer(&path, &Portfolio::default(), 0, None).unwrap_err();
+
+        assert!(error.contains("left untouched"));
+        assert_eq!(std::fs::read(&path).unwrap(), b"{ not json");
+    }
+
+    #[test]
+    fn a_save_is_refused_when_the_same_revision_has_other_content() {
+        let path = temp_dir("same-rev").join("portfolio.json");
+        let mine = Portfolio {
+            revision: 2,
+            ..Portfolio::default()
+        };
+        save(&path, &mine).unwrap();
+        let known = content_hash(&path);
+
+        // Another computer's save with the same revision but other content arrives.
+        let other = Portfolio {
+            revision: 2,
+            schema_version: mine.schema_version,
+            settings: portfolio::Settings {
+                usd_jpy: Some(rust_decimal::Decimal::from(123)),
+                ..portfolio::Settings::default()
+            },
+            ..Portfolio::default()
+        };
+        save(&path, &other).unwrap();
+
+        assert_eq!(save_unless_newer(&path, &mine, 2, known), Ok(None));
+        assert!(
+            save_unless_newer(&path, &mine, 2, content_hash(&path))
+                .unwrap()
+                .is_some()
+        );
     }
 }

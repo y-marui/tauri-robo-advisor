@@ -158,3 +158,17 @@ export function applyFetchAll(): Promise<PortfolioView> {
 export function clearFetchRuns(): Promise<void> {
   return invoke<void>("clear_fetch_runs");
 }
+
+/**
+ * Moves the data to another folder (`null`: back to the local one). When the
+ * folder already has data, this rejects with "FOLDER_HAS_DATA" until it is
+ * called again with `useExisting`.
+ */
+export function setDataFolder(folder: string | null, useExisting: boolean): Promise<PortfolioView> {
+  return invoke<PortfolioView>("set_data_folder", { folder, useExisting });
+}
+
+/** The folder iCloud Drive offers for this app, or `null` when iCloud Drive is not set up. */
+export function icloudDataFolder(): Promise<string | null> {
+  return invoke<string | null>("icloud_data_folder");
+}
