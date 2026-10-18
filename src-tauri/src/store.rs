@@ -306,12 +306,16 @@ mod tests {
     #[test]
     fn a_save_is_refused_when_the_file_on_disk_is_newer() {
         let path = temp_dir("newer-lock").join("portfolio.json");
-        let mut newer = Portfolio::default();
-        newer.revision = 5;
+        let newer = Portfolio {
+            revision: 5,
+            ..Portfolio::default()
+        };
         save(&path, &newer).unwrap();
 
-        let mut stale = Portfolio::default();
-        stale.revision = 3;
+        let stale = Portfolio {
+            revision: 3,
+            ..Portfolio::default()
+        };
         assert_eq!(save_unless_newer(&path, &stale, 2), Ok(false));
         assert_eq!(peek_revision(&path), Some(5), "the newer file is kept");
         assert_eq!(save_unless_newer(&path, &newer, 5), Ok(true));
