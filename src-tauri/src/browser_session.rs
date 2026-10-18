@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use browser::{Cdp, Endpoint, Kind};
+use portfolio::FetchLink;
 use serde::Serialize;
 use tabular::Table;
 
@@ -32,6 +33,30 @@ pub struct PageInfo {
     pub title: String,
 }
 
+/// One of several same-named links: what to save to find it again, and where it goes.
+#[derive(Debug, Serialize)]
+pub struct LinkChoiceView {
+    pub reference: String,
+    pub label: String,
+}
+
+/// What reading a recipe's page gave.
+#[derive(Debug)]
+pub enum RecipeRead {
+    /// The table, and where each link went (to save when it was not saved yet).
+    Table {
+        table: Table,
+        references: Vec<String>,
+    },
+    /// Several different links have this text; the user has to pick one.
+    NeedsChoice {
+        link: usize,
+        choices: Vec<LinkChoiceView>,
+    },
+    /// A saved link no longer exists: the page has changed.
+    LinkChanged { link: usize },
+}
+
 /// A table found on a page, described so the user can pick the right one.
 #[derive(Debug, Serialize)]
 pub struct TableSummary {
@@ -41,10 +66,17 @@ pub struct TableSummary {
     pub label: String,
 }
 
+/// Starts an error message that means the browser tab is no longer where the recipes expect it:
+/// the rest of the batch must not run.
+pub const STOP_BATCH: &str = "[stop] ";
+
 #[derive(Default)]
 pub struct BrowserSession {
     endpoint: Mutex<Option<Endpoint>>,
     fetched: Mutex<Vec<Table>>,
+    /// The tab and the address a batch of recipes started from. Every recipe of the batch
+    /// must start on exactly this page; a tab that was navigated meanwhile stops the batch.
+    pinned: Mutex<Option<(String, String)>>,
 }
 
 impl BrowserSession {
@@ -126,6 +158,106 @@ impl BrowserSession {
         Ok(summaries)
     }
 
+    /// Follows the recipe's links from the given page (each is a plain link that only
+    /// shows another page), then reads the one table whose first cell starts with
+    /// `title`. Nothing is typed or submitted.
+    pub fn run_recipe(
+        &self,
+        page_id: &str,
+        links: &[FetchLink],
+        title: &str,
+    ) -> Result<RecipeRead, String> {
+        let mut cdp = self.connect()?;
+        let page = cdp
+            .pages()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|p| p.target_id == page_id)
+            .ok_or_else(|| browser::Error::NoPage.to_string())?;
+        let session = cdp.attach(&page).map_err(|e| e.to_string())?;
+
+        let start = cdp.current_href(&session).map_err(|e| e.to_string())?;
+        {
+            let mut pinned = lock(&self.pinned)?;
+            match pinned.as_ref() {
+                Some((id, href)) if id == page_id => {
+                    if *href != start {
+                        return Err(format!(
+                            "{STOP_BATCH}The page changed while the recipes were running. Fetch again."
+                        ));
+                    }
+                }
+                _ => *pinned = Some((page_id.to_owned(), start.clone())),
+            }
+        }
+        let mut references = Vec::with_capacity(links.len());
+        for (index, link) in links.iter().enumerate() {
+            match cdp.follow_link(&session, &link.text, link.reference.as_deref()) {
+                Ok(followed) => references.push(followed.reference),
+                Err(browser::Error::LinkAmbiguous(choices)) => {
+                    // Back to the page the recipe started from, so it can be run again.
+                    cdp.go_back(&session, index, &start).map_err(|e| {
+                        format!("{STOP_BATCH}Could not return to the starting page: {e}")
+                    })?;
+                    let choices = choices
+                        .into_iter()
+                        .map(|c| LinkChoiceView {
+                            reference: c.reference,
+                            label: c.label,
+                        })
+                        .collect();
+                    return Ok(RecipeRead::NeedsChoice {
+                        link: index,
+                        choices,
+                    });
+                }
+                Err(browser::Error::LinkChanged) => {
+                    cdp.go_back(&session, index, &start).map_err(|e| {
+                        format!("{STOP_BATCH}Could not return to the starting page: {e}")
+                    })?;
+                    return Ok(RecipeRead::LinkChanged { link: index });
+                }
+                Err(error) => {
+                    // A timeout leaves it unknown whether the page moved, so the way back cannot
+                    // be told: the whole batch stops. Otherwise go back to the start; if that
+                    // fails the batch stops too, since the next recipe would read the wrong page.
+                    if error == browser::Error::Timeout || error == browser::Error::WrongPage {
+                        return Err(format!(
+                            "{STOP_BATCH}Link {}: {error}; the page may have moved, so the remaining recipes were not run.",
+                            index + 1
+                        ));
+                    }
+                    return match cdp.go_back(&session, index, &start) {
+                        Ok(()) => Err(format!("Link {}: {error}", index + 1)),
+                        Err(back) => Err(format!(
+                            "{STOP_BATCH}Link {}: {error}; could not return to the starting page: {back}",
+                            index + 1
+                        )),
+                    };
+                }
+            }
+        }
+
+        let read = cdp
+            .read_tables(&session)
+            .map_err(|e| e.to_string())
+            .and_then(|raw| pick_table(raw, title));
+        // Every run ends on the page it started from, so the next recipe starts there too.
+        let restored = cdp.go_back(&session, links.len(), &start);
+        // A failed restoration takes precedence: the batch must stop before the next recipe
+        // reads the wrong page.
+        restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;
+        let table = read?;
+        Ok(RecipeRead::Table { table, references })
+    }
+
+    /// Forgets the page a batch started from; the next run pins its own.
+    pub fn unpin(&self) {
+        if let Ok(mut pinned) = self.pinned.lock() {
+            *pinned = None;
+        }
+    }
+
     /// The table the user chose from the last fetch.
     pub fn take_table(&self, index: usize) -> Result<Table, String> {
         lock(&self.fetched)?
@@ -152,6 +284,30 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
     mutex
         .lock()
         .map_err(|_| "The data is temporarily unavailable.".to_owned())
+}
+
+/// The one table whose first cell starts with `title`. More than one (or none)
+/// is an error: the recipe should name the table clearly.
+fn pick_table(raw: Vec<Vec<Vec<String>>>, title: &str) -> Result<Table, String> {
+    let title = title.trim();
+    let mut matching: Vec<Table> = raw
+        .into_iter()
+        .filter_map(|rows| tabular::from_rows(rows).ok())
+        .filter(|table| {
+            table
+                .rows
+                .first()
+                .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
+                .is_some_and(|cell| cell.trim().starts_with(title))
+        })
+        .collect();
+    match matching.len() {
+        0 => Err("No table on the page starts with the recipe's table title.".to_owned()),
+        1 => Ok(matching.remove(0)),
+        n => Err(format!(
+            "{n} tables on the page start with the recipe's table title; make the title more specific."
+        )),
+    }
 }
 
 /// The profile folder is chosen by the user on their own computer, but it must
@@ -195,6 +351,29 @@ mod tests {
         assert_eq!(host_of("chrome://settings/"), None);
         assert_eq!(host_of("https:///x"), None);
         assert_eq!(host_of("about:blank"), None);
+    }
+
+    fn rows(first: &str) -> Vec<Vec<String>> {
+        vec![
+            vec![first.to_owned(), String::new()],
+            vec!["a".to_owned(), "1".to_owned()],
+        ]
+    }
+
+    #[test]
+    fn the_table_is_picked_by_the_start_of_its_first_cell() {
+        let raw = vec![rows("Menu"), rows("Stocks (cash/taxable)"), rows("Funds")];
+
+        let table = pick_table(raw, " Stocks (").unwrap();
+
+        assert_eq!(table.rows[0][0], "Stocks (cash/taxable)");
+    }
+
+    #[test]
+    fn no_match_and_several_matches_are_errors() {
+        assert!(pick_table(vec![rows("Menu")], "Stocks").is_err());
+        let error = pick_table(vec![rows("Stocks A"), rows("Stocks B")], "Stocks").unwrap_err();
+        assert!(error.starts_with("2 tables"));
     }
 
     #[test]

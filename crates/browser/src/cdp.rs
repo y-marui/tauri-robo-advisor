@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
+use crate::links::{self, FIND_LINKS, NAVIGATE};
 use crate::{Endpoint, Error};
 
 /// How long one answer may take, and the largest message accepted.
@@ -22,13 +23,21 @@ const MAX_CELL_CHARS: usize = 1_000;
 /// are layout, not data, and are left out.
 pub(crate) const READ_TABLES: &str = r#"(() => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 1000);
+  const shown = (e) => {
+    if (e.getClientRects().length === 0) return false;
+    for (let n = e; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false;
+    }
+    return true;
+  };
   return [...document.querySelectorAll('table')]
-    .filter((table) => !table.querySelector('table'))
+    .filter((table) => !table.querySelector('table') && shown(table))
     .slice(0, 200)
     .map((table) =>
-      [...table.rows].slice(0, 5000).map((row) => {
+      [...table.rows].filter(shown).slice(0, 5000).map((row) => {
         const cells = [];
-        for (const cell of [...row.cells].slice(0, 200)) {
+        for (const cell of [...row.cells].filter(shown).slice(0, 200)) {
           cells.push(clean(cell.innerText ?? cell.textContent));
           for (let i = 1; i < Math.min(cell.colSpan || 1, 200); i++) cells.push('');
         }
@@ -69,6 +78,13 @@ fn parse_tables(value: &Value) -> Result<Vec<Vec<Vec<String>>>, Error> {
                 .collect()
         })
         .collect()
+}
+
+/// The link that was followed, described by where it went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Followed {
+    /// Save this next to the link text so the same link is found next time.
+    pub reference: String,
 }
 
 /// A page the browser has open.
@@ -195,6 +211,175 @@ impl Cdp {
         parse_tables(&value)
     }
 
+    /// Follows the link with exactly this visible text, to show another page,
+    /// and waits until the page has loaded. Only a plain `<a>` link with a real
+    /// address on the page's own site is followed, and not one that looks like an
+    /// order or a money movement. The browser is sent to the checked address
+    /// directly; the link is not clicked, so no script of the page runs.
+    /// Nothing is typed or submitted.
+    ///
+    /// Links with the same text that go to the same place count as one. When they
+    /// go to different places, nothing is clicked unless a `reference` (from an
+    /// earlier run) says which one; a reference that matches nothing means the
+    /// page has changed, and nothing is clicked either.
+    pub fn follow_link(
+        &mut self,
+        session: &str,
+        text: &str,
+        reference: Option<&str>,
+    ) -> Result<Followed, Error> {
+        links::link_text_allowed(text)?;
+        let wanted = serde_json::to_string(text.trim()).map_err(|_| Error::Script)?;
+        let found = self.evaluate(session, &format!("({FIND_LINKS})({wanted})"))?;
+        let candidates = links::parse_candidates(&found)?;
+        if candidates.is_empty() {
+            return Err(Error::LinkNotFound);
+        }
+        let allowed: Vec<_> = candidates.iter().filter(|c| c.allowed()).collect();
+        if allowed.is_empty() {
+            return Err(Error::LinkRefused);
+        }
+        let chosen = match reference {
+            Some(reference) => allowed
+                .iter()
+                .find(|c| c.reference() == reference)
+                .ok_or(Error::LinkChanged)?,
+            None => {
+                // Different destinations are ambiguous; scripted links cannot be
+                // told apart by where they go, so several of them are ambiguous too.
+                let mut places: Vec<crate::LinkChoice> = Vec::new();
+                for candidate in &allowed {
+                    let reference = candidate.reference();
+                    if reference.is_empty() || !places.iter().any(|p| p.reference == reference) {
+                        places.push(crate::LinkChoice {
+                            reference,
+                            label: candidate.label(),
+                        });
+                    }
+                }
+                if places.len() > 1 {
+                    return Err(Error::LinkAmbiguous(places));
+                }
+                &allowed[0]
+            }
+        };
+        // A mark on the current document: it is gone once the new document has replaced it.
+        let mark = navigation_mark();
+        let before = self
+            .evaluate(
+                session,
+                &format!("(() => {{ window.__roboAdvisorNav = {mark}; return location.href; }})()"),
+            )?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let expected = serde_json::to_string(&chosen.href).map_err(|_| Error::Script)?;
+        let origin = serde_json::to_string(&chosen.origin).map_err(|_| Error::Script)?;
+        let navigated = self.evaluate(
+            session,
+            &format!(
+                "({NAVIGATE})({wanted}, {}, {expected}, {origin})",
+                chosen.index
+            ),
+        )?;
+        if navigated.as_str() != Some("navigated") {
+            return Err(Error::LinkNotFound);
+        }
+        let followed = Followed {
+            reference: chosen.reference(),
+        };
+        self.wait_navigated(session, mark, &before)?;
+        // The page that was reached must be on the site the link was found on: a redirect
+        // (or a script) may have taken the tab elsewhere.
+        let site = self.evaluate(session, "location.origin")?;
+        if site.as_str() != Some(chosen.origin.as_str()) {
+            return Err(Error::WrongPage);
+        }
+        // The address that was really reached (a redirect may have changed it) is judged by
+        // the same rules as a link.
+        let reached = self.evaluate(
+            session,
+            "location.pathname + location.search + location.hash",
+        )?;
+        match reached.as_str() {
+            Some(address) if links::address_allowed(address) => {}
+            _ => return Err(Error::WrongPage),
+        }
+        Ok(followed)
+    }
+
+    /// Goes back `steps` pages in the tab's history, to the page a recipe started from,
+    /// so that a recipe stopped at a link can be run again from its beginning.
+    pub fn go_back(&mut self, session: &str, steps: usize, start: &str) -> Result<(), Error> {
+        if steps > 10 {
+            return Err(Error::WrongPage);
+        }
+        if steps == 0 {
+            return self.expect_href(session, start);
+        }
+        let mark = navigation_mark();
+        let before = self
+            .evaluate(
+                session,
+                &format!("(() => {{ window.__roboAdvisorNav = {mark}; return location.href; }})()"),
+            )?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        self.evaluate(
+            session,
+            &format!("(() => {{ history.go(-{steps}); return true; }})()"),
+        )?;
+        self.wait_navigated(session, mark, &before)?;
+        self.expect_href(session, start)
+    }
+
+    /// The address of the page the tab is on.
+    pub fn current_href(&mut self, session: &str) -> Result<String, Error> {
+        Ok(self
+            .evaluate(session, "location.href")?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned())
+    }
+
+    /// Fails unless the tab is on exactly this address (a restored start page).
+    fn expect_href(&mut self, session: &str, expected: &str) -> Result<(), Error> {
+        if self.current_href(session)? == expected {
+            Ok(())
+        } else {
+            Err(Error::WrongPage)
+        }
+    }
+
+    /// Waits (bounded) until the page that was asked for has really replaced the old
+    /// one and has loaded. The old document still reports "complete" for a while after
+    /// the navigation starts, so readiness alone proves nothing: the mark left on the old
+    /// document must be gone (a new document), or, for a page that changes its address
+    /// without loading a new document, the address must have changed.
+    fn wait_navigated(&mut self, session: &str, mark: u64, before: &str) -> Result<(), Error> {
+        let probe = format!(
+            "({{ marker: window.__roboAdvisorNav === {mark}, ready: document.readyState, href: location.href }})"
+        );
+        for _ in 0..60 {
+            std::thread::sleep(Duration::from_millis(300));
+            let state = self.evaluate(session, &probe)?;
+            let marker = state.get("marker").and_then(Value::as_bool).unwrap_or(true);
+            let ready = state.get("ready").and_then(Value::as_str) == Some("complete");
+            let href = state
+                .get("href")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if ready && (!marker || href != before) {
+                // A page that builds itself after loading (a single-page app) is waited
+                // for until its content stops changing, not for a fixed time.
+                self.evaluate(session, SETTLE)?;
+                return Ok(());
+            }
+        }
+        Err(Error::Timeout)
+    }
+
     fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
         let result = self.call(
             Some(session),
@@ -217,6 +402,23 @@ impl Cdp {
         let _ = self.socket.close(None);
         sent.map(|_| ())
     }
+}
+
+/// Resolves once the page has stopped changing for a moment (bounded to 8 seconds), so
+/// that the content of a page that renders after loading is there before it is read.
+const SETTLE: &str = "new Promise(resolve => { \
+    const done = () => { observer.disconnect(); resolve(true); }; \
+    let timer = setTimeout(done, 1500); \
+    const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 1500); }); \
+    observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true }); \
+    setTimeout(done, 8000); \
+})";
+
+/// A number that differs from visit to visit, to tell one document from the next.
+fn navigation_mark() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(1, |d| d.as_nanos() as u64 % 1_000_000_000_000)
 }
 
 fn connection(error: tungstenite::Error) -> Error {

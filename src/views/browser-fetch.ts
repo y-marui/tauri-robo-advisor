@@ -46,8 +46,8 @@ function kindLabel(kind: BrowserKind): string {
 }
 
 interface Options {
-  /** Receives the preview of the table the user chose. */
-  onTable(preview: TablePreview): void;
+  /** Receives the preview of the table the user chose, and the text its first cell starts with. */
+  onTable(preview: TablePreview, label: string): void;
   info(text: string): void;
   fail(text: string): void;
 }
@@ -69,6 +69,7 @@ export function browserFetch(options: Options): HTMLElement {
   const tableSelect = h("select", { "aria-label": t("Table") });
   const useButton = h("button", { type: "button" }, t("Use this table"));
   const closeButton = h("button", { type: "button" }, t("Close browser"));
+  let lastTables: FetchedTable[] = [];
   const afterOpen = h(
     "div",
     { hidden: true },
@@ -134,6 +135,7 @@ export function browserFetch(options: Options): HTMLElement {
       }
       info(t("Reading the page…"));
       const tables: FetchedTable[] = await fetchBrowserTables(pageSelect.value);
+      lastTables = tables;
       tableSelect.replaceChildren(
         ...tables.map((table) =>
           h(
@@ -163,7 +165,9 @@ export function browserFetch(options: Options): HTMLElement {
       if (tableSelect.value === "") {
         return;
       }
-      onTable(await useFetchedTable(Number(tableSelect.value)));
+      const index = Number(tableSelect.value);
+      const label = lastTables.find((table) => table.index === index)?.label ?? "";
+      onTable(await useFetchedTable(index), label);
     });
   });
 
