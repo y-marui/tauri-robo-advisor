@@ -23,8 +23,16 @@ const MAX_CELL_CHARS: usize = 1_000;
 /// are layout, not data, and are left out.
 pub(crate) const READ_TABLES: &str = r#"(() => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 1000);
+  const shown = (e) => {
+    if (e.getClientRects().length === 0) return false;
+    for (let n = e; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false;
+    }
+    return true;
+  };
   return [...document.querySelectorAll('table')]
-    .filter((table) => !table.querySelector('table'))
+    .filter((table) => !table.querySelector('table') && shown(table))
     .slice(0, 200)
     .map((table) =>
       [...table.rows].slice(0, 5000).map((row) => {

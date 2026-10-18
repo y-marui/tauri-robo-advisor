@@ -75,8 +75,29 @@ const ACTION_TEXT: &[&str] = &[
 /// Order and money words. They can also name a view ("注文照会", "出金履歴", "Payment history"),
 /// so a view word in the same text excuses them.
 const MONEY_TEXT: &[&str] = &[
-    "注文", "発注", "売却", "売付", "買付", "買い", "売り", "購入", "入金", "出金", "送金", "振替",
-    "振込", "約定", "order", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
+    "注文",
+    "発注",
+    "売却",
+    "売付",
+    "買付",
+    "買い",
+    "売り",
+    "購入",
+    "入金",
+    "出金",
+    "送金",
+    "振替",
+    "振込",
+    "約定",
+    "subscribe",
+    "subscription",
+    "order",
+    "purchase",
+    "deposit",
+    "withdraw",
+    "transfer",
+    "trade",
+    "payment",
 ];
 
 /// Words that show a link only displays something (so "注文照会" or "買付余力" may be followed).
@@ -137,8 +158,27 @@ const ACTION_HREF: &[&str] = &[
 /// Words that must start a word of the address ("edit" is not "credit").
 const ACTION_HREF_AT_START: &[&str] = &["edit", "apply", "send"];
 const MONEY_HREF: &[&str] = &[
-    "order", "purchase", "deposit", "withdraw", "transfer", "trade", "payment", "注文", "発注",
-    "売却", "売付", "買付", "購入", "入金", "出金", "送金", "振替", "振込", "約定",
+    "order",
+    "purchase",
+    "deposit",
+    "withdraw",
+    "transfer",
+    "trade",
+    "payment",
+    "subscribe",
+    "subscription",
+    "注文",
+    "発注",
+    "売却",
+    "売付",
+    "買付",
+    "購入",
+    "入金",
+    "出金",
+    "送金",
+    "振替",
+    "振込",
+    "約定",
 ];
 const VIEW_HREF: &[&str] = &[
     "照会", "履歴", "一覧", "余力", "残高", "明細", "状況", "inquiry", "history", "list",

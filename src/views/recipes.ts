@@ -50,8 +50,8 @@ export function recipesPanel(ctx: Context): Panel {
   }
 
   /** Runs one recipe; returns a note for the user when it needs attention. */
-  async function runOne(recipe: Recipe): Promise<HTMLElement | null> {
-    const outcome = await runRecipe(recipe.name, pageSelect.value);
+  async function runOne(recipe: Recipe, page: string): Promise<HTMLElement | null> {
+    const outcome = await runRecipe(recipe.name, page);
     if (outcome.status === "ready") {
       return null;
     }
@@ -110,6 +110,10 @@ export function recipesPanel(ctx: Context): Panel {
       return;
     }
     const mine = ++sequence;
+    // One tab for the whole batch: the selection cannot change under it.
+    const page = pageSelect.value;
+    pageSelect.disabled = true;
+    refreshButton.disabled = true;
     // Whatever is on screen is out of date from now on, and must not be applied or redrawn.
     refresh++;
     if (applyButton) {
@@ -127,7 +131,7 @@ export function recipesPanel(ctx: Context): Panel {
       for (const recipe of view.portfolio.recipes.filter((r) => !only || only.includes(r.name))) {
         info(t("Fetching “{recipe}”…", { recipe: recipe.name }));
         try {
-          const note = await runOne(recipe);
+          const note = await runOne(recipe, page);
           if (mine !== sequence) {
             return;
           }
@@ -149,6 +153,8 @@ export function recipesPanel(ctx: Context): Panel {
       info("");
     } finally {
       runButton.disabled = false;
+      pageSelect.disabled = false;
+      refreshButton.disabled = false;
     }
   }
 
