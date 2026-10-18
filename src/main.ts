@@ -197,7 +197,7 @@ window.addEventListener("focus", () => {
   }
   getPortfolio()
     .then((next) => {
-      if (next.portfolio.revision !== view?.portfolio.revision || next.data.folder !== view?.data.folder) {
+      if (next.portfolio.revision !== view?.portfolio.revision || JSON.stringify(next.data) !== JSON.stringify(view?.data)) {
         view = next;
         renderAll();
       }

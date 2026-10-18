@@ -307,6 +307,11 @@ impl AppState {
         if target != disk.path {
             // The data in memory is replaced only after the pointer is written, so a failure
             // leaves the old file and the old data exactly as they were.
+            if store::fingerprint(&target).is_none()
+                && data_folder::is_waiting_for_download(&target_dir)
+            {
+                return Err("The data file in that folder is still being downloaded. Wait a moment and try again.".to_owned());
+            }
             let adopted = if store::fingerprint(&target).is_some() {
                 if !use_existing {
                     return Err(FOLDER_HAS_DATA.to_owned());

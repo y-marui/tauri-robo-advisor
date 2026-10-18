@@ -81,6 +81,11 @@ pub struct SyncNotes {
     pub waiting_for_download: bool,
 }
 
+/// Whether the data file in this folder exists only as an iCloud placeholder (not downloaded yet).
+pub fn is_waiting_for_download(folder: &Path) -> bool {
+    folder.join(format!(".{DATA_FILE}.icloud")).exists()
+}
+
 pub fn scan(folder: &Path) -> SyncNotes {
     let mut notes = SyncNotes::default();
     let Ok(entries) = fs::read_dir(folder) else {

@@ -74,8 +74,14 @@ pub fn save_unless_newer(
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
     lock.lock()
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
-    if peek_revision(path).is_some_and(|on_disk| on_disk > base_revision) {
-        return Ok(false);
+    match peek_revision(path) {
+        Some(on_disk) if on_disk > base_revision => return Ok(false),
+        None if path.exists() => {
+            // The file is there but cannot be read (malformed, too large, or from a newer
+            // version): it is left as it is, never replaced.
+            return Err("The data file on disk cannot be read, so it was left untouched. Fix or remove it, then try again.".to_owned());
+        }
+        _ => {}
     }
     save(path, portfolio)?;
     Ok(true)
@@ -319,5 +325,16 @@ mod tests {
         assert_eq!(save_unless_newer(&path, &stale, 2), Ok(false));
         assert_eq!(peek_revision(&path), Some(5), "the newer file is kept");
         assert_eq!(save_unless_newer(&path, &newer, 5), Ok(true));
+    }
+
+    #[test]
+    fn an_unreadable_file_on_disk_is_never_replaced() {
+        let path = temp_dir("unreadable").join("portfolio.json");
+        std::fs::write(&path, b"{ not json").unwrap();
+
+        let error = save_unless_newer(&path, &Portfolio::default(), 0).unwrap_err();
+
+        assert!(error.contains("left untouched"));
+        assert_eq!(std::fs::read(&path).unwrap(), b"{ not json");
     }
 }
