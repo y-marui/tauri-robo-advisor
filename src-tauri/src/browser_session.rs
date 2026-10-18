@@ -174,6 +174,8 @@ impl BrowserSession {
             match cdp.follow_link(&session, &link.text, link.reference.as_deref()) {
                 Ok(followed) => references.push(followed.reference),
                 Err(browser::Error::LinkAmbiguous(choices)) => {
+                    // Back to the page the recipe started from, so it can be run again.
+                    let _ = cdp.go_back(&session, index);
                     let choices = choices
                         .into_iter()
                         .map(|c| LinkChoiceView {
@@ -187,6 +189,7 @@ impl BrowserSession {
                     });
                 }
                 Err(browser::Error::LinkChanged) => {
+                    let _ = cdp.go_back(&session, index);
                     return Ok(RecipeRead::LinkChanged { link: index });
                 }
                 Err(error) => return Err(format!("Link {}: {error}", index + 1)),

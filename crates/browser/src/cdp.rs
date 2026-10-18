@@ -280,6 +280,28 @@ impl Cdp {
         Ok(followed)
     }
 
+    /// Goes back `steps` pages in the tab's history, to the page a recipe started from,
+    /// so that a recipe stopped at a link can be run again from its beginning.
+    pub fn go_back(&mut self, session: &str, steps: usize) -> Result<(), Error> {
+        if steps == 0 || steps > 10 {
+            return Ok(());
+        }
+        let mark = navigation_mark();
+        let before = self
+            .evaluate(
+                session,
+                &format!("(() => {{ window.__roboAdvisorNav = {mark}; return location.href; }})()"),
+            )?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        self.evaluate(
+            session,
+            &format!("(() => {{ history.go(-{steps}); return true; }})()"),
+        )?;
+        self.wait_navigated(session, mark, &before)
+    }
+
     /// Waits (bounded) until the page that was asked for has really replaced the old
     /// one and has loaded. The old document still reports "complete" for a while after
     /// the navigation starts, so readiness alone proves nothing: the mark left on the old
@@ -299,10 +321,9 @@ impl Cdp {
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             if ready && (!marker || href != before) {
-                // A page that builds itself after loading gets a moment to settle.
-                if marker {
-                    std::thread::sleep(Duration::from_millis(700));
-                }
+                // A page that builds itself after loading (a single-page app) is waited
+                // for until its content stops changing, not for a fixed time.
+                self.evaluate(session, SETTLE)?;
                 return Ok(());
             }
         }
@@ -332,6 +353,16 @@ impl Cdp {
         sent.map(|_| ())
     }
 }
+
+/// Resolves once the page has stopped changing for a moment (bounded to 8 seconds), so
+/// that the content of a page that renders after loading is there before it is read.
+const SETTLE: &str = "new Promise(resolve => { \
+    const done = () => { observer.disconnect(); resolve(true); }; \
+    let timer = setTimeout(done, 600); \
+    const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 600); }); \
+    observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true }); \
+    setTimeout(done, 8000); \
+})";
 
 /// A number that differs from visit to visit, to tell one document from the next.
 fn navigation_mark() -> u64 {

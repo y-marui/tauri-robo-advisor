@@ -315,7 +315,12 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     assert_eq!(followed.reference, crate::fingerprint("/account/list"));
 
     let scripts = log.lock().unwrap().clone();
-    assert_eq!(scripts.len(), 5, "find, mark, go, then two checks");
+    assert_eq!(
+        scripts.len(),
+        6,
+        "find, mark, go, two checks, then the settle wait"
+    );
+    assert!(scripts[5].contains("MutationObserver"));
     assert!(
         scripts[0].contains("\"口座(円建)\""),
         "the text is passed as JSON data"
