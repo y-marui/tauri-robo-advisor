@@ -257,6 +257,11 @@ export function tableImportPanel(ctx: Context): Panel {
     unitSelect.value = "1";
     headerInput.value = "1";
     perRecordSelect.value = "1";
+    // The cell parts and the number mode belong to the table that is being replaced.
+    namePartInput.value = "";
+    valuePartInput.value = "";
+    pricePartInput.value = "";
+    looseInput.checked = false;
     syncControls();
     useSavedMapping();
 
