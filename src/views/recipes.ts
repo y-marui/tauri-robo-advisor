@@ -23,6 +23,8 @@ export function recipesPanel(ctx: Context): Panel {
   let current: PortfolioView | null = null;
   let hasRuns = false;
   let sequence = 0;
+  // Only one run drives the browser tab at a time; a retry waits for the one before it.
+  let running: Promise<void> = Promise.resolve();
 
   const info = (text: string): void => {
     message.classList.remove("error");
@@ -92,7 +94,13 @@ export function recipesPanel(ctx: Context): Panel {
   }
 
   /** Runs the named recipes (all when none are named) and shows the combined result. */
-  async function runAll(only?: string[]): Promise<void> {
+  function runAll(only?: string[]): Promise<void> {
+    const next = running.then(() => runBatch(only));
+    running = next.catch(() => undefined);
+    return next;
+  }
+
+  async function runBatch(only?: string[]): Promise<void> {
     const view = current;
     if (!view) {
       return;
