@@ -20,7 +20,8 @@ export interface ImportPlanOptions {
   source: string;
   /** The currency of the values; only products in this currency can be linked. */
   currency: string;
-  accountSelect: HTMLSelectElement;
+  /** The account to replace; without it the view only shows and links, and has no replace button. */
+  accountSelect?: HTMLSelectElement;
   /** Extra messages shown above the replace button. */
   notes?: HTMLElement[];
 }
@@ -133,45 +134,47 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
   }
   parts.push(...(notes ?? []));
 
-  const apply = h("button", { type: "button" }, t("Replace holdings"));
-  apply.disabled = accountSelect.value === "";
-  let armed: number | undefined;
-  apply.addEventListener("click", () => {
-    if (armed === undefined) {
-      apply.textContent = t("Confirm replace");
-      apply.classList.add("danger", "armed");
-      armed = window.setTimeout(() => {
-        apply.textContent = t("Replace holdings");
-        apply.classList.remove("danger", "armed");
-        armed = undefined;
-      }, 4000);
-      return;
-    }
-    window.clearTimeout(armed);
-    armed = undefined;
-    // Read the account now, not when the plan was drawn: the user may have
-    // changed the selection in between.
-    const accountId = Number(accountSelect.value);
-    if (accountSelect.value === "" || !Number.isFinite(accountId)) {
-      ctx.fail(t("Choose an account first."));
-      return;
-    }
-    void ctx.apply({
-      type: "replace_holdings",
-      account: accountId,
-      holdings: plan.matched.map((m) => ({ product: m.product, value: m.value })),
+  if (accountSelect) {
+    const apply = h("button", { type: "button" }, t("Replace holdings"));
+    apply.disabled = accountSelect.value === "";
+    let armed: number | undefined;
+    apply.addEventListener("click", () => {
+      if (armed === undefined) {
+        apply.textContent = t("Confirm replace");
+        apply.classList.add("danger", "armed");
+        armed = window.setTimeout(() => {
+          apply.textContent = t("Replace holdings");
+          apply.classList.remove("danger", "armed");
+          armed = undefined;
+        }, 4000);
+        return;
+      }
+      window.clearTimeout(armed);
+      armed = undefined;
+      // Read the account now, not when the plan was drawn: the user may have
+      // changed the selection in between.
+      const accountId = Number(accountSelect.value);
+      if (accountSelect.value === "" || !Number.isFinite(accountId)) {
+        ctx.fail(t("Choose an account first."));
+        return;
+      }
+      void ctx.apply({
+        type: "replace_holdings",
+        account: accountId,
+        holdings: plan.matched.map((m) => ({ product: m.product, value: m.value })),
+      });
     });
-  });
-  parts.push(
-    h(
-      "p",
-      { class: "note" },
-      t("This replaces every holding of “{account}” with the linked rows above.", {
-        account:
-          view.portfolio.accounts.find((a) => String(a.id) === accountSelect.value)?.name ?? "?",
-      }),
-    ),
-    apply,
-  );
+    parts.push(
+      h(
+        "p",
+        { class: "note" },
+        t("This replaces every holding of “{account}” with the linked rows above.", {
+          account:
+            view.portfolio.accounts.find((a) => String(a.id) === accountSelect.value)?.name ?? "?",
+        }),
+      ),
+      apply,
+    );
+  }
   return h("div", {}, ...parts);
 }

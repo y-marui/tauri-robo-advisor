@@ -21,6 +21,8 @@ _最終更新: 2026-10-15_
 | `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
 | `src/views/data-folder.ts` | データの保存場所のカードと、同期に関する知らせ | `src/api.ts` |
 | `src-tauri/src/data_folder.rs` | 保存先のフォルダの選択（ポインタファイル）、競合のコピーと未ダウンロードの検出、iCloud Drive のフォルダ | — |
+| `src/views/recipes.ts` | 取得レシピのカード（一覧、すべて取得、リンクの選択、反映） | `src/views/import-plan.ts` |
+| `crates/browser/src/links.rs` | リンクをたどる規則（押してよいリンク、行き先の参照、安全な文字列の受け渡し） | — |
 | `src/views/table-import.ts` | 表の取り込みのカード（ファイル・貼り付け・列の指定・保存） | `src/views/import-plan.ts` |
 | `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer と表の取り込みで共有 | `src/api.ts` |
 | `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネル、全体のバランス（グラフと提案）のパネル、不備の表示 | `src/panel.ts`, `src/fields.ts` |

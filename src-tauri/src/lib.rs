@@ -7,7 +7,9 @@ mod store;
 
 use std::sync::Arc;
 
-use app_state::{AppState, PortfolioView, TableImportPlan, TablePreview};
+use app_state::{
+    AppState, PortfolioView, RecipeOutcome, RecipeRunView, TableImportPlan, TablePreview,
+};
 use bitflyer::{Client, Holdings, ReqwestTransport};
 use browser_session::{BrowserInfo, BrowserSession, PageInfo, TableSummary};
 use portfolio::{Edit, ImportPlan, ImportRow};
@@ -226,6 +228,58 @@ async fn close_browser(state: State<'_, Arc<AppState>>) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+// Saved fetch recipes: follow the recipe's links in the browser the user logged in to
+// (plain links that only show another page), read its table, and keep the rows. The
+// holdings change only when `apply_fetch_all` is called, after the user has seen the result.
+#[tauri::command]
+async fn run_recipe(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    page: String,
+) -> Result<RecipeOutcome, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.run_recipe(&name, &page))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fetch_all_plan(state: State<'_, Arc<AppState>>) -> Result<Vec<RecipeRunView>, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.fetch_all_plan())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn set_link_reference(
+    state: State<'_, Arc<AppState>>,
+    recipe: portfolio::Recipe,
+    link: usize,
+    reference: Option<String>,
+) -> Result<PortfolioView, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.set_link_reference(&recipe, link, reference))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn apply_fetch_all(state: State<'_, Arc<AppState>>) -> Result<PortfolioView, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.apply_fetch_all())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn clear_fetch_runs(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.clear_runs())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 // Where the data file lives. The folder is chosen by the user on their own
 // computer (for example one that iCloud Drive syncs); the app sends nothing.
 #[tauri::command]
@@ -337,6 +391,11 @@ pub fn run() {
             plan_table_import,
             set_data_folder,
             icloud_data_folder,
+            run_recipe,
+            fetch_all_plan,
+            set_link_reference,
+            apply_fetch_all,
+            clear_fetch_runs,
             list_browsers,
             open_browser,
             browser_pages,

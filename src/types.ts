@@ -61,6 +61,23 @@ export interface ImportMapping {
   value_row: number;
 }
 
+/** One link of a recipe, by its visible text. */
+export interface FetchLink {
+  text: string;
+  /** Where the link goes (without the parts that change per visit); filled in the first time. */
+  reference: string | null;
+}
+
+/** A saved way to fetch one table after the login. */
+export interface Recipe {
+  name: string;
+  links: FetchLink[];
+  table_starts_with: string;
+  currency: string;
+  account: number;
+  mapping: ImportMapping;
+}
+
 export interface Settings {
   usd_jpy: string | null;
   category_tolerance: string;
@@ -79,6 +96,7 @@ export interface Portfolio {
   import_mappings: ImportMapping[];
   /** Counts the accepted edits; a copy with a lower number is stale. */
   revision: number;
+  recipes: Recipe[];
 }
 
 export type Issue =
@@ -160,6 +178,8 @@ export type Edit =
       value_row: number;
     }
   | { type: "remove_import_mapping"; source: string }
+  | { type: "set_recipe"; recipe: Recipe }
+  | { type: "remove_recipe"; name: string }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
@@ -334,3 +354,19 @@ export interface FetchedTable {
   columns: number;
   label: string;
 }
+
+/** One recipe's result. Mirrors `RecipeRunView` in Rust. */
+export interface RecipeRun {
+  name: string;
+  account: number;
+  source: string;
+  currency: string;
+  plan: ImportPlan;
+  skipped: Skipped[];
+  rows_read: number;
+}
+
+export type RecipeOutcome =
+  | { status: "ready"; run: RecipeRun }
+  | { status: "needs_choice"; link: number; choices: { reference: string; label: string }[] }
+  | { status: "link_changed"; link: number };

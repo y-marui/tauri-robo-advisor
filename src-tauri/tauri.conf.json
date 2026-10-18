@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-robo-advisor",
+  "productName": "Robo Advisor",
   "version": "0.1.0",
-  "identifier": "dev.marui.robo-advisor",
+  "identifier": "y.marui.Robo-Advisor",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "tauri-robo-advisor",
+        "title": "Robo Advisor",
         "width": 800,
         "height": 600
       }

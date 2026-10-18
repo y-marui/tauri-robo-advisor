@@ -105,6 +105,32 @@ export function tableImportPanel(ctx: Context): Panel {
   );
   const result = h("div", { class: "import-result", "aria-live": "polite" });
 
+  // A recipe remembers how this import was done, so the next time one button can do it.
+  const recipeName = h("input", { type: "text", autocomplete: "off", "aria-label": t("Recipe name"), placeholder: t("Recipe name") });
+  const recipeLinks = h("textarea", {
+    rows: 3,
+    "aria-label": t("Links to follow, one per line (empty: the open page)"),
+    placeholder: t("Links to follow, one per line (empty: the open page)"),
+  });
+  const tableTitleInput = h("input", {
+    type: "text",
+    autocomplete: "off",
+    "aria-label": t("Text the table’s first cell starts with"),
+    placeholder: t("Text the table’s first cell starts with"),
+  });
+  const saveRecipe = h("button", { type: "button" }, t("Save recipe"));
+  const recipeBox = h(
+    "details",
+    { class: "save-recipe" },
+    h("summary", {}, t("Save as a recipe")),
+    h("div", { class: "fields" },
+      h("label", { class: "field" }, h("span", {}, t("Recipe name")), recipeName),
+      h("label", { class: "field" }, h("span", {}, t("Text the table’s first cell starts with")), tableTitleInput),
+    ),
+    recipeLinks,
+    h("div", { class: "add-row" }, saveRecipe),
+  );
+
   let current: PortfolioView | null = null;
   let preview: TablePreview | null = null;
   let planned = false;
@@ -348,6 +374,48 @@ export function tableImportPanel(ctx: Context): Panel {
     );
   }
 
+  saveRecipe.addEventListener("click", () => {
+    const chosen = mapping();
+    const account = Number(accountSelect.value);
+    const title = tableTitleInput.value.trim();
+    if (!chosen || source() === "" || recipeName.value.trim() === "" || title === "" || accountSelect.value === "" || !Number.isFinite(account)) {
+      fail(t("Choose an account and enter the recipe name and the table title first."));
+      return;
+    }
+    const links = recipeLinks.value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "")
+      .map((text) => ({ text, reference: null }));
+    void ctx
+      .apply({
+        type: "set_recipe",
+        recipe: {
+          name: recipeName.value.trim(),
+          links,
+          table_starts_with: title,
+          currency: currencySelect.value,
+          account,
+          mapping: {
+            source: source(),
+            name_column: chosen.name,
+            value_column: chosen.value,
+            price_column: chosen.price,
+            price_unit: chosen.price_unit,
+            header_rows: chosen.header_rows,
+            rows_per_record: chosen.rows_per_record,
+            name_row: chosen.name_row,
+            value_row: chosen.value_row,
+          },
+        },
+      })
+      .then((ok) => {
+        if (ok) {
+          info(t("The recipe was saved."));
+        }
+      });
+  });
+
   const run = (): void => {
     showPlan().catch((error) => fail(t("Could not read: {reason}", { reason: String(error) })));
   };
@@ -374,12 +442,20 @@ export function tableImportPanel(ctx: Context): Panel {
       h("label", { class: "field" }, h("span", {}, t("Currency of the values")), currencySelect),
     ),
     h("div", { class: "add-row" }, fileInput),
-    browserFetch({ onTable: (loaded) => showPreview(loaded), info, fail }),
+    browserFetch({
+      onTable: (loaded, label) => {
+        showPreview(loaded);
+        tableTitleInput.value = label;
+      },
+      info,
+      fail,
+    }),
     pasteArea,
     h("div", { class: "add-row" }, pasteButton),
     message,
     previewBox,
     mappingBox,
+    recipeBox,
     result,
   );
 

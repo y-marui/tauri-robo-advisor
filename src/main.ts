@@ -15,6 +15,7 @@ import { dataNotes } from "./views/data-folder.ts";
 import { issuesList } from "./views/issues.ts";
 import { productsPanel } from "./views/products.ts";
 import { tableImportPanel } from "./views/table-import.ts";
+import { recipesPanel } from "./views/recipes.ts";
 import { settingsPanel } from "./views/settings.ts";
 
 // The frontend only shows data and sends the user's edits. Every rule, every
@@ -156,6 +157,7 @@ function build(): void {
     holdingsTablePanel(context),
     accountTabsPanel(context),
     tableImportPanel(context),
+    recipesPanel(context),
     bitflyerPanel(context),
     categoriesPanel(context),
     productsPanel(context),

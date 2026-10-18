@@ -5,13 +5,20 @@
 -include .env
 
 # Where a self-made Tauri app is installed (kept apart from /Applications itself so
-# it never collides with an App Store version), and where the DMG for
-# `install-my-apps` is published.
-APP_NAME ?= tauri-robo-advisor
+# it never collides with an App Store version; set DEPLOY_DIR=/Applications in .env to install
+# directly under it).
+# The name of the app bundle and the DMG (the productName in src-tauri/tauri.conf.json).
+APP_NAME ?= Robo Advisor
+# The process name of the running app (the executable inside the bundle keeps the Cargo package name).
+PROCESS_NAME ?= tauri-robo-advisor
 DEPLOY_DIR ?= /Applications/My Tauri
-DMG_DEST ?= $(HOME)/Library/Mobile Documents/com~apple~CloudDocs/Build/Tauri
 BUNDLE_DIR ?= target/release/bundle
 DEPLOY_OPEN ?= true
+# Like the swift-* repositories: set DEPLOY_DMG=true and DMG_DEST in .env to also publish the DMG
+# for `install-my-apps` after `make deploy` (see .env.example). A leading ~/ in DMG_DEST is expanded.
+DEPLOY_DMG ?= false
+DMG_DEST ?=
+DMG_DIR = $(patsubst ~/%,$(HOME)/%,$(DMG_DEST))
 
 install:
 	npm ci
@@ -40,24 +47,28 @@ all: lint test
 deploy:
 	@test "$$(uname)" = "Darwin" || { echo "deploy is for macOS only."; exit 1; }
 	npm run tauri build -- --bundles app
-	@if pgrep -x "$(APP_NAME)" >/dev/null; then \
+	@if pgrep -x "$(PROCESS_NAME)" >/dev/null; then \
 	  osascript -e 'tell application "$(APP_NAME)" to quit'; \
-	  i=0; while pgrep -x "$(APP_NAME)" >/dev/null && [ $$i -lt 20 ]; do sleep 0.5; i=$$((i+1)); done; \
+	  i=0; while pgrep -x "$(PROCESS_NAME)" >/dev/null && [ $$i -lt 20 ]; do sleep 0.5; i=$$((i+1)); done; \
 	fi
 	mkdir -p "$(DEPLOY_DIR)"
 	rm -rf "$(DEPLOY_DIR)/$(APP_NAME).app"
 	ditto "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(DEPLOY_DIR)/$(APP_NAME).app"
 	@echo "Installed: $(DEPLOY_DIR)/$(APP_NAME).app"
 	@if [ "$(DEPLOY_OPEN)" = "true" ]; then open "$(DEPLOY_DIR)/$(APP_NAME).app"; fi
+	@if [ "$(DEPLOY_DMG)" = "true" ]; then $(MAKE) -s dmg; fi
 
-# Build the DMG and publish it as $(DMG_DEST)/$(APP_NAME).dmg for install-my-apps.
+# Build the DMG (scripts/build-dmg.sh: hdiutil, no Finder scripting). When DMG_DEST is set, publish
+# it as $(DMG_DEST)/$(APP_NAME).dmg for install-my-apps.
 dmg:
 	@test "$$(uname)" = "Darwin" || { echo "dmg is for macOS only."; exit 1; }
-	rm -rf "$(BUNDLE_DIR)/dmg"
-	npm run tauri build -- --bundles dmg
-	mkdir -p "$(DMG_DEST)"
-	@set -- "$(BUNDLE_DIR)"/dmg/*.dmg; test -f "$$1" || { echo "No DMG was built."; exit 1; }; \
-	  cp -f "$$1" "$(DMG_DEST)/$(APP_NAME).dmg" && echo "Published: $(DMG_DEST)/$(APP_NAME).dmg"
+	npm run tauri build -- --bundles app
+	bash scripts/build-dmg.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(BUNDLE_DIR)/dmg/$(APP_NAME).dmg"
+	@if [ -n "$(DMG_DIR)" ]; then \
+	  mkdir -p "$(DMG_DIR)" && cp -f "$(BUNDLE_DIR)/dmg/$(APP_NAME).dmg" "$(DMG_DIR)/$(APP_NAME).dmg" && echo "Published: $(DMG_DIR)/$(APP_NAME).dmg"; \
+	else \
+	  echo "DMG_DEST is not set, so the DMG was not published (set it in .env)."; \
+	fi
 
 update-charter:
 	curl -fsSL https://raw.githubusercontent.com/y-marui/dev-charter/main/scripts/install.sh | CHARTER_UPDATE_ONLY=1 bash

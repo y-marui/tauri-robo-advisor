@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 /// The on-disk schema version. A file with a newer version is refused rather
 /// than guessed at, so an older app never rewrites data it does not understand.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Version 2 added the saved import mappings, the revision, and the fetch recipes
+/// (all with defaults, so a version 1 file loads and is saved as version 2).
+pub const SCHEMA_VERSION: u32 = 2;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -159,6 +161,30 @@ pub struct ImportMapping {
     pub value_row: usize,
 }
 
+/// One link to follow, by its visible text. `reference` says which of several
+/// links with that text is meant (where it goes, without the parts that change
+/// per visit); the app fills it in the first time the link is followed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FetchLink {
+    pub text: String,
+    #[serde(default)]
+    pub reference: Option<String>,
+}
+
+/// A saved way to fetch one table after the user has logged in: follow these
+/// links, find the table whose first cell starts with `table_starts_with`, read
+/// it with `mapping`, and put the result into `account`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recipe {
+    pub name: String,
+    #[serde(default)]
+    pub links: Vec<FetchLink>,
+    pub table_starts_with: String,
+    pub currency: String,
+    pub account: AccountId,
+    pub mapping: ImportMapping,
+}
+
 fn one() -> u64 {
     1
 }
@@ -190,6 +216,8 @@ pub struct Portfolio {
     /// overwrite a newer one.
     #[serde(default)]
     pub revision: u64,
+    #[serde(default)]
+    pub recipes: Vec<Recipe>,
 }
 
 impl Default for Portfolio {
@@ -204,6 +232,7 @@ impl Default for Portfolio {
             settings: Settings::default(),
             import_mappings: Vec::new(),
             revision: 0,
+            recipes: Vec::new(),
         }
     }
 }

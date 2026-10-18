@@ -116,12 +116,28 @@ fn fake_browser(script_value: Value) -> Endpoint {
 }
 
 fn fake_browser_with(script_value: Value, fail_script: bool) -> Endpoint {
+    fake_browser_queue(vec![script_value], fail_script)
+}
+
+/// Like `fake_browser`, but the page answers successive scripts with these values
+/// in order (the last one is repeated), and the scripts it was asked to run are
+/// kept for the test to look at.
+fn fake_browser_queue(values: Vec<Value>, fail_script: bool) -> Endpoint {
+    fake_browser_logged(values, fail_script, None)
+}
+
+fn fake_browser_logged(
+    values: Vec<Value>,
+    fail_script: bool,
+    log: Option<std::sync::Arc<std::sync::Mutex<Vec<String>>>>,
+) -> Endpoint {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
         let mut socket = tungstenite::accept(stream).unwrap();
         let mut first = true;
+        let mut next = 0usize;
         while let Ok(Message::Text(text)) = socket.read() {
             let request: Value = serde_json::from_str(text.as_str()).unwrap();
             let id = request["id"].clone();
@@ -141,10 +157,16 @@ fn fake_browser_with(script_value: Value, fail_script: bool) -> Endpoint {
                 }
                 "Runtime.evaluate" => {
                     assert_eq!(request["sessionId"], "s1");
+                    if let Some(log) = &log {
+                        let expression = request["params"]["expression"].as_str().unwrap_or("");
+                        log.lock().unwrap().push(expression.to_owned());
+                    }
                     if fail_script {
                         json!({"exceptionDetails": {"text": "secret page text"}})
                     } else {
-                        json!({"result": {"type": "object", "value": script_value}})
+                        let value = values[next.min(values.len() - 1)].clone();
+                        next += 1;
+                        json!({"result": {"type": "object", "value": value}})
                     }
                 }
                 "Browser.close" => json!({}),
@@ -252,4 +274,395 @@ fn the_fixed_script_only_reads_the_page() {
     ] {
         assert!(!script.contains(action), "{action}");
     }
+}
+
+// ---- following a link --------------------------------------------------------
+
+fn attached(endpoint: &Endpoint) -> (Cdp, String) {
+    let mut cdp = Cdp::connect(endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+    (cdp, session)
+}
+
+/// What the page answers to the readiness probe: whether the old document's mark is still there,
+/// and its state.
+fn probe(marker: bool, ready: &str) -> Value {
+    json!({"marker": marker, "ready": ready, "href": "https://h.example/old"})
+}
+
+fn found(href: &str, same_site: bool, scripted: bool) -> Value {
+    json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted, "origin": "https://h.example"}])
+}
+
+#[test]
+fn a_plain_link_is_found_clicked_and_waited_for() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            found("/account/list", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(true, "loading"),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let followed = cdp.follow_link(&session, "口座(円建)", None).unwrap();
+    assert_eq!(followed.reference, crate::fingerprint("/account/list"));
+
+    let scripts = log.lock().unwrap().clone();
+    assert_eq!(
+        scripts.len(),
+        8,
+        "find, mark, go, two checks, the settle wait, the site and address checks"
+    );
+    assert!(scripts[5].contains("MutationObserver"));
+    assert!(
+        scripts[0].contains("\"口座(円建)\""),
+        "the text is passed as JSON data"
+    );
+    assert!(
+        scripts[1].contains("__roboAdvisorNav"),
+        "the old document is marked first"
+    );
+    assert!(
+        scripts[2].contains(", 4, \"/account/list\", \"https://h.example\")"),
+        "the position, the accepted address and the site come from the search"
+    );
+}
+
+#[test]
+fn a_link_text_is_passed_as_data_not_as_code() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![json!([])], false, Some(log.clone()));
+    let (mut cdp, session) = attached(&endpoint);
+
+    let result = cdp.follow_link(&session, "x\"); alert(1); (\"", None);
+
+    assert_eq!(result, Err(Error::LinkNotFound));
+    let scripts = log.lock().unwrap().clone();
+    assert!(
+        scripts[0].contains("x\\\"); alert(1); (\\\""),
+        "quotes are escaped: {}",
+        scripts[0]
+    );
+}
+
+#[test]
+fn risky_links_are_refused_before_the_page_is_asked() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![json!([])], false, Some(log.clone()));
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "買い注文", None),
+        Err(Error::LinkRefused)
+    );
+    assert_eq!(
+        cdp.follow_link(&session, "ログアウト", None),
+        Err(Error::LinkRefused)
+    );
+    assert!(log.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_link_to_another_site_or_to_an_action_is_refused_and_nothing_is_clicked() {
+    for page in [
+        found("/x", false, false),
+        found("/trade/order/confirm", true, false),
+    ] {
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let endpoint = fake_browser_logged(vec![page], false, Some(log.clone()));
+        let (mut cdp, session) = attached(&endpoint);
+
+        assert_eq!(
+            cdp.follow_link(&session, "保有銘柄", None),
+            Err(Error::LinkRefused)
+        );
+        assert_eq!(log.lock().unwrap().len(), 1, "only the search ran");
+    }
+}
+
+#[test]
+fn a_missing_link_and_a_link_that_is_gone_are_reported() {
+    let endpoint = fake_browser(json!([]));
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkNotFound)
+    );
+
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/a", true, false),
+            json!("https://h.example/old"),
+            json!("gone"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkNotFound)
+    );
+}
+
+fn two_links(a: &str, b: &str) -> Value {
+    json!([
+        {"index": 1, "href": a, "same_site": true, "scripted": false, "origin": "https://h.example"},
+        {"index": 7, "href": b, "same_site": true, "scripted": false, "origin": "https://h.example"},
+    ])
+}
+
+#[test]
+fn links_with_the_same_text_and_the_same_destination_count_as_one() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            two_links(
+                "/ETGate/?_ControlID=A&_SeqNo=1111111111",
+                "/ETGate/?_ControlID=A&_SeqNo=2222222222",
+            ),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let followed = cdp.follow_link(&session, "ポートフォリオ", None).unwrap();
+
+    assert_eq!(
+        followed.reference,
+        crate::fingerprint("/ETGate/?_ControlID=A")
+    );
+    assert!(
+        log.lock().unwrap()[2]
+            .contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\", \"https://h.example\")"),
+        "the first one is followed"
+    );
+}
+
+#[test]
+fn links_with_the_same_text_and_different_destinations_are_not_guessed() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![two_links("/a/list", "/b/list")],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
+
+    assert_eq!(
+        error,
+        Error::LinkAmbiguous(vec![
+            crate::LinkChoice {
+                reference: crate::fingerprint("/a/list"),
+                label: "/a/list".to_owned(),
+            },
+            crate::LinkChoice {
+                reference: crate::fingerprint("/b/list"),
+                label: "/b/list".to_owned(),
+            },
+        ])
+    );
+    assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
+}
+
+#[test]
+fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            two_links("/a/list", "/b/list"),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/b/list")))
+        .unwrap();
+    assert!(
+        log.lock().unwrap()[2].contains(", 7, \"/b/list\", \"https://h.example\")"),
+        "the second link was followed"
+    );
+
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![two_links("/a/list", "/b/list")],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/c/list"))),
+        Err(Error::LinkChanged)
+    );
+    assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
+}
+
+#[test]
+fn a_link_the_page_handles_itself_is_never_followed() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![found("", false, true)], false, Some(log.clone()));
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkRefused)
+    );
+    assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
+}
+
+#[test]
+fn an_address_that_was_too_long_to_check_is_refused() {
+    let mut page = found("/ok/list", true, false);
+    page[0]["too_long"] = json!(true);
+    let endpoint = fake_browser(page);
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::LinkRefused)
+    );
+}
+
+#[test]
+fn links_that_differ_only_in_an_account_number_are_different_destinations() {
+    let endpoint = fake_browser(two_links(
+        "/holdings?account=1234567890",
+        "/holdings?account=2234567890",
+    ));
+    let (mut cdp, session) = attached(&endpoint);
+
+    let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
+
+    assert!(matches!(error, Error::LinkAmbiguous(choices) if choices.len() == 2));
+}
+
+#[test]
+fn the_old_document_saying_complete_is_not_taken_for_the_new_page() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/next", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            // The old document is still there (its mark is on it) and still says complete.
+            probe(true, "complete"),
+            probe(true, "complete"),
+            // Now the new document has replaced it.
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    let started = std::time::Instant::now();
+
+    cdp.follow_link(&session, "保有銘柄", None).unwrap();
+
+    assert!(
+        started.elapsed() >= std::time::Duration::from_millis(900),
+        "it kept waiting through the two probes of the old document"
+    );
+}
+
+#[test]
+fn a_page_that_only_changes_its_address_is_also_recognized() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/app#/holdings", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            json!({"marker": true, "ready": "complete", "href": "https://h.example/app#/holdings"}),
+            json!({"marker": true, "ready": "complete", "href": "https://h.example/app#/holdings"}),
+            json!("https://h.example"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert!(cdp.follow_link(&session, "保有銘柄", None).is_ok());
+}
+
+#[test]
+fn a_page_on_another_site_after_the_move_is_not_accepted() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/next", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(false, "complete"),
+            json!(true),
+            // A redirect took the tab to another site.
+            json!("https://elsewhere.example"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn going_back_is_accepted_only_on_the_start_page() {
+    let endpoint = fake_browser_queue(
+        vec![
+            json!("https://h.example/old"),
+            json!(true),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example/other"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.go_back(&session, 1, "https://h.example/start"),
+        Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn a_redirect_to_a_refused_address_on_the_same_site_is_not_accepted() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/next", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
+            json!("/logout"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::WrongPage)
+    );
 }
