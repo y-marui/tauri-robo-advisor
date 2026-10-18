@@ -161,6 +161,10 @@ export function tableImportPanel(ctx: Context): Panel {
   const mapping = (): ColumnMapping | null => {
     const header = Number(headerInput.value);
     const product = modeSelect.value === "product";
+    const parts = [part(namePartInput), part(valuePartInput), part(pricePartInput)];
+    if (parts[0] === undefined || parts[1] === undefined || (product && parts[2] === undefined)) {
+      return null; // a part that is not a whole number from 0 to 19 is not guessed at
+    }
     if (
       nameSelect.value === "" ||
       valueSelect.value === "" ||
@@ -179,16 +183,20 @@ export function tableImportPanel(ctx: Context): Panel {
       rows_per_record: Number(perRecordSelect.value),
       name_row: Number(nameRowSelect.value),
       value_row: Number(valueRowSelect.value),
-      name_part: part(namePartInput),
-      value_part: part(valuePartInput),
-      price_part: product ? part(pricePartInput) : null,
+      name_part: parts[0],
+      value_part: parts[1],
+      price_part: product ? parts[2] : null,
       loose_numbers: looseInput.checked,
     };
   };
-  /** Which value of a cell (counted from 0); empty: the whole cell. */
-  const part = (input: HTMLInputElement): number | null => {
+  /** Which value of a cell (counted from 0); empty: the whole cell; anything else that is not 0 to 19: `undefined`. */
+  const part = (input: HTMLInputElement): number | null | undefined => {
     const text = input.value.trim();
-    return text === "" || !Number.isInteger(Number(text)) || Number(text) < 0 ? null : Number(text);
+    if (text === "") {
+      return null;
+    }
+    const n = Number(text);
+    return Number.isInteger(n) && n >= 0 && n <= 19 ? n : undefined;
   };
 
   /** Shows the controls that fit the mode, and the rows a record can have. */
