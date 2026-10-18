@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The app identifier is now `y.marui.Robo-Advisor`, in the same form as the Swift apps (`y.marui.<App-Name>`). The data folder (and the default browser profile inside it) moves to `~/Library/Application Support/y.marui.Robo-Advisor` on macOS; a portfolio file or browser profile in the old `dev.marui.robo-advisor` folder is not read any more and has to be moved by hand. The keychain service name for the bitFlyer key is unchanged, so a saved key keeps working.
+
 ### Added
 
+- Fetch recipes (#36): save how a table was fetched (links to follow by their visible text, the table's first-cell start, the column mapping, the account) and fetch everything with one button after logging in. The browser crate may now follow plain same-site `<a>` links that only show another page: links that look like orders or money movements are refused, links with the same text and the same destination count as one, different destinations are never guessed (the user picks and the choice is saved as a reference), and a saved link that has vanished stops the run. Recipes that feed one account are merged before its holdings are replaced, and an account with no linked row is left alone.
 - `make deploy` can also publish the DMG, like the `swift-*` repositories: `DEPLOY_DMG=true` and `DMG_DEST` in `.env` (`.env.example` added). `DMG_DEST` no longer has a built-in default, so `make dmg` only builds the DMG unless it is set.
 - Browser fetch in the table import (#28): choose Chrome, Edge, or Brave, open it with a profile of its own, log in by hand, read the tables of the page, and pick one to go through the same column choice, alias linking, and replace-holdings flow as a file or pasted text. New commands `list_browsers`, `open_browser`, `browser_pages`, `fetch_browser_tables`, `use_fetched_table`, `close_browser`; the browser is closed on request and when the app quits.
 - `browser` crate (first step of the optional browser fetch, #28): finds Chrome, Edge, or Brave, starts it with a profile of its own, and reads pages over the DevTools protocol on localhost. The user logs in by hand; nothing is typed, clicked, or stored. New dependencies: `tungstenite` (WebSocket client, without TLS) with `sha1` and `data-encoding`.

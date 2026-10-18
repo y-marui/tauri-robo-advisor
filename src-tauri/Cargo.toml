@@ -30,6 +30,6 @@ export = { path = "../crates/export" }
 tabular = { path = "../crates/tabular" }
 browser = { path = "../crates/browser" }
 keyring = "4"
+rust_decimal = "1"
 
 [dev-dependencies]
-rust_decimal = "1"

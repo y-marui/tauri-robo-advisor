@@ -7,6 +7,8 @@
 use bitflyer::Credentials;
 use keyring::Entry;
 
+// Not the app identifier: this name only labels the keychain entry. It is kept as it was so that
+// a key saved earlier is still found after the identifier changed.
 const SERVICE: &str = "dev.marui.robo-advisor";
 const BITFLYER_KEY: &str = "bitflyer-api-key";
 const BITFLYER_SECRET: &str = "bitflyer-api-secret";

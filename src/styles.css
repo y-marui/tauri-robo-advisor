@@ -426,3 +426,14 @@ textarea {
   max-height: 14rem;
   overflow: auto;
 }
+
+/* Fetch recipes. */
+.recipe-run {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.recipe-attention .add-row {
+  align-items: center;
+}
