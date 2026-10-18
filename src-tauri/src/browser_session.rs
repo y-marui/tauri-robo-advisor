@@ -150,7 +150,16 @@ impl BrowserSession {
                     .rows
                     .first()
                     .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
-                    .map(|c| c.chars().take(MAX_LABEL_CHARS).collect())
+                    // Plain words: the label is put in a text input (which would drop a line
+                    // break) and is compared with the recipe's title as plain words.
+                    .map(|c| {
+                        c.split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            .chars()
+                            .take(MAX_LABEL_CHARS)
+                            .collect()
+                    })
                     .unwrap_or_default(),
             })
             .collect();
