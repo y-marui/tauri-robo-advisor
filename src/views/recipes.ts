@@ -110,6 +110,11 @@ export function recipesPanel(ctx: Context): Panel {
       return;
     }
     const mine = ++sequence;
+    // Whatever is on screen is out of date from now on, and must not be applied or redrawn.
+    refresh++;
+    if (applyButton) {
+      applyButton.disabled = true;
+    }
     runButton.disabled = true;
     attention.replaceChildren();
     try {

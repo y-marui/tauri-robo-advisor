@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use portfolio::{
     AccountId, Edit, HoldingInput, ImportMapping, ImportPlan, ImportRow, Issue, Portfolio,
@@ -46,6 +47,12 @@ pub struct AppState {
     table: Mutex<Option<Table>>,
     /// The rows each recipe read, until they are applied or dropped.
     runs: Mutex<Vec<StoredRun>>,
+    /// Counts every change of the kept runs, so an apply can tell that the runs are no
+    /// longer the ones that were shown.
+    runs_generation: AtomicU64,
+    /// What the user was last shown: the portfolio the plan was made from, and the runs
+    /// generation. An apply is accepted only for exactly this.
+    shown: Mutex<Option<(Portfolio, u64)>>,
     /// The browser opened for a fetch, and the tables read from it.
     pub browser: crate::browser_session::BrowserSession,
 }
@@ -138,6 +145,8 @@ impl AppState {
             portfolio,
             table: Mutex::new(None),
             runs: Mutex::new(Vec::new()),
+            runs_generation: AtomicU64::new(0),
+            shown: Mutex::new(None),
             browser: crate::browser_session::BrowserSession::default(),
         }
     }
@@ -316,7 +325,11 @@ impl AppState {
         let mut recipe = self.recipe(name)?;
         // An earlier result of this recipe must never survive a run that fails or needs
         // attention: it would be applied together with the fresh ones.
-        self.lock_runs()?.retain(|r| r.name != name);
+        {
+            let mut runs = self.lock_runs()?;
+            runs.retain(|r| r.name != name);
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
+        }
         let read = self
             .browser
             .run_recipe(page, &recipe.links, &recipe.table_starts_with)?;
@@ -367,6 +380,7 @@ impl AppState {
         let mut runs = self.lock_runs()?;
         runs.retain(|r| r.name != run.name);
         runs.push(run);
+        self.runs_generation.fetch_add(1, Ordering::SeqCst);
         Ok(RecipeOutcome::Ready { run: view })
     }
 
@@ -382,8 +396,25 @@ impl AppState {
         })
     }
 
-    /// The kept runs, planned again with the aliases as they are now.
+    /// The kept runs, planned again with the aliases as they are now. What is returned is
+    /// what `apply_fetch_all` will accept: it remembers the portfolio the plan was made
+    /// from and the state of the runs.
     pub fn fetch_all_plan(&self) -> Result<Vec<RecipeRunView>, String> {
+        // Taken before the plan is made, so an edit at any time after it is caught.
+        let snapshot = self.portfolio_snapshot()?;
+        let (views, generation) = self.plan_views()?;
+        *lock_shown(&self.shown)? = Some((snapshot, generation));
+        Ok(views)
+    }
+
+    fn portfolio_snapshot(&self) -> Result<Portfolio, String> {
+        let guard = self.lock()?;
+        Ok(guard.as_ref().map_err(Clone::clone)?.clone())
+    }
+
+    /// The planned runs, and the generation of the runs they were made from (read while
+    /// the runs are locked, so it describes exactly these).
+    fn plan_views(&self) -> Result<(Vec<RecipeRunView>, u64), String> {
         let mut runs = self.lock_runs()?;
         // A recipe that was changed or removed after its run must not be applied.
         let current = {
@@ -393,12 +424,25 @@ impl AppState {
                 .map(|p| p.recipes.clone())
                 .unwrap_or_default()
         };
+        let before = runs.len();
         runs.retain(|run| current.iter().any(|r| r == &run.recipe));
-        runs.iter().map(|run| self.run_view(run)).collect()
+        if runs.len() != before {
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
+        }
+        let views = runs
+            .iter()
+            .map(|run| self.run_view(run))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((views, self.runs_generation.load(Ordering::SeqCst)))
     }
 
     pub fn clear_runs(&self) -> Result<(), String> {
-        self.lock_runs()?.clear();
+        {
+            let mut runs = self.lock_runs()?;
+            runs.clear();
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
+        }
+        *lock_shown(&self.shown)? = None;
         Ok(())
     }
 
@@ -406,13 +450,23 @@ impl AppState {
     /// recipes that feed it (products that appear twice are added up). An account
     /// with no linked row is left alone, so an unlinked first run never empties it.
     pub fn apply_fetch_all(&self) -> Result<PortfolioView, String> {
-        // The snapshot is taken BEFORE the plan is made, so an edit made at any time after it
-        // is seen by the comparison at the end, whether or not the plan already used it.
-        let snapshot: Portfolio = {
-            let guard = self.lock()?;
-            guard.as_ref().map_err(Clone::clone)?.clone()
+        // Only what the user was shown can be applied: the portfolio the displayed plan was
+        // made from, and the runs as they were then. Without a displayed plan (nothing was
+        // shown yet) the state as of now is used.
+        let (snapshot, generation) = match lock_shown(&self.shown)?.clone() {
+            Some(shown) => shown,
+            None => (
+                self.portfolio_snapshot()?,
+                self.runs_generation.load(Ordering::SeqCst),
+            ),
         };
-        let views = self.fetch_all_plan()?;
+        if self.runs_generation.load(Ordering::SeqCst) != generation {
+            return Err("The results changed while they were shown. Fetch again.".to_owned());
+        }
+        let (views, planned) = self.plan_views()?;
+        if planned != generation {
+            return Err("The results changed while they were shown. Fetch again.".to_owned());
+        }
         // An account is replaced by what ALL of its recipes read. If one of them has no
         // result (it failed, needs a choice, or was added after the others ran), replacing
         // would delete the holdings that recipe was meant to supply.
@@ -488,6 +542,14 @@ impl AppState {
             .lock()
             .map_err(|_| "The data is temporarily unavailable.".to_owned())
     }
+}
+
+fn lock_shown(
+    shown: &Mutex<Option<(Portfolio, u64)>>,
+) -> Result<std::sync::MutexGuard<'_, Option<(Portfolio, u64)>>, String> {
+    shown
+        .lock()
+        .map_err(|_| "The data is temporarily unavailable.".to_owned())
 }
 
 #[cfg(test)]
@@ -1010,5 +1072,32 @@ mod tests {
             .unwrap();
         assert!(state.set_link_reference(&current, 0, None).is_err());
         assert!(state.view().unwrap().portfolio.recipes.is_empty());
+    }
+
+    #[test]
+    fn only_the_plan_that_was_shown_can_be_applied() {
+        let (state, main, _, stock, _) = recipe_state("shown");
+        link(&state, stock, "Stock A");
+        save_recipe(&state, "Domestic", main);
+        *state.runs.lock().unwrap() = vec![stored("Domestic", main, &[("Stock A", 100)])];
+        state.fetch_all_plan().unwrap();
+
+        // The runs change after the plan was shown (a retry finished): refused.
+        state.runs_generation.fetch_add(1, Ordering::SeqCst);
+        let error = state.apply_fetch_all().unwrap_err();
+        assert!(error.contains("Fetch again"), "{error}");
+        assert!(held(&state, main).is_empty(), "nothing was applied");
+
+        // Shown again, then an alias is changed before the confirmation: refused.
+        state.fetch_all_plan().unwrap();
+        state
+            .apply(Edit::RemoveAlias {
+                product: stock,
+                source: "SBI".to_owned(),
+                name: "Stock A".to_owned(),
+            })
+            .unwrap();
+        assert!(state.apply_fetch_all().is_err());
+        assert!(held(&state, main).is_empty());
     }
 }

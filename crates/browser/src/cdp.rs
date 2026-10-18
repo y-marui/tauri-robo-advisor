@@ -281,14 +281,23 @@ impl Cdp {
             reference: chosen.reference(),
         };
         self.wait_navigated(session, mark, &before)?;
+        // The page that was reached must be on the site the link was found on: a redirect
+        // (or a script) may have taken the tab elsewhere.
+        let site = self.evaluate(session, "location.origin")?;
+        if site.as_str() != Some(chosen.origin.as_str()) {
+            return Err(Error::WrongPage);
+        }
         Ok(followed)
     }
 
     /// Goes back `steps` pages in the tab's history, to the page a recipe started from,
     /// so that a recipe stopped at a link can be run again from its beginning.
-    pub fn go_back(&mut self, session: &str, steps: usize) -> Result<(), Error> {
-        if steps == 0 || steps > 10 {
-            return Ok(());
+    pub fn go_back(&mut self, session: &str, steps: usize, start: &str) -> Result<(), Error> {
+        if steps > 10 {
+            return Err(Error::WrongPage);
+        }
+        if steps == 0 {
+            return self.expect_href(session, start);
         }
         let mark = navigation_mark();
         let before = self
@@ -303,7 +312,26 @@ impl Cdp {
             session,
             &format!("(() => {{ history.go(-{steps}); return true; }})()"),
         )?;
-        self.wait_navigated(session, mark, &before)
+        self.wait_navigated(session, mark, &before)?;
+        self.expect_href(session, start)
+    }
+
+    /// The address of the page the tab is on.
+    pub fn current_href(&mut self, session: &str) -> Result<String, Error> {
+        Ok(self
+            .evaluate(session, "location.href")?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned())
+    }
+
+    /// Fails unless the tab is on exactly this address (a restored start page).
+    fn expect_href(&mut self, session: &str, expected: &str) -> Result<(), Error> {
+        if self.current_href(session)? == expected {
+            Ok(())
+        } else {
+            Err(Error::WrongPage)
+        }
     }
 
     /// Waits (bounded) until the page that was asked for has really replaced the old

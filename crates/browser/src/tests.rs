@@ -305,6 +305,8 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
             json!("navigated"),
             probe(true, "loading"),
             probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
         ],
         false,
         Some(log.clone()),
@@ -317,8 +319,8 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     let scripts = log.lock().unwrap().clone();
     assert_eq!(
         scripts.len(),
-        6,
-        "find, mark, go, two checks, then the settle wait"
+        7,
+        "find, mark, go, two checks, the settle wait, the site check"
     );
     assert!(scripts[5].contains("MutationObserver"));
     assert!(
@@ -430,6 +432,8 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
             json!("https://h.example/old"),
             json!("navigated"),
             probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
         ],
         false,
         Some(log.clone()),
@@ -486,6 +490,8 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
             json!("https://h.example/old"),
             json!("navigated"),
             probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
         ],
         false,
         Some(log.clone()),
@@ -563,6 +569,8 @@ fn the_old_document_saying_complete_is_not_taken_for_the_new_page() {
             probe(true, "complete"),
             // Now the new document has replaced it.
             probe(false, "complete"),
+            json!(true),
+            json!("https://h.example"),
         ],
         false,
     );
@@ -585,10 +593,54 @@ fn a_page_that_only_changes_its_address_is_also_recognized() {
             json!("https://h.example/old"),
             json!("navigated"),
             json!({"marker": true, "ready": "complete", "href": "https://h.example/app#/holdings"}),
+            json!({"marker": true, "ready": "complete", "href": "https://h.example/app#/holdings"}),
+            json!("https://h.example"),
         ],
         false,
     );
     let (mut cdp, session) = attached(&endpoint);
 
     assert!(cdp.follow_link(&session, "保有銘柄", None).is_ok());
+}
+
+#[test]
+fn a_page_on_another_site_after_the_move_is_not_accepted() {
+    let endpoint = fake_browser_queue(
+        vec![
+            found("/next", true, false),
+            json!("https://h.example/old"),
+            json!("navigated"),
+            probe(false, "complete"),
+            json!(true),
+            // A redirect took the tab to another site.
+            json!("https://elsewhere.example"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.follow_link(&session, "保有銘柄", None),
+        Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn going_back_is_accepted_only_on_the_start_page() {
+    let endpoint = fake_browser_queue(
+        vec![
+            json!("https://h.example/old"),
+            json!(true),
+            probe(false, "complete"),
+            json!(true),
+            json!("https://h.example/other"),
+        ],
+        false,
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    assert_eq!(
+        cdp.go_back(&session, 1, "https://h.example/start"),
+        Err(Error::WrongPage)
+    );
 }

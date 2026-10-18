@@ -24,6 +24,8 @@ pub enum Error {
     LinkRefused,
     #[error("the link has changed since it was saved; choose it again")]
     LinkChanged,
+    #[error("the browser is not on the expected page")]
+    WrongPage,
     #[error("several different links have that text; choose one")]
     LinkAmbiguous(Vec<LinkChoice>),
 }
