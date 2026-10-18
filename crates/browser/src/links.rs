@@ -143,9 +143,34 @@ const VIEW_HREF: &[&str] = &[
 const ACTION_WHOLE_WORD: &[&str] = &["add", "adds"];
 
 fn has_whole_word(text: &str, words: &[&str]) -> bool {
-    text.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| words.contains(&word))
+    tokens(text).iter().any(|t| words.contains(&t.as_str()))
+}
+
+/// The words of an identifier or a phrase, lower-cased: split at anything that is not a
+/// letter or digit and at a camelCase boundary, so `addAccount`, `add_account` and
+/// `_SeqNo` give `add`, `account` and `seq`, `no`, while `address` stays one word.
+fn tokens(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut previous_lower = false;
+    for c in text.chars() {
+        if !c.is_alphanumeric() {
+            if !current.is_empty() {
+                out.push(std::mem::take(&mut current));
+            }
+            previous_lower = false;
+            continue;
+        }
+        if c.is_uppercase() && previous_lower && !current.is_empty() {
+            out.push(std::mem::take(&mut current));
+        }
+        previous_lower = c.is_lowercase();
+        current.extend(c.to_lowercase());
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
 }
 
 fn mentions(haystack: &str, words: &[&str]) -> bool {
@@ -268,7 +293,7 @@ fn part_looks_read_only(part: &str) -> bool {
         .collect();
     let action = mentions(&lower, ACTION_HREF)
         || mentions(&compact, ACTION_HREF)
-        || has_whole_word(&lower, ACTION_WHOLE_WORD)
+        || has_whole_word(part, ACTION_WHOLE_WORD)
         || lower
             .split(|c: char| !c.is_alphanumeric())
             .any(|word| ACTION_HREF_AT_START.iter().any(|w| word.starts_with(w)));
@@ -310,8 +335,13 @@ const VOLATILE_KEYS: &[&str] = &[
     "seq",
     "token",
     "session",
+    "sessionid",
+    "jsessionid",
+    "phpsessid",
+    "sessid",
     "sid",
     "time",
+    "timestamp",
     "stamp",
     "nonce",
     "rand",
@@ -349,8 +379,9 @@ pub fn normalize_href(href: &str) -> String {
         .filter_map(|pair| {
             let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
             // A name or value written with escapes (`%73ession`) is judged as the server reads it.
-            let lower = percent_decoded(key).to_lowercase();
-            let volatile = VOLATILE_KEYS.iter().any(|k| lower.contains(k))
+            // Whole words only: `timeframe` is not a time stamp and `author` is not `auth`.
+            let words = tokens(&percent_decoded(key));
+            let volatile = words.iter().any(|w| VOLATILE_KEYS.contains(&w.as_str()))
                 || volatile_value(&percent_decoded(value));
             (!volatile).then(|| (key.to_owned(), value.to_owned()))
         })
@@ -379,8 +410,9 @@ pub(crate) fn parse_candidates(value: &serde_json::Value) -> Result<Vec<Candidat
 pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
   const seen = new Map();
+  const shown = (a) => a.getClientRects().length > 0 && getComputedStyle(a).visibility !== 'hidden';
   [...document.querySelectorAll('a')].forEach((a, i) => {
-    if (clean(a.innerText ?? a.textContent) !== wanted) return;
+    if (!shown(a) || clean(a.innerText ?? a.textContent) !== wanted) return;
     const raw = a.getAttribute('href') ?? '';
     const scripted = raw === '' || raw.startsWith('#') || raw.toLowerCase().startsWith('javascript:');
     let sameSite = false;
@@ -410,7 +442,8 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin) => {
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
   if (!origin || origin !== location.origin) return 'gone';
   const a = document.querySelectorAll('a')[index];
-  if (!a || clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
+  if (!a || a.getClientRects().length === 0 || getComputedStyle(a).visibility === 'hidden') return 'gone';
+  if (clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
   let url;
   try { url = new URL(a.getAttribute('href') ?? '', location.href); } catch (e) { return 'gone'; }
   if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.origin !== location.origin) return 'gone';
@@ -607,6 +640,13 @@ mod tests {
             "escaped names and values are judged as the server reads them"
         );
         assert_eq!(normalize_href("/a?ticket=xyz&b=2&auth=q"), "/a?b=2");
+        assert_eq!(
+            normalize_href(
+                "/h?timeframe=daily&author=p&sessionId=1&_SeqNo=2&JSESSIONID=3&access_token=4"
+            ),
+            "/h?timeframe=daily&author=p",
+            "whole words only"
+        );
         assert!(fingerprint("/a?b=2").starts_with("h:") && fingerprint("/a?b=2").len() == 18);
         assert_ne!(fingerprint("/a"), fingerprint("/b"));
         assert_eq!(fingerprint("/a"), fingerprint("/a"));
