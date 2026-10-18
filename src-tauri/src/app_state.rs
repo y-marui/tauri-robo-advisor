@@ -58,6 +58,8 @@ type Fingerprint = (SystemTime, u64);
 struct Disk {
     path: PathBuf,
     seen: Option<Fingerprint>,
+    /// A hash of the file's content as last read or written by this app.
+    hash: Option<u64>,
     warning: Option<String>,
 }
 
@@ -75,6 +77,7 @@ fn refresh(portfolio: &mut Result<Portfolio, String>, disk: &mut Disk) {
         return;
     }
     disk.seen = now;
+    disk.hash = store::content_hash(&disk.path);
     if now.is_none() {
         disk.warning = None; // the bad file is gone
         return;
@@ -222,11 +225,13 @@ impl AppState {
     fn with_paths(app_data: PathBuf, path: PathBuf) -> Self {
         let portfolio = Mutex::new(store::load(&path));
         let seen = store::fingerprint(&path);
+        let hash = store::content_hash(&path);
         Self {
             app_data,
             disk: Mutex::new(Disk {
                 path,
                 seen,
+                hash,
                 warning: None,
             }),
             portfolio,
@@ -282,11 +287,22 @@ impl AppState {
         let base_revision = guard.as_ref().map_err(Clone::clone)?.revision;
         // The check and the replacement happen under a lock on the folder, so two instances
         // cannot both pass the check and then overwrite each other.
-        if !store::save_unless_newer(&disk.path, &next, base_revision)? {
+        // A data file that exists only as an iCloud placeholder is not downloaded yet: creating
+        // a new file next to it could clash with the real one once it arrives.
+        if !disk.path.exists()
+            && disk
+                .path
+                .parent()
+                .is_some_and(data_folder::is_waiting_for_download)
+        {
+            return Err("The data file is still being downloaded from the synced folder. Wait a moment, then try again.".to_owned());
+        }
+        if !store::save_unless_newer(&disk.path, &next, base_revision, disk.hash)? {
             disk.seen = None; // read the newer file on the next look
             return Err(CHANGED_ELSEWHERE.to_owned());
         }
         disk.seen = store::fingerprint(&disk.path);
+        disk.hash = store::content_hash(&disk.path);
         disk.warning = None;
         let view = PortfolioView::new(&next, self.data_info(disk));
         *guard = Ok(next);
@@ -341,6 +357,7 @@ impl AppState {
             }
             disk.path = target;
             disk.seen = store::fingerprint(&disk.path);
+            disk.hash = store::content_hash(&disk.path);
             disk.warning = None;
         }
         let portfolio = guard.as_ref().map_err(Clone::clone)?;

@@ -61,6 +61,21 @@ pub fn peek_revision(path: &Path) -> Option<u64> {
         .map(|r| r.revision)
 }
 
+/// A hash of the file's bytes (not for security: it tells whether the content is the one
+/// that was last read or written). `None` when the file cannot be read.
+pub fn content_hash(path: &Path) -> Option<u64> {
+    if fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
+        return None;
+    }
+    let bytes = fs::read(path).ok()?;
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Some(hash)
+}
+
 /// Saves like `save`, but only if the file on disk is not newer than `base_revision`, and the
 /// check and the write are made while holding an exclusive lock on a lock file next to the data
 /// file. Returns `Ok(false)` (and writes nothing) when a newer file is already there.
@@ -68,6 +83,7 @@ pub fn save_unless_newer(
     path: &Path,
     portfolio: &Portfolio,
     base_revision: u64,
+    known_hash: Option<u64>,
 ) -> Result<bool, String> {
     let lock_path = path.with_extension("json.lock");
     let lock = create_private(&lock_path)
@@ -76,6 +92,14 @@ pub fn save_unless_newer(
         .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
     match peek_revision(path) {
         Some(on_disk) if on_disk > base_revision => return Ok(false),
+        // The same revision but not the content that was last read or written here: another
+        // computer saved its own version, so this save would overwrite it.
+        Some(on_disk)
+            if on_disk == base_revision
+                && known_hash.is_some_and(|known| content_hash(path) != Some(known)) =>
+        {
+            return Ok(false);
+        }
         None if path.exists() => {
             // The file is there but cannot be read (malformed, too large, or from a newer
             // version): it is left as it is, never replaced.
@@ -337,9 +361,9 @@ mod tests {
             revision: 3,
             ..Portfolio::default()
         };
-        assert_eq!(save_unless_newer(&path, &stale, 2), Ok(false));
+        assert_eq!(save_unless_newer(&path, &stale, 2, None), Ok(false));
         assert_eq!(peek_revision(&path), Some(5), "the newer file is kept");
-        assert_eq!(save_unless_newer(&path, &newer, 5), Ok(true));
+        assert_eq!(save_unless_newer(&path, &newer, 5, None), Ok(true));
     }
 
     #[test]
@@ -347,9 +371,38 @@ mod tests {
         let path = temp_dir("unreadable").join("portfolio.json");
         std::fs::write(&path, b"{ not json").unwrap();
 
-        let error = save_unless_newer(&path, &Portfolio::default(), 0).unwrap_err();
+        let error = save_unless_newer(&path, &Portfolio::default(), 0, None).unwrap_err();
 
         assert!(error.contains("left untouched"));
         assert_eq!(std::fs::read(&path).unwrap(), b"{ not json");
+    }
+
+    #[test]
+    fn a_save_is_refused_when_the_same_revision_has_other_content() {
+        let path = temp_dir("same-rev").join("portfolio.json");
+        let mine = Portfolio {
+            revision: 2,
+            ..Portfolio::default()
+        };
+        save(&path, &mine).unwrap();
+        let known = content_hash(&path);
+
+        // Another computer's save with the same revision but other content arrives.
+        let other = Portfolio {
+            revision: 2,
+            schema_version: mine.schema_version,
+            settings: portfolio::Settings {
+                usd_jpy: Some(rust_decimal::Decimal::from(123)),
+                ..portfolio::Settings::default()
+            },
+            ..Portfolio::default()
+        };
+        save(&path, &other).unwrap();
+
+        assert_eq!(save_unless_newer(&path, &mine, 2, known), Ok(false));
+        assert_eq!(
+            save_unless_newer(&path, &mine, 2, content_hash(&path)),
+            Ok(true)
+        );
     }
 }
