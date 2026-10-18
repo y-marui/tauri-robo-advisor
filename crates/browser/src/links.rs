@@ -32,6 +32,8 @@ const ACTION_TEXT: &[&str] = &[
     "追加",
     "訂正",
     "申込",
+    "買う",
+    "売る",
     "申し込み",
     "cancel",
     "delete",
@@ -70,16 +72,53 @@ const VIEW_TEXT: &[&str] = &[
 
 /// The same for the address, whose parts (path segments and query pairs) are judged one by one.
 const ACTION_HREF: &[&str] = &[
-    "cancel", "delete", "submit", "confirm", "logout", "signout", "change", "update", "save",
-    "modify", "regist", "execute", "approve", "remove", "create", "settle", "remit", "buy", "sell",
+    "cancel",
+    "delete",
+    "submit",
+    "confirm",
+    "logout",
+    "signout",
+    "change",
+    "update",
+    "save",
+    "modify",
+    "regist",
+    "execute",
+    "approve",
+    "remove",
+    "create",
+    "settle",
+    "remit",
+    "buy",
+    "sell",
+    "取消",
+    "取り消し",
+    "削除",
+    "変更",
+    "更新",
+    "登録",
+    "解約",
+    "送信",
+    "保存",
+    "承認",
+    "確定",
+    "実行",
+    "訂正",
+    "申込",
+    "申し込み",
+    "買う",
+    "売る",
+    "ログアウト",
 ];
 /// Words that must start a word of the address ("edit" is not "credit").
 const ACTION_HREF_AT_START: &[&str] = &["edit", "apply", "send"];
 const MONEY_HREF: &[&str] = &[
-    "order", "purchase", "deposit", "withdraw", "transfer", "trade", "payment",
+    "order", "purchase", "deposit", "withdraw", "transfer", "trade", "payment", "注文", "発注",
+    "売却", "売付", "買付", "購入", "入金", "出金", "送金", "振替", "振込", "約定",
 ];
 const VIEW_HREF: &[&str] = &[
-    "inquiry", "history", "list", "balance", "status", "detail", "summary", "position", "holding",
+    "照会", "履歴", "一覧", "余力", "残高", "明細", "状況", "inquiry", "history", "list",
+    "balance", "status", "detail", "summary", "position", "holding",
 ];
 
 fn mentions(haystack: &str, words: &[&str]) -> bool {
@@ -394,6 +433,9 @@ mod tests {
                 Err(Error::LinkRefused),
                 "an action word is not excused by a view word: {mixed}"
             );
+        }
+        for ja in ["買う", "売る", "今すぐ買う"] {
+            assert_eq!(link_text_allowed(ja), Err(Error::LinkRefused), "{ja}");
         }
         assert_eq!(link_text_allowed(&"あ".repeat(61)), Err(Error::LinkRefused));
         assert_eq!(link_text_allowed("a\nb"), Err(Error::LinkRefused));
