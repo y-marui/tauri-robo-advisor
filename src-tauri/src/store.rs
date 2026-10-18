@@ -17,10 +17,17 @@ const MAX_FILE_BYTES: u64 = 10 * 1024 * 1024;
 ///
 /// A file that exists but cannot be understood is an error. The caller must not
 /// overwrite it, so a bad file is never silently replaced by an empty one.
+#[cfg(test)]
 pub fn load(path: &Path) -> Result<Portfolio, String> {
+    load_hashed(path).map(|(portfolio, _)| portfolio)
+}
+
+/// Like `load`, and also the hash of the very bytes that were parsed (`None` when there is no
+/// file yet), so the portfolio and the hash recorded for it can never come from two versions.
+pub fn load_hashed(path: &Path) -> Result<(Portfolio, Option<u64>), String> {
     let length = match fs::metadata(path) {
         Ok(metadata) => metadata.len(),
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Portfolio::default()),
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok((Portfolio::default(), None)),
         Err(e) => return Err(format!("Could not read the data file ({}).", e.kind())),
     };
     if length > MAX_FILE_BYTES {
@@ -28,6 +35,7 @@ pub fn load(path: &Path) -> Result<Portfolio, String> {
     }
     let bytes =
         fs::read(path).map_err(|e| format!("Could not read the data file ({}).", e.kind()))?;
+    let hash = hash_bytes(&bytes);
     let mut portfolio: Portfolio = serde_json::from_slice(&bytes)
         .map_err(|_| "The data file is not valid; it was left untouched.".to_owned())?;
     portfolio
@@ -35,7 +43,16 @@ pub fn load(path: &Path) -> Result<Portfolio, String> {
         .map_err(|e| format!("{e}; the data file was left untouched."))?;
     // An older file is read as it is and saved as the current version.
     portfolio.schema_version = portfolio.schema_version.max(portfolio::SCHEMA_VERSION);
-    Ok(portfolio)
+    Ok((portfolio, Some(hash)))
+}
+
+fn hash_bytes(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 /// Cheap check for "did the file change?": its modification time and size.
@@ -67,13 +84,7 @@ pub fn content_hash(path: &Path) -> Option<u64> {
     if fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
         return None;
     }
-    let bytes = fs::read(path).ok()?;
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in bytes {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    Some(hash)
+    Some(hash_bytes(&fs::read(path).ok()?))
 }
 
 /// Saves like `save`, but only if the file on disk is not newer than `base_revision`, and the

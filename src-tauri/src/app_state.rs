@@ -77,13 +77,14 @@ fn refresh(portfolio: &mut Result<Portfolio, String>, disk: &mut Disk) {
         return;
     }
     disk.seen = now;
-    disk.hash = store::content_hash(&disk.path);
     if now.is_none() {
+        disk.hash = None;
         disk.warning = None; // the bad file is gone
         return;
     }
-    match store::load(&disk.path) {
-        Ok(on_disk) => {
+    match store::load_hashed(&disk.path) {
+        Ok((on_disk, hash)) => {
+            disk.hash = hash;
             disk.warning = None;
             match portfolio {
                 Ok(current) if on_disk.revision > current.revision => *portfolio = Ok(on_disk),
@@ -223,9 +224,12 @@ impl AppState {
     }
 
     fn with_paths(app_data: PathBuf, path: PathBuf) -> Self {
-        let portfolio = Mutex::new(store::load(&path));
         let seen = store::fingerprint(&path);
-        let hash = store::content_hash(&path);
+        let (loaded, hash) = match store::load_hashed(&path) {
+            Ok((portfolio, hash)) => (Ok(portfolio), hash),
+            Err(error) => (Err(error), None),
+        };
+        let portfolio = Mutex::new(loaded);
         Self {
             app_data,
             disk: Mutex::new(Disk {
@@ -338,11 +342,14 @@ impl AppState {
             {
                 return Err("The data file in that folder is still being downloaded. Wait a moment and try again.".to_owned());
             }
-            let adopted = if store::fingerprint(&target).is_some() {
+            // The fingerprint is taken before the file is read, so a change made after the read
+            // shows up as a change on the next look.
+            let seen_before = store::fingerprint(&target);
+            let adopted = if seen_before.is_some() {
                 if !use_existing {
                     return Err(FOLDER_HAS_DATA.to_owned());
                 }
-                Some(store::load(&target)?)
+                Some(store::load_hashed(&target)?)
             } else {
                 // Created only if still absent (checked under the lock): a file that arrived
                 // meanwhile is not replaced without the confirmation.
@@ -352,12 +359,18 @@ impl AppState {
                 None
             };
             data_folder::write_pointer(&self.app_data, folder.as_deref())?;
-            if let Some(portfolio) = adopted {
-                *guard = Ok(portfolio);
+            match adopted {
+                Some((portfolio, hash)) => {
+                    *guard = Ok(portfolio);
+                    disk.seen = seen_before;
+                    disk.hash = hash;
+                }
+                None => {
+                    disk.seen = store::fingerprint(&target);
+                    disk.hash = store::content_hash(&target);
+                }
             }
             disk.path = target;
-            disk.seen = store::fingerprint(&disk.path);
-            disk.hash = store::content_hash(&disk.path);
             disk.warning = None;
         }
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
