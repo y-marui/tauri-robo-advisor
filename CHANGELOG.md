@@ -4,6 +4,7 @@
 
 ### Added
 
+- `make deploy` can also publish the DMG, like the `swift-*` repositories: `DEPLOY_DMG=true` and `DMG_DEST` in `.env` (`.env.example` added). `DMG_DEST` no longer has a built-in default, so `make dmg` only builds the DMG unless it is set.
 - Browser fetch in the table import (#28): choose Chrome, Edge, or Brave, open it with a profile of its own, log in by hand, read the tables of the page, and pick one to go through the same column choice, alias linking, and replace-holdings flow as a file or pasted text. New commands `list_browsers`, `open_browser`, `browser_pages`, `fetch_browser_tables`, `use_fetched_table`, `close_browser`; the browser is closed on request and when the app quits.
 - `browser` crate (first step of the optional browser fetch, #28): finds Chrome, Edge, or Brave, starts it with a profile of its own, and reads pages over the DevTools protocol on localhost. The user logs in by hand; nothing is typed, clicked, or stored. New dependencies: `tungstenite` (WebSocket client, without TLS) with `sha1` and `data-encoding`.
 - `make deploy` builds the `.app` and installs it into `/Applications/My Tauri` (kept apart from `/Applications` itself, so it never collides with an App Store version), and `make dmg` publishes the DMG to the iCloud `Build/Tauri` folder for `install-my-apps`. Both are macOS only, and the folders can be overridden with `DEPLOY_DIR` and `DMG_DEST`.
