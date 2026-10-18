@@ -61,6 +61,27 @@ pub fn peek_revision(path: &Path) -> Option<u64> {
         .map(|r| r.revision)
 }
 
+/// Saves like `save`, but only if the file on disk is not newer than `base_revision`, and the
+/// check and the write are made while holding an exclusive lock on a lock file next to the data
+/// file. Returns `Ok(false)` (and writes nothing) when a newer file is already there.
+pub fn save_unless_newer(
+    path: &Path,
+    portfolio: &Portfolio,
+    base_revision: u64,
+) -> Result<bool, String> {
+    let lock_path = path.with_extension("json.lock");
+    let lock = create_private(&lock_path)
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    lock.lock()
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    if peek_revision(path).is_some_and(|on_disk| on_disk > base_revision) {
+        return Ok(false);
+    }
+    save(path, portfolio)?;
+    Ok(true)
+    // The lock is released when `lock` is dropped.
+}
+
 /// Writes the portfolio atomically: the data goes to a temporary file in the
 /// same directory, is flushed to disk, and then replaces the real file, so a
 /// crash never leaves a half-written file behind.
@@ -280,5 +301,19 @@ mod tests {
 
         assert!(load(&path).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), newer);
+    }
+
+    #[test]
+    fn a_save_is_refused_when_the_file_on_disk_is_newer() {
+        let path = temp_dir("newer-lock").join("portfolio.json");
+        let mut newer = Portfolio::default();
+        newer.revision = 5;
+        save(&path, &newer).unwrap();
+
+        let mut stale = Portfolio::default();
+        stale.revision = 3;
+        assert_eq!(save_unless_newer(&path, &stale, 2), Ok(false));
+        assert_eq!(peek_revision(&path), Some(5), "the newer file is kept");
+        assert_eq!(save_unless_newer(&path, &newer, 5), Ok(true));
     }
 }

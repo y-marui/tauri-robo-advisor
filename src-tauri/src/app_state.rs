@@ -271,11 +271,12 @@ impl AppState {
         next: Portfolio,
     ) -> Result<PortfolioView, String> {
         let base_revision = guard.as_ref().map_err(Clone::clone)?.revision;
-        if store::peek_revision(&disk.path).is_some_and(|on_disk| on_disk > base_revision) {
+        // The check and the replacement happen under a lock on the folder, so two instances
+        // cannot both pass the check and then overwrite each other.
+        if !store::save_unless_newer(&disk.path, &next, base_revision)? {
             disk.seen = None; // read the newer file on the next look
             return Err(CHANGED_ELSEWHERE.to_owned());
         }
-        store::save(&disk.path, &next)?;
         disk.seen = store::fingerprint(&disk.path);
         let view = PortfolioView::new(&next, self.data_info(disk));
         *guard = Ok(next);
@@ -304,15 +305,21 @@ impl AppState {
         };
         let target = target_dir.join(DATA_FILE);
         if target != disk.path {
-            if store::fingerprint(&target).is_some() {
+            // The data in memory is replaced only after the pointer is written, so a failure
+            // leaves the old file and the old data exactly as they were.
+            let adopted = if store::fingerprint(&target).is_some() {
                 if !use_existing {
                     return Err(FOLDER_HAS_DATA.to_owned());
                 }
-                *guard = Ok(store::load(&target)?);
+                Some(store::load(&target)?)
             } else {
                 store::save(&target, guard.as_ref().map_err(Clone::clone)?)?;
-            }
+                None
+            };
             data_folder::write_pointer(&self.app_data, folder.as_deref())?;
+            if let Some(portfolio) = adopted {
+                *guard = Ok(portfolio);
+            }
             disk.path = target;
             disk.seen = store::fingerprint(&disk.path);
             disk.warning = None;
