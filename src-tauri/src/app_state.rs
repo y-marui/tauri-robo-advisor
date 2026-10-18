@@ -82,12 +82,20 @@ fn refresh(portfolio: &mut Result<Portfolio, String>, disk: &mut Disk) {
     match store::load(&disk.path) {
         Ok(on_disk) => {
             disk.warning = None;
-            let newer = match portfolio {
-                Ok(current) => on_disk.revision > current.revision,
-                Err(_) => true,
-            };
-            if newer {
-                *portfolio = Ok(on_disk);
+            match portfolio {
+                Ok(current) if on_disk.revision > current.revision => *portfolio = Ok(on_disk),
+                // Two computers saved the same revision before their files were exchanged:
+                // the file that arrived is taken (what is in memory was already saved by
+                // this computer, so nothing is unsaved), and the user is told.
+                Ok(current) if on_disk.revision == current.revision && on_disk != *current => {
+                    *portfolio = Ok(on_disk);
+                    disk.warning = Some(
+                        "two computers saved at the same time; the other version was loaded, so please check your latest change"
+                            .to_owned(),
+                    );
+                }
+                Ok(_) => {}
+                Err(_) => *portfolio = Ok(on_disk),
             }
         }
         Err(error) => disk.warning = Some(error),
@@ -1417,5 +1425,22 @@ mod tests {
             .unwrap();
         assert!(state.apply_fetch_all().is_err());
         assert!(held(&state, main).is_empty());
+    }
+
+    #[test]
+    fn a_file_with_the_same_revision_but_other_content_is_taken_and_reported() {
+        let path = temp_path("divergent");
+        let a = AppState::load(path.clone());
+        a.apply(add_account("From A")).unwrap();
+        // Another computer saved its own revision 1, and that file replaces this one (a sync).
+        let other = temp_path("divergent-other");
+        let c = AppState::load(other.clone());
+        c.apply(add_account("From C")).unwrap();
+        std::fs::copy(&other, &path).unwrap();
+
+        let view = a.view().unwrap();
+
+        assert_eq!(account_names(&a), vec!["From C"]);
+        assert!(view.data.warning.is_some());
     }
 }
