@@ -1,20 +1,23 @@
 //! Finds a Chromium-based browser (Chrome, Edge, or Brave), starts it with a
 //! profile of its own, and reads pages through the DevTools protocol.
 //!
-//! The user logs in by hand in that browser. This crate never types, clicks, or
-//! stores a credential: it only asks the browser which pages are open and runs
-//! a fixed read-only script in one of them. The connection is on this computer
+//! The user logs in by hand in that browser. This crate never types or stores a
+//! credential. It asks the browser which pages are open, runs fixed read-only
+//! scripts in one of them, and may follow a plain link to show another page
+//! (see `links`); it never submits anything. The connection is on this computer
 //! only, and no driver program (chromedriver) is needed.
 
 mod cdp;
 mod detect;
 mod error;
 mod launch;
+mod links;
 
-pub use cdp::{Cdp, Page};
+pub use cdp::{Cdp, Followed, Page};
 pub use detect::{Found, Kind, Os, candidate_paths, find_browsers, find_with};
-pub use error::Error;
+pub use error::{Error, LinkChoice};
 pub use launch::{Endpoint, parse_active_port, start};
+pub use links::{fingerprint, link_text_allowed, normalize_href};
 
 #[cfg(test)]
 mod tests;

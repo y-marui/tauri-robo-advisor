@@ -27,11 +27,13 @@ pub fn load(path: &Path) -> Result<Portfolio, String> {
     }
     let bytes =
         fs::read(path).map_err(|e| format!("Could not read the data file ({}).", e.kind()))?;
-    let portfolio: Portfolio = serde_json::from_slice(&bytes)
+    let mut portfolio: Portfolio = serde_json::from_slice(&bytes)
         .map_err(|_| "The data file is not valid; it was left untouched.".to_owned())?;
     portfolio
         .validate_integrity()
         .map_err(|e| format!("{e}; the data file was left untouched."))?;
+    // An older file is read as it is and saved as the current version.
+    portfolio.schema_version = portfolio.schema_version.max(portfolio::SCHEMA_VERSION);
     Ok(portfolio)
 }
 
@@ -223,5 +225,36 @@ mod tests {
 
         assert!(!error.contains("secret-holding-name"));
         assert!(!error.contains(dir.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn a_version_1_file_loads_and_is_saved_as_the_current_version() {
+        let dir = temp_dir("v1");
+        let path = dir.join("portfolio.json");
+        fs::write(&path, br#"{"schema_version":1,"next_id":1}"#).unwrap();
+
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.schema_version, portfolio::SCHEMA_VERSION);
+        save(&path, &loaded).unwrap();
+
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains(&format!(
+            "\"schema_version\": {}",
+            portfolio::SCHEMA_VERSION
+        )));
+    }
+
+    #[test]
+    fn a_file_from_a_newer_version_is_refused_and_left_untouched() {
+        let dir = temp_dir("v-newer");
+        let path = dir.join("portfolio.json");
+        let newer = format!(
+            r#"{{"schema_version":{},"next_id":1}}"#,
+            portfolio::SCHEMA_VERSION + 1
+        );
+        fs::write(&path, &newer).unwrap();
+
+        assert!(load(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), newer);
     }
 }

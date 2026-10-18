@@ -8,6 +8,8 @@ export interface Context {
   apply(edit: Edit): Promise<boolean>;
   /** Shows a message without sending anything. */
   fail(message: string): void;
+  /** Takes a new state that did not come from an edit (for example after the data folder changed). */
+  setView(view: PortfolioView, message: string): void;
 }
 
 /** Copies the current state into a control, unless the user is typing in it. */
