@@ -88,6 +88,21 @@ pub fn save_unless_newer(
     // The lock is released when `lock` is dropped.
 }
 
+/// Saves only if there is no data file yet, checked under the same lock; returns `Ok(false)`
+/// when one has appeared (for example from another computer), leaving it untouched.
+pub fn save_if_absent(path: &Path, portfolio: &Portfolio) -> Result<bool, String> {
+    let lock_path = path.with_extension("json.lock");
+    let lock = create_private(&lock_path)
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    lock.lock()
+        .map_err(|e| format!("Could not lock the data file ({}).", e.kind()))?;
+    if path.exists() {
+        return Ok(false);
+    }
+    save(path, portfolio)?;
+    Ok(true)
+}
+
 /// Writes the portfolio atomically: the data goes to a temporary file in the
 /// same directory, is flushed to disk, and then replaces the real file, so a
 /// crash never leaves a half-written file behind.

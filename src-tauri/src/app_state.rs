@@ -76,6 +76,7 @@ fn refresh(portfolio: &mut Result<Portfolio, String>, disk: &mut Disk) {
     }
     disk.seen = now;
     if now.is_none() {
+        disk.warning = None; // the bad file is gone
         return;
     }
     match store::load(&disk.path) {
@@ -278,6 +279,7 @@ impl AppState {
             return Err(CHANGED_ELSEWHERE.to_owned());
         }
         disk.seen = store::fingerprint(&disk.path);
+        disk.warning = None;
         let view = PortfolioView::new(&next, self.data_info(disk));
         *guard = Ok(next);
         Ok(view)
@@ -318,7 +320,11 @@ impl AppState {
                 }
                 Some(store::load(&target)?)
             } else {
-                store::save(&target, guard.as_ref().map_err(Clone::clone)?)?;
+                // Created only if still absent (checked under the lock): a file that arrived
+                // meanwhile is not replaced without the confirmation.
+                if !store::save_if_absent(&target, guard.as_ref().map_err(Clone::clone)?)? {
+                    return Err(FOLDER_HAS_DATA.to_owned());
+                }
                 None
             };
             data_folder::write_pointer(&self.app_data, folder.as_deref())?;
