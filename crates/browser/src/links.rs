@@ -40,7 +40,15 @@ const ACTION_TEXT: &[&str] = &[
     "submit",
     "confirm",
     "logout",
+    "log out",
+    "log-out",
+    "logoff",
+    "log off",
     "sign out",
+    "sign-out",
+    "signoff",
+    "ログオフ",
+    "サインアウト",
     "change",
     "update",
     "save",
@@ -233,7 +241,13 @@ fn percent_decoded(text: &str) -> String {
 /// else it says; an order or money word is excused only by a view word in the same part.
 fn part_looks_read_only(part: &str) -> bool {
     let lower = part.to_lowercase();
+    // Separators are dropped so that `log-out`, `log_out` and `sign.out` read as one word.
+    let compact: String = lower
+        .chars()
+        .filter(|c| !matches!(c, '-' | '_' | '.' | ' '))
+        .collect();
     let action = mentions(&lower, ACTION_HREF)
+        || mentions(&compact, ACTION_HREF)
         || lower
             .split(|c: char| !c.is_alphanumeric())
             .any(|word| ACTION_HREF_AT_START.iter().any(|w| word.starts_with(w)));
@@ -438,6 +452,16 @@ mod tests {
                 Err(Error::LinkRefused),
                 "an action word is not excused by a view word: {mixed}"
             );
+        }
+        for out in [
+            "Log out",
+            "Log-out",
+            "Sign-out",
+            "Logoff",
+            "ログオフ",
+            "サインアウト",
+        ] {
+            assert_eq!(link_text_allowed(out), Err(Error::LinkRefused), "{out}");
         }
         for ja in ["買う", "売る", "今すぐ買う"] {
             assert_eq!(link_text_allowed(ja), Err(Error::LinkRefused), "{ja}");
