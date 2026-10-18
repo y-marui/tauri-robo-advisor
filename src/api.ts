@@ -13,6 +13,7 @@ import type {
   Overview,
   ColumnMapping,
   PortfolioView,
+  Recipe,
   RecipeOutcome,
   RecipeRun,
   TableImportPlan,
@@ -40,6 +41,14 @@ export function exportAll(): Promise<string> {
  */
 export function applyEdit(edit: Edit): Promise<PortfolioView> {
   return invoke<PortfolioView>("apply_portfolio_edit", { edit });
+}
+
+/**
+ * Sets (or clears) the saved reference of one link, only if the recipe is still the
+ * one given; Rust checks and writes under one lock.
+ */
+export function setLinkReference(recipe: Recipe, link: number, reference: string | null): Promise<PortfolioView> {
+  return invoke<PortfolioView>("set_link_reference", { recipe, link, reference });
 }
 
 /** Values every category in JPY for the balance charts. */

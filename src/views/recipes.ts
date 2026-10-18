@@ -1,4 +1,4 @@
-import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, runRecipe } from "../api.ts";
+import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, runRecipe, setLinkReference } from "../api.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t } from "../i18n.ts";
@@ -55,17 +55,15 @@ export function recipesPanel(ctx: Context): Panel {
     }
     const link = recipe.links[outcome.link];
     const saveReference = async (reference: string | null): Promise<void> => {
-      // Only the link's reference is changed, and only if the recipe is still the one that
+      // Rust changes only this link's reference, and only if the recipe is still the one that
       // produced this question: an edit made meanwhile must not be put back.
-      const latest = current?.portfolio.recipes.find((r) => r.name === recipe.name);
-      if (!latest || JSON.stringify(latest) !== JSON.stringify(recipe)) {
-        fail(t("The recipe was changed or removed in the meantime. Fetch again."));
+      try {
+        ctx.setView(await setLinkReference(recipe, outcome.link, reference), t("Saved."));
+      } catch (error) {
+        fail(String(error));
         return;
       }
-      const links = latest.links.map((l, i) => (i === outcome.link ? { ...l, reference } : l));
-      if (await ctx.apply({ type: "set_recipe", recipe: { ...latest, links } })) {
-        await runAll([recipe.name]);
-      }
+      await runAll([recipe.name]);
     };
     if (outcome.status === "link_changed") {
       const again = h("button", { type: "button" }, t("Choose the link again"));

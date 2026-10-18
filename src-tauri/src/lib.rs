@@ -251,6 +251,19 @@ async fn fetch_all_plan(state: State<'_, Arc<AppState>>) -> Result<Vec<RecipeRun
 }
 
 #[tauri::command]
+async fn set_link_reference(
+    state: State<'_, Arc<AppState>>,
+    recipe: portfolio::Recipe,
+    link: usize,
+    reference: Option<String>,
+) -> Result<PortfolioView, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.set_link_reference(&recipe, link, reference))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn apply_fetch_all(state: State<'_, Arc<AppState>>) -> Result<PortfolioView, String> {
     let state = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || state.apply_fetch_all())
@@ -355,6 +368,7 @@ pub fn run() {
             plan_table_import,
             run_recipe,
             fetch_all_plan,
+            set_link_reference,
             apply_fetch_all,
             clear_fetch_runs,
             list_browsers,

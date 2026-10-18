@@ -270,6 +270,45 @@ impl AppState {
             .ok_or_else(|| "That recipe does not exist.".to_owned())
     }
 
+    /// Saves `new` in place of the recipe `expected` only if the stored recipe is still
+    /// exactly `expected`; the check and the write are made under one lock, so an edit
+    /// made meanwhile is never put back and a recipe removed meanwhile is never recreated.
+    fn replace_recipe_if_unchanged(
+        &self,
+        expected: &Recipe,
+        new: Recipe,
+    ) -> Result<PortfolioView, String> {
+        let mut guard = self.lock()?;
+        let mut next = guard.as_ref().map_err(Clone::clone)?.clone();
+        if !next.recipes.iter().any(|r| r == expected) {
+            return Err(
+                "The recipe was changed or removed in the meantime. Fetch again.".to_owned(),
+            );
+        }
+        next.apply(Edit::SetRecipe { recipe: new })
+            .map_err(|e| e.to_string())?;
+        store::save(&self.path, &next)?;
+        let view = PortfolioView::new(&next);
+        *guard = Ok(next);
+        Ok(view)
+    }
+
+    /// Sets (or clears) the saved reference of one link of a recipe, if the recipe is still
+    /// the one the question was asked about.
+    pub fn set_link_reference(
+        &self,
+        expected: &Recipe,
+        link: usize,
+        reference: Option<String>,
+    ) -> Result<PortfolioView, String> {
+        let mut new = expected.clone();
+        new.links
+            .get_mut(link)
+            .ok_or_else(|| "That link does not exist.".to_owned())?
+            .reference = reference;
+        self.replace_recipe_if_unchanged(expected, new)
+    }
+
     /// Follows the recipe's links in the browser, reads its table, and keeps the
     /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
     /// without a saved reference gets one now, so the same link is found next time.
@@ -290,18 +329,16 @@ impl AppState {
         };
 
         // Only fill in the references if the recipe is still the one that ran: an edit made
-        // while the page was being read must not be put back the way it was.
-        let unchanged = self.recipe(name).ok().as_ref() == Some(&recipe);
-        if unchanged && recipe.links.iter().any(|l| l.reference.is_none()) {
+        // while the page was being read must not be put back the way it was. The check and
+        // the write happen under one lock.
+        if recipe.links.iter().any(|l| l.reference.is_none()) {
             let mut learned = recipe.clone();
             for (link, reference) in learned.links.iter_mut().zip(references) {
                 link.reference.get_or_insert(reference);
             }
             // Best effort: the run itself does not depend on it being saved.
             if self
-                .apply(Edit::SetRecipe {
-                    recipe: learned.clone(),
-                })
+                .replace_recipe_if_unchanged(&recipe, learned.clone())
                 .is_ok()
             {
                 recipe = learned;
@@ -928,5 +965,46 @@ mod tests {
             vec![(stock, rust_decimal::Decimal::from(9))],
             "untouched"
         );
+    }
+
+    #[test]
+    fn a_link_reference_is_saved_only_if_the_recipe_is_still_the_one_asked_about() {
+        use portfolio::FetchLink;
+        let (state, main, _, _, _) = recipe_state("reference");
+        let recipe = Recipe {
+            links: vec![FetchLink {
+                text: "List".to_owned(),
+                reference: None,
+            }],
+            ..domestic_recipe(main)
+        };
+        state
+            .apply(Edit::SetRecipe {
+                recipe: recipe.clone(),
+            })
+            .unwrap();
+
+        let view = state
+            .set_link_reference(&recipe, 0, Some("h:0123456789abcdef".to_owned()))
+            .unwrap();
+        assert_eq!(
+            view.portfolio.recipes[0].links[0].reference.as_deref(),
+            Some("h:0123456789abcdef")
+        );
+
+        // The same question again: the recipe has changed since, so nothing is written.
+        let error = state.set_link_reference(&recipe, 0, None).unwrap_err();
+        assert!(error.contains("changed or removed"));
+        assert!(state.set_link_reference(&recipe, 5, None).is_err());
+
+        // A removed recipe is never brought back.
+        let current = view.portfolio.recipes[0].clone();
+        state
+            .apply(Edit::RemoveRecipe {
+                name: current.name.clone(),
+            })
+            .unwrap();
+        assert!(state.set_link_reference(&current, 0, None).is_err());
+        assert!(state.view().unwrap().portfolio.recipes.is_empty());
     }
 }
