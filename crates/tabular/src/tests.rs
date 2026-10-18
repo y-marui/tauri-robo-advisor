@@ -508,6 +508,9 @@ fn loose_numbers_read_the_first_number_and_strict_ones_do_not() {
         "not a grouping"
     );
     assert_eq!(mapping::parse_amount_loose("5 items"), Some(dec!(5)));
+    assert_eq!(mapping::parse_amount_loose(".5US$"), Some(dec!(0.5)));
+    assert_eq!(mapping::parse_amount_loose("-.5US$"), Some(dec!(-0.5)));
+    assert_eq!(mapping::parse_amount_loose("US$ ．25"), Some(dec!(0.25)));
     assert_eq!(mapping::parse_amount_loose("no number"), None);
     assert_eq!(mapping::parse_amount_loose(""), None);
     assert_eq!(mapping::parse_amount("123.45US$"), None);

@@ -221,10 +221,19 @@ pub(crate) fn parse_amount_loose(text: &str) -> Option<Decimal> {
     let digit = |c: char| c.is_ascii_digit() || ('０'..='９').contains(&c);
     let start = chars.iter().position(|&c| digit(c))?;
     let mut token = String::new();
-    if start > 0 && matches!(chars[start - 1], '-' | '−' | '－' | '▲' | '△') {
+    let mut seen_point = false;
+    // A decimal point directly before the first digit (".5") is part of the number.
+    let mut sign_at = start;
+    if start > 0 && matches!(chars[start - 1], '.' | '．') {
+        seen_point = true;
+        sign_at = start - 1;
+    }
+    if sign_at > 0 && matches!(chars[sign_at - 1], '-' | '−' | '－' | '▲' | '△') {
         token.push('-');
     }
-    let mut seen_point = false;
+    if seen_point {
+        token.push_str("0.");
+    }
     let rest = &chars[start..];
     for (k, &c) in rest.iter().enumerate() {
         match c {
