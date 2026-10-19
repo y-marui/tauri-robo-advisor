@@ -855,6 +855,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         currency: "JPY".to_owned(),
         account,
         mapping: mapping_for(" SBI "),
+        all_tables: false,
     }
 }
 

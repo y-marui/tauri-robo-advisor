@@ -1,6 +1,7 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
+use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Funding,
@@ -128,6 +129,14 @@ pub enum Edit {
     },
     RemoveRecipe {
         name: String,
+    },
+    /// Adds a recipe that ships with the app (see `presets`) for an account. The recipe is an
+    /// ordinary one afterwards: the user can read it, change it, or remove it. A recipe of the
+    /// same name for the same account is replaced; for another account, the account's name is
+    /// added to the recipe's name.
+    AddPresetRecipe {
+        preset: String,
+        account: AccountId,
     },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
@@ -646,6 +655,29 @@ impl Portfolio {
                 }
             }
             Edit::SetRecipe { recipe } => {
+                let recipe = recipe.validated(self)?;
+                match self.recipes.iter_mut().find(|r| r.name == recipe.name) {
+                    Some(existing) => *existing = recipe,
+                    None => {
+                        if self.recipes.len() >= MAX_RECIPES {
+                            return Err(Error::Invalid("too many recipes".to_owned()));
+                        }
+                        self.recipes.push(recipe);
+                    }
+                }
+            }
+            Edit::AddPresetRecipe { preset, account } => {
+                let preset = Preset::find(preset.trim())
+                    .ok_or_else(|| Error::Invalid("that preset does not exist".to_owned()))?;
+                let mut recipe = preset.recipe(account);
+                let account_name = self.account(account)?.name.clone();
+                if self
+                    .recipes
+                    .iter()
+                    .any(|r| r.name == recipe.name && r.account != account)
+                {
+                    recipe.name = format!("{} ({})", recipe.name, account_name);
+                }
                 let recipe = recipe.validated(self)?;
                 match self.recipes.iter_mut().find(|r| r.name == recipe.name) {
                     Some(existing) => *existing = recipe,

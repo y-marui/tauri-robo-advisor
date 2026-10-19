@@ -10,6 +10,7 @@ mod edit;
 mod error;
 mod import;
 mod model;
+mod presets;
 mod validate;
 mod valuation;
 
@@ -17,6 +18,7 @@ pub use edit::{Edit, HoldingInput};
 pub use error::{Error, Issue};
 pub use import::{ImportPlan, ImportRow, MatchedRow};
 pub use model::*;
+pub use presets::{PresetInfo, presets};
 
 #[cfg(test)]
 mod tests;

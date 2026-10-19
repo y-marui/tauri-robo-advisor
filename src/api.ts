@@ -13,6 +13,7 @@ import type {
   Overview,
   ColumnMapping,
   PortfolioView,
+  PresetInfo,
   Recipe,
   RecipeOutcome,
   RecipeRun,
@@ -138,6 +139,11 @@ export function useFetchedTable(index: number): Promise<TablePreview> {
 
 export function closeBrowser(): Promise<void> {
   return invoke<void>("close_browser");
+}
+
+/** The recipes that ship with the app. */
+export function listPresets(): Promise<PresetInfo[]> {
+  return invoke<PresetInfo[]>("list_presets");
 }
 
 /** Follows the recipe's links in the browser and reads its table; the holdings are not changed. */

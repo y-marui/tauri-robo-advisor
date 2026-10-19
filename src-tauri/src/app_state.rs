@@ -561,9 +561,12 @@ impl AppState {
             runs.retain(|r| r.name != name);
             self.runs_generation.fetch_add(1, Ordering::SeqCst);
         }
-        let read = self
-            .browser
-            .run_recipe(page, &recipe.links, &recipe.table_starts_with)?;
+        let read = self.browser.run_recipe(
+            page,
+            &recipe.links,
+            &recipe.table_starts_with,
+            recipe.all_tables.then_some(recipe.mapping.header_rows),
+        )?;
         let (table, references) = match read {
             RecipeRead::NeedsChoice { link, choices } => {
                 return Ok(RecipeOutcome::NeedsChoice { link, choices });
@@ -1284,6 +1287,7 @@ mod tests {
                     name: "Domestic".to_owned(),
                     links: Vec::new(),
                     table_starts_with: "Stocks".to_owned(),
+                    all_tables: false,
                     currency: "JPY".to_owned(),
                     account: main,
                     mapping: ImportMapping {
@@ -1348,6 +1352,7 @@ mod tests {
             name: "Domestic".to_owned(),
             links: Vec::new(),
             table_starts_with: "Stocks".to_owned(),
+            all_tables: false,
             currency: "JPY".to_owned(),
             account,
             mapping: ImportMapping {
@@ -1561,5 +1566,135 @@ mod tests {
         assert_eq!(held[0].value, rust_decimal::Decimal::from(250));
         assert_eq!(held[0].quantity, Some(rust_decimal::Decimal::from(5)));
         assert_eq!(held[0].price, Some(rust_decimal::Decimal::from(50)));
+    }
+
+    #[test]
+    fn the_shipped_presets_are_valid_recipes_with_links_the_app_may_follow() {
+        let (state, main, _, _, _) = recipe_state("presets");
+        for preset in portfolio::presets() {
+            state
+                .apply(Edit::AddPresetRecipe {
+                    preset: preset.id.to_owned(),
+                    account: main,
+                })
+                .unwrap();
+        }
+        let recipes = state.view().unwrap().portfolio.recipes;
+        assert_eq!(recipes.len(), portfolio::presets().len());
+        for recipe in &recipes {
+            assert!(recipe.all_tables);
+            for link in &recipe.links {
+                assert_eq!(
+                    browser::link_text_allowed(&link.text),
+                    Ok(()),
+                    "{}",
+                    link.text
+                );
+            }
+        }
+        // The same preset again replaces it; for another account the name carries the account.
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "sbi-funds".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        assert_eq!(state.view().unwrap().portfolio.recipes.len(), recipes.len());
+        let (_, other) = {
+            let v = state.view().unwrap();
+            (v.portfolio.accounts[0].id, v.portfolio.accounts[1].id)
+        };
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "sbi-funds".to_owned(),
+                account: other,
+            })
+            .unwrap();
+        let after = state.view().unwrap().portfolio.recipes;
+        assert_eq!(after.len(), recipes.len() + 1);
+        assert!(after.iter().any(|r| r.name.contains("Other")));
+        assert!(
+            state
+                .apply(Edit::AddPresetRecipe {
+                    preset: "nope".to_owned(),
+                    account: main,
+                })
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_preset_reads_a_page_laid_out_like_the_real_one() {
+        // A made-up page with the layout of the real tables: a title row, a heading row, then two
+        // rows per holding (a name row, then quantity, cost, price, profit).
+        let table = |title: &str,
+                     headings: [&str; 4],
+                     first: (&str, &str, &str),
+                     second: (&str, &str, &str)| {
+            let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
+            vec![
+                row(&[title, "", "", ""]),
+                row(&headings),
+                row(&[first.0, "", "Buttons", ""]),
+                row(&[first.1, "100", first.2, "+5"]),
+                row(&[second.0, "", "Buttons", ""]),
+                row(&[second.1, "50", second.2, "+1"]),
+            ]
+        };
+        let a = table(
+            "Stocks A",
+            ["Quantity", "Cost", "Price", "Profit"],
+            ("1111 Alpha", "10", "12.50"),
+            ("2222 Beta", "3", "100"),
+        );
+        let b = table(
+            "Stocks B",
+            ["Quantity", "Cost", "Price", "Profit"],
+            ("3333 Gamma", "2", "1,000"),
+            ("4444 Delta", "1", "7"),
+        );
+        let (state, main, _, _, _) = recipe_state("preset-page");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "sbi-domestic-stocks".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        let recipe = state.view().unwrap().portfolio.recipes[0].clone();
+        let mut rows = a.clone();
+        rows.extend(b.into_iter().skip(recipe.mapping.header_rows));
+        let table = tabular::from_rows(rows).unwrap();
+
+        let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
+
+        let got: Vec<(String, String, String)> = result
+            .rows
+            .iter()
+            .map(|r| {
+                (
+                    r.name.clone(),
+                    r.value.to_string(),
+                    r.price.map_or(String::new(), |p| p.to_string()),
+                )
+            })
+            .collect();
+        assert_eq!(result.skipped, vec![]);
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "1111 Alpha".to_owned(),
+                    "125.00".to_owned(),
+                    "12.50".to_owned()
+                ),
+                ("2222 Beta".to_owned(), "300".to_owned(), "100".to_owned()),
+                (
+                    "3333 Gamma".to_owned(),
+                    "2000".to_owned(),
+                    "1000".to_owned()
+                ),
+                ("4444 Delta".to_owned(), "7".to_owned(), "7".to_owned()),
+            ]
+        );
     }
 }

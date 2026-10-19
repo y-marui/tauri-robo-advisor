@@ -287,6 +287,9 @@ export const MESSAGES = {
   "The data file was changed on another computer. It has been reloaded; please try again.": {
     ja: "データファイルが、別のコンピューターで変更されました。読み込み直したので、もう一度操作してください。",
   },
+  "Preset": { ja: "組み込みのレシピ" },
+  "Add the preset": { ja: "追加する" },
+  "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },
   "Fetch recipes": { ja: "取得レシピ" },
   "The recipe was changed or removed in the meantime. Fetch again.": {
     ja: "その間に、レシピが変更または削除されました。もう一度取得してください。",

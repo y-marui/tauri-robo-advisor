@@ -1,9 +1,9 @@
-import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, runRecipe, setLinkReference } from "../api.ts";
+import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, listPresets, runRecipe, setLinkReference } from "../api.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
-import type { BrowserPage, PortfolioView, Recipe, RecipeRun } from "../types.ts";
+import type { BrowserPage, PortfolioView, PresetInfo, Recipe, RecipeRun } from "../types.ts";
 import { importPlanView } from "./import-plan.ts";
 
 // Saved fetch recipes: after the user has logged in to the browser opened by the
@@ -23,6 +23,33 @@ export function recipesPanel(ctx: Context): Panel {
   const message = h("p", { class: "note", role: "status" });
   const attention = h("div", { class: "recipe-attention" });
   const results = h("div", { class: "recipe-results", "aria-live": "polite" });
+
+  // Recipes that ship with the app: pick one and an account, and it is added as an ordinary recipe.
+  const presetSelect = h("select", { "aria-label": t("Preset") });
+  const presetAccount = h("select", { "aria-label": t("Account to update") });
+  const presetAdd = h("button", { type: "button" }, t("Add the preset"));
+  const presetNote = h("p", { class: "note" });
+  let presets: PresetInfo[] = [];
+  let presetAccountsSignature = "";
+  const showPresetNote = (): void => {
+    presetNote.textContent = presets.find((p) => p.id === presetSelect.value)?.description ?? "";
+  };
+  presetSelect.addEventListener("change", showPresetNote);
+  presetAdd.addEventListener("click", () => {
+    const account = Number(presetAccount.value);
+    if (presetSelect.value === "" || presetAccount.value === "" || !Number.isFinite(account)) {
+      fail(t("Choose a preset and an account first."));
+      return;
+    }
+    void ctx.apply({ type: "add_preset_recipe", preset: presetSelect.value, account });
+  });
+  void listPresets()
+    .then((found) => {
+      presets = found;
+      presetSelect.replaceChildren(...found.map((p) => h("option", { value: p.id }, p.label)));
+      showPresetNote();
+    })
+    .catch(() => undefined);
 
   let current: PortfolioView | null = null;
   let hasRuns = false;
@@ -272,6 +299,8 @@ export function recipesPanel(ctx: Context): Panel {
       t("After you log in to the browser opened by the app, “Fetch everything” follows each recipe’s links (they only show other pages), reads its table, and shows the result of all of them. Nothing changes until you confirm."),
     ),
     list,
+    h("div", { class: "add-row" }, presetSelect, presetAccount, presetAdd),
+    presetNote,
     h("div", { class: "add-row" }, pageSelect, refreshButton, runButton),
     message,
     attention,
@@ -286,6 +315,15 @@ export function recipesPanel(ctx: Context): Panel {
     render(view) {
       current = view;
       renderList(view);
+      const accountsSignature = view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join("|");
+      if (accountsSignature !== presetAccountsSignature) {
+        presetAccountsSignature = accountsSignature;
+        const previous = presetAccount.value;
+        presetAccount.replaceChildren(...view.portfolio.accounts.map((a) => h("option", { value: String(a.id) }, a.name)));
+        presetAccount.value = view.portfolio.accounts.some((a) => String(a.id) === previous)
+          ? previous
+          : String(view.portfolio.accounts[0]?.id ?? "");
+      }
       // An alias was linked or removed, or a recipe changed: show the plans again.
       if (hasRuns) {
         // The result on screen is out of date until the plans are made again: it cannot be applied.

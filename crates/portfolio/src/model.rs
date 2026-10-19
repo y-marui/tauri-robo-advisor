@@ -205,6 +205,10 @@ pub struct Recipe {
     #[serde(default)]
     pub links: Vec<FetchLink>,
     pub table_starts_with: String,
+    /// Read every table whose first cell starts with `table_starts_with` (one table per kind of
+    /// account on a page) and put their rows together; off: exactly one table must match.
+    #[serde(default)]
+    pub all_tables: bool,
     pub currency: String,
     pub account: AccountId,
     pub mapping: ImportMapping,
