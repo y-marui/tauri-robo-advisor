@@ -140,7 +140,11 @@ export function recipesPanel(ctx: Context): Panel {
     const pageFor = (recipe: Recipe): string | null => {
       if (recipe.start_site) {
         const site = recipe.start_site;
-        return open.find((p) => p.host === site || p.host.endsWith(`.${site}`))?.id ?? null;
+        const within = (p: BrowserPage): boolean => p.host === site || p.host.endsWith(`.${site}`);
+        // With several tabs of the same site, the one chosen on the screen wins (the list of
+        // holdings of a site that cannot be navigated is the page the user opened).
+        const chosen = open.find((p) => p.id === pageSelect.value && within(p));
+        return (chosen ?? open.find(within))?.id ?? null;
       }
       return pageSelect.value === "" ? null : pageSelect.value;
     };
