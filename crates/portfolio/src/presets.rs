@@ -54,6 +54,11 @@ pub struct PresetInfo {
     pub id: &'static str,
     pub label: &'static str,
     pub description: &'static str,
+    /// What identifies the recipe of this preset (the same fields `AddPresetRecipe` uses to
+    /// find an existing one), so the screen can tell which recipe came from which preset.
+    pub table_starts_with: &'static str,
+    pub source: &'static str,
+    pub links: &'static [&'static str],
 }
 
 /// SBI Securities: every table is a title row, a heading row, then two rows per holding (a row
@@ -170,6 +175,9 @@ pub fn presets() -> Vec<PresetInfo> {
             id: p.id,
             label: p.label,
             description: p.description,
+            table_starts_with: p.table_starts_with,
+            source: p.layout.source,
+            links: p.links,
         })
         .collect()
 }

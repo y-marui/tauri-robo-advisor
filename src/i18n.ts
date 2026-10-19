@@ -26,7 +26,6 @@ export const MESSAGES = {
   "Weight": { ja: "比率" },
   "Type": { ja: "種別" },
   "Sellable": { ja: "売却可" },
-  "Funding": { ja: "原資" },
   "Rounding unit": { ja: "丸め単位" },
   "Can buy": { ja: "買える商品" },
   "Any product": { ja: "すべての商品" },
@@ -328,6 +327,8 @@ export const MESSAGES = {
   "Open the page 取引余力・預り資産 of Daiwa Connect Securities after logging in, then fetch: the yen balance (金銭残高) is read.": {
     ja: "ログイン後に、大和コネクト証券の「取引余力・預り資産」のページを開いてから取得します。円の残高（金銭残高）を読みます。",
   },
+  "Move up": { ja: "上へ" },
+  "Move down": { ja: "下へ" },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },

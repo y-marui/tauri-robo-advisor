@@ -10,7 +10,6 @@ export type AccountKind =
   | "crypto"
   | "deposit"
   | "other";
-export type Funding = "cash" | "points";
 
 export interface Category {
   id: number;
@@ -35,7 +34,6 @@ export interface Account {
   sellable: boolean;
   /** `null` means the account can buy any product. */
   tradable: number[] | null;
-  funding: Funding;
   rounding_unit: string;
 }
 
@@ -112,6 +110,10 @@ export interface PresetInfo {
   id: string;
   label: string;
   description: string;
+  /** What identifies the recipe of the preset (the same fields the backend matches on). */
+  table_starts_with: string;
+  source: string;
+  links: string[];
 }
 
 export interface Settings {
@@ -187,11 +189,11 @@ export type Edit =
       name?: string;
       kind?: AccountKind;
       sellable?: boolean;
-      funding?: Funding;
       rounding_unit?: string;
     }
   | { type: "set_tradable"; id: number; products: number[] | null }
   | { type: "remove_account"; id: number }
+  | { type: "move_account"; id: number; up: boolean }
   | {
       type: "set_holding";
       account: number;

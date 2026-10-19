@@ -4,12 +4,15 @@
 
 ### Changed
 
+- The funding of an account (cash or points) is gone: nothing used it, and it does not matter which a purchase is paid with. The Accounts card, the data, and `accounts.csv` no longer have it. Schema version 7; an older app refuses such a file.
+- The account choice of a preset starts on the account that its recipe already has, or on "---" (nothing chosen); the add button needs a real account.
 - The rounding unit of a new account now defaults to 1 yen (it was 1,000 yen), since many investment trusts can be bought in 1 yen steps. Existing accounts keep the unit they have, and it can still be changed per account.
 - The app identifier is now `y.marui.Robo-Advisor`, in the same form as the Swift apps (`y.marui.<App-Name>`). The data folder (and the default browser profile inside it) moves to `~/Library/Application Support/y.marui.Robo-Advisor` on macOS; a portfolio file or browser profile in the old `dev.marui.robo-advisor` folder is not read any more and has to be moved by hand. The keychain service name for the bitFlyer key is unchanged, so a saved key keeps working.
 
 ### Added
 
 - Daiwa Connect Securities cash preset (#37): open the page 取引余力・預り資産 after logging in and fetch; the yen balance (金銭残高) is read and linked by name to a yen product. A mapping can now limit the records read from the top of a table (`max_records`), so the valuations and the total that follow the balance are not read. Schema version 6.
+- Reorder accounts: up and down buttons in the Accounts card move an account in the list (`MoveAccount`); the order is used by the tabs, the tables, and the choices. At an end nothing changes.
 - Edit names and categories in the holdings table: the name of a category (in its heading row), and the name and the category of a product (in its row) can be changed in place; changing the category moves the product to its new group. The same edits existed in the Categories and Products cards further down, which were hard to find.
 - Make a product from an unmatched name (#37): in the result of an import, each name that has no product yet has a name field (the imported name), a category, a currency (the one the table was imported in, or another), and one button that creates the product and links the name to it in a single step (`AddProductWithAlias`; both or neither). The recipes card says to add an account first when there is none, and the import says to add a category first when there is none.
 - Open the login pages (#37): a button in the recipes card opens the login page of each site that a recipe reads (SBI Securities, Daiwa Connect Securities so far; the addresses are data of the presets) in a new tab of the browser the app opened, unless a tab of that site is already open. The browser only goes to the address: nothing is typed, clicked, or submitted, and the person logs in by hand. Only plain `https://host/...` addresses are opened.

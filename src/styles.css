@@ -464,3 +464,9 @@ textarea {
   width: 100%;
   box-sizing: border-box;
 }
+
+.order {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 6px;
+}
