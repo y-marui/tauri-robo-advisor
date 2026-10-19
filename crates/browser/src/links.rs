@@ -299,6 +299,26 @@ pub fn origin_of(address: &str) -> String {
     }
 }
 
+/// Which page an address is, for telling whether a tab is still on the page a batch started
+/// from: the scheme, host, port, and path, without the query, the fragment, or the `;` parameters
+/// of each path segment (some sites carry a session identifier there, which changes between
+/// visits). Another path, host, or port is another page. An address that is not of the form
+/// `scheme://...` gives an empty text, which is never the same page as anything but itself.
+pub fn page_identity(address: &str) -> String {
+    let origin = origin_of(address);
+    if origin.is_empty() {
+        return String::new();
+    }
+    let rest = &address[origin.len()..];
+    let end = rest.find(['?', '#']).unwrap_or(rest.len());
+    let path = rest[..end]
+        .split('/')
+        .map(|segment| segment.split_once(';').map_or(segment, |(name, _)| name))
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("{origin}{path}")
+}
+
 /// Whether an address may be opened as a login page: plain `https://host/...` (no user name,
 /// port, white space, control character, or back slash), not too long.
 pub fn login_url_ok(url: &str) -> bool {
@@ -674,6 +694,33 @@ pub(crate) const FIRST_HEADING: &str = r#"(() => {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_page_is_the_same_page_whatever_its_session_parameter_query_or_fragment() {
+        let a = page_identity("https://h.example/app/home.do;sid=AAA?x=1&y=2#top");
+        assert_eq!(a, "https://h.example/app/home.do");
+        assert_eq!(
+            page_identity("https://h.example/app/home.do;sid=BBB?x=9"),
+            a
+        );
+        assert_eq!(page_identity("https://h.example/app/home.do"), a);
+        // A parameter on a middle segment is dropped too, and the path below it is kept.
+        assert_eq!(
+            page_identity("https://h.example/a;p=1/b.do?q"),
+            "https://h.example/a/b.do"
+        );
+        // Another path, host, port, or scheme is another page.
+        for other in [
+            "https://h.example/app/other.do",
+            "https://h.example/app/home.do/",
+            "https://i.example/app/home.do",
+            "https://h.example:8443/app/home.do",
+            "http://h.example/app/home.do",
+        ] {
+            assert_ne!(page_identity(other), a, "{other}");
+        }
+        assert_eq!(page_identity("about:blank"), "");
+    }
 
     #[test]
     fn plain_view_links_are_allowed() {

@@ -54,6 +54,10 @@ pub struct Preset {
     /// The page where the person logs in (the app only opens it; nothing is typed). One per
     /// company: it belongs to the preset of the company's first entry.
     login_url: &'static str,
+    /// The currency of the values the page shows, when it is known (a page that shows every
+    /// valuation in yen); empty means the currency of the product a name is linked to. A name
+    /// linked to a product in another currency is then reported, not imported.
+    currency: &'static str,
     layout: Layout,
 }
 
@@ -102,6 +106,7 @@ const PRESETS: &[Preset] = &[
         start_site: "sbisec.co.jp",
         following_tables: false,
         login_url: "https://www.sbisec.co.jp/ETGate",
+        currency: "",
         layout: sbi_layout(1),
     },
     Preset {
@@ -115,6 +120,7 @@ const PRESETS: &[Preset] = &[
         start_site: "sbisec.co.jp",
         following_tables: false,
         login_url: "https://www.sbisec.co.jp/ETGate",
+        currency: "",
         layout: sbi_layout(10_000),
     },
     // Monex Securities, the page 保有残高・口座管理. The page the person lands on after logging in
@@ -136,6 +142,7 @@ const PRESETS: &[Preset] = &[
         start_site: "monex.co.jp",
         following_tables: false,
         login_url: "https://www.monex.co.jp/",
+        currency: "",
         layout: Layout {
             source: "Monex",
             name_column: 0,
@@ -151,26 +158,30 @@ const PRESETS: &[Preset] = &[
             max_records: None,
         },
     },
-    // Rakuten Securities, the investment trust holdings list: the page of the member site that
-    // the top page links to with a plain link on the same host (the pages of the company are
-    // spread over several hosts). The holdings are one table whose cells hold small tables (the
-    // amounts), so it is an outer table (see `browser::PageTables`) and is found by its heading
-    // cells. After a heading row, a holding is two rows: the data row (a cell for a mark, name,
-    // account type, units, cost, price, evaluation, profit, and a last cell; the cost, the price,
-    // and the evaluation cells hold two lines, and the first line is the amount) and a row with a
-    // note. Only the evaluation (first line of its cell) and the units are read: "9,999円",
-    // "9,999口" are numbers with a unit.
+    // Rakuten Securities, the page 保有商品一覧-すべて (all holdings): the top page after logging in
+    // links to it with a plain link on the same host (the pages of the company are spread over
+    // several hosts). The holdings of every kind are one table, found by its heading cells (its
+    // cells are outer-table cells: some hold small tables, see `browser::PageTables`). After the
+    // heading row, a holding is one visible row: the kind, name, account type, units, cost, price,
+    // and a cell with the evaluation (first line) and the profit. The page also has a summary
+    // table by kind with hidden detail rows, which does not start with the same cells. Only the
+    // evaluation (first number of its cell) and the units are read; "9,999円" and "9,999口" are
+    // numbers with a unit. The page shows amounts in yen; a holding in a foreign currency is not
+    // covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
+    // button), and the page shows no count to check them against (its total is in a hidden row,
+    // which is not read), so the person checks the rows shown before applying them.
     Preset {
-        id: "rakuten-funds",
-        label: "Rakuten Securities: investment trusts",
-        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-投資信託\" and reads the investment trust holdings table (evaluation and units held).",
-        links: &["保有商品一覧-投資信託"],
+        id: "rakuten-all",
+        label: "Rakuten Securities: all holdings",
+        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (evaluation and units held). Only holdings in yen are covered, not holdings in a foreign currency such as foreign stocks.",
+        links: &["保有商品一覧-すべて"],
         menu: None,
-        table_starts_with: "注文 ファンド 分配金 コース (変更)",
+        table_starts_with: "種別 銘柄 口座",
         allowed_sites: &["rakuten-sec.co.jp"],
         start_site: "rakuten-sec.co.jp",
         following_tables: false,
         login_url: "https://www.rakuten-sec.co.jp/",
+        currency: "JPY",
         layout: Layout {
             source: "Rakuten",
             name_column: 1,
@@ -178,7 +189,7 @@ const PRESETS: &[Preset] = &[
             price_column: None,
             price_unit: 1,
             header_rows: 1,
-            rows_per_record: 2,
+            rows_per_record: 1,
             name_row: 0,
             value_row: 0,
             loose_numbers: true,
@@ -206,6 +217,7 @@ const PRESETS: &[Preset] = &[
         start_site: "connect-sec.co.jp",
         following_tables: true,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
+        currency: "",
         layout: Layout {
             source: "Daiwa Connect",
             name_column: 0,
@@ -240,6 +252,7 @@ const PRESETS: &[Preset] = &[
         start_site: "connect-sec.co.jp",
         following_tables: false,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
+        currency: "",
         layout: Layout {
             source: "Daiwa Connect",
             name_column: 0,
@@ -317,8 +330,9 @@ impl Preset {
             following_tables: self.following_tables,
             start_site: self.start_site.to_owned(),
             allowed_sites: self.allowed_sites.iter().map(|s| (*s).to_owned()).collect(),
-            // The values are in the currency of the product they are linked to.
-            currency: String::new(),
+            // The values are in the page's currency when the preset knows it, else in the currency
+            // of the product they are linked to.
+            currency: self.currency.to_owned(),
             account,
             mapping: ImportMapping {
                 source: layout.source.to_owned(),
