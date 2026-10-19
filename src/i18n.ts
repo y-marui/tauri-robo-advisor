@@ -72,7 +72,7 @@ export const MESSAGES = {
   "By category": { ja: "カテゴリ別" },
   "Language": { ja: "言語" },
   "Categories": { ja: "カテゴリ" },
-  "Products": { ja: "商品" },
+  "Records": { ja: "全レコード" },
   "Accounts": { ja: "口座" },
   "Holdings": { ja: "保有" },
   "Settings": { ja: "設定" },
@@ -94,8 +94,18 @@ export const MESSAGES = {
   "Add a product": { ja: "商品を追加" },
   "Add an account": { ja: "口座を追加" },
   "Add a category first.": { ja: "先にカテゴリを追加してください。" },
-  "Add products and accounts to enter holdings.": {
-    ja: "保有を入力するには、商品と口座を追加してください。",
+  "Add a record": { ja: "レコードを追加" },
+  "No records": { ja: "レコードはありません" },
+  "Filter products": { ja: "商品を絞り込む" },
+  "Delete product": { ja: "商品を削除" },
+  "Every product and every record, as saved. Edit them here.": {
+    ja: "保存されている商品とレコードのすべて。ここで編集します。",
+  },
+  "Enter an amount (0 is allowed). To remove a record, use its Delete button.": {
+    ja: "金額を入力してください（0 も可）。レコードを消すには、その行の削除ボタンを使います。",
+  },
+  "Enter an amount or a weight, as numbers.": {
+    ja: "金額か比率を、数値で入力してください。",
   },
   "Free": { ja: "自由" },
   "Equal": { ja: "等分" },
