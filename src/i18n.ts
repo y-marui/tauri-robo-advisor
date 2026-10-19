@@ -12,6 +12,31 @@ export const LANGUAGES: { code: Lang; label: string }[] = [
 
 export const MESSAGES = {
   "Portfolio": { ja: "ポートフォリオ" },
+  "Import": { ja: "取り込み" },
+  "Main sections": { ja: "メインの区分" },
+  "Preset import: steps": { ja: "組み込みのレシピで取り込む手順" },
+  "Done": { ja: "済" },
+  "To do": { ja: "未" },
+  "Add a category and an account (Settings tab).": { ja: "カテゴリと口座を追加します（設定タブ）。" },
+  "Choose a preset and an account, and add it (Fetch recipes card).": {
+    ja: "組み込みのレシピと口座を選んで追加します（取得レシピのカード）。",
+  },
+  "Open the browser and the login pages, and log in yourself (Fetch recipes card).": {
+    ja: "ブラウザとログインのページを開き、ログインは自分で行います（取得レシピのカード）。",
+  },
+  "Fetch everything (Fetch recipes card).": { ja: "まとめて取得します（取得レシピのカード）。" },
+  "Link the names to products (one click creates a product), then apply.": {
+    ja: "名前を商品に結び付け（1クリックで商品を作れます）、反映します。",
+  },
+  "A table from a file, pasted text, or the browser, with your own columns, is in the Import a table card below.": {
+    ja: "ファイル、貼り付け、ブラウザの表を、自分で列を選んで取り込む方法は、下の「表の取り込み」のカードにあります。",
+  },
+  "The file is left untouched. To start a new file, move portfolio.json out of the data folder and open the app again.": {
+    ja: "ファイルはそのまま残してあります。新しく始めるには、データの保存場所から portfolio.json を別の場所へ移して、アプリを開き直してください。",
+  },
+  "No value yet": { ja: "評価額はまだありません" },
+  "Group by": { ja: "まとめ方" },
+  "By category": { ja: "カテゴリ別" },
   "Language": { ja: "言語" },
   "Categories": { ja: "カテゴリ" },
   "Products": { ja: "商品" },

@@ -31,11 +31,15 @@ export function holdingsTablePanel(ctx: Context): Panel {
     { value: HTMLElement; share: HTMLElement; target: HTMLElement; difference: HTMLElement }
   >();
   const note = h("p", { class: "note", role: "status" });
+  let groupBy: "category" | "account" = "category";
+  let lastView: PortfolioView | null = null;
+  let lastOverview: Overview | null = null;
 
   const table = panel(
-    "Holdings by category",
+    "Holdings",
     (view) =>
       [
+        groupBy,
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
         view.portfolio.categories.map((c) => `${c.id}:${c.name}`).join(","),
         // A product's name is followed by its field (no rebuild); its category and currency move or relabel the row.
@@ -64,118 +68,157 @@ export function holdingsTablePanel(ctx: Context): Panel {
         v.portfolio.holdings.find((x) => x.account === account && x.product === product);
 
       const rows: HTMLElement[] = [];
-      for (const category of categories) {
-        const own = products.filter((p) => p.category === category.id);
-        const records = holdings.filter((x) => own.some((p) => p.id === x.product));
 
-        const subtotal = {
-          value: h("td", { class: "num" }),
-          share: h("td", { class: "num" }),
-          target: h("td", { class: "num" }),
-          difference: h("td", { class: "num" }),
+      const recordRow = (record: Holding, secondColumn: "account" | "category"): void => {
+        const product = products.find((p) => p.id === record.product);
+        const account = accounts.find((a) => a.id === record.account);
+        if (!product || !account) {
+          return;
+        }
+        const cells = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
+        holdingCells.set(`${record.account}:${record.product}`, cells);
+        const quantityCell = h("td", { class: "num" });
+        const priceCell = h("td", { class: "num" });
+        const showQuantityAndPrice = (): void => {
+          const held = holdingOf(current, record.account, record.product);
+          quantityCell.textContent = held?.quantity ?? "";
+          priceCell.textContent = priceText(held);
         };
-        categoryCells.set(category.id, subtotal);
+        showQuantityAndPrice();
+        refreshers.push(showQuantityAndPrice);
+        // A record that only carries a weight (a product to start buying) has no value yet.
+        const weightOnly = record.weight !== null && Number(record.value) === 0;
         rows.push(
           h(
             "tr",
-            { class: "group" },
+            {},
             h(
               "th",
-              { scope: "rowgroup", colspan: 2 },
+              { scope: "row", class: "product-cell" },
               textField({
                 ctx,
                 bind,
-                label: t("Category name"),
-                get: (v) => v.portfolio.categories.find((c) => c.id === category.id)?.name ?? "",
-                edit: (text) => ({ type: "update_category", id: category.id, name: text }),
+                label: t("Product name"),
+                get: (v) => v.portfolio.products.find((p) => p.id === product.id)?.name ?? "",
+                edit: (text) => ({ type: "update_product", id: product.id, name: text }),
+              }),
+              selectField({
+                ctx,
+                bind,
+                label: t("Category of the product"),
+                options: categories.map((c) => ({ value: String(c.id), label: c.name })),
+                get: (v) => String(v.portfolio.products.find((p) => p.id === product.id)?.category ?? ""),
+                edit: (value) => ({ type: "update_product", id: product.id, category: Number(value) }),
               }),
             ),
+            h(
+              "td",
+              {},
+              secondColumn === "account"
+                ? account.name
+                : (categories.find((c) => c.id === product.category)?.name ?? ""),
+            ),
+            h(
+              "td",
+              {},
+              textField({
+                ctx,
+                bind,
+                label: `${product.name} / ${account.name} (${product.currency})`,
+                get: (v) => holdingOf(v, record.account, record.product)?.value ?? "",
+                edit: (text) => {
+                  if (text === "") {
+                    return { type: "remove_holding", account: record.account, product: record.product };
+                  }
+                  const value = cleanDecimal(text);
+                  return value === null
+                    ? null
+                    : {
+                        type: "set_holding",
+                        account: record.account,
+                        product: record.product,
+                        value,
+                        quantity: holdingOf(current, record.account, record.product)?.quantity ?? null,
+                      };
+                },
+                attrs: { inputmode: "decimal", class: "number" },
+              }),
+              h("span", { class: "muted" }, ` ${product.currency}`),
+              weightOnly ? h("span", { class: "muted weight-only" }, ` (${t("No value yet")})`) : null,
+            ),
+            quantityCell,
+            priceCell,
+            cells.value,
+            cells.share,
             h("td", {}),
             h("td", {}),
-            h("td", {}),
-            subtotal.value,
-            subtotal.share,
-            subtotal.target,
-            subtotal.difference,
           ),
         );
+      };
 
-        for (const record of records) {
-          const product = own.find((p) => p.id === record.product);
-          const account = accounts.find((a) => a.id === record.account);
-          if (!product || !account) {
+      if (groupBy === "account") {
+        for (const account of accounts) {
+          const records = holdings.filter((x) => x.account === account.id);
+          if (records.length === 0) {
             continue;
           }
-          const cells = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
-          holdingCells.set(`${record.account}:${record.product}`, cells);
-          const quantityCell = h("td", { class: "num" });
-          const priceCell = h("td", { class: "num" });
-          const showQuantityAndPrice = (): void => {
-            const held = holdingOf(current, record.account, record.product);
-            quantityCell.textContent = held?.quantity ?? "";
-            priceCell.textContent = priceText(held);
-          };
-          showQuantityAndPrice();
-          refreshers.push(showQuantityAndPrice);
           rows.push(
             h(
               "tr",
-              {},
-              h(
-                "th",
-                { scope: "row", class: "product-cell" },
-                textField({
-                  ctx,
-                  bind,
-                  label: t("Product name"),
-                  get: (v) => v.portfolio.products.find((p) => p.id === product.id)?.name ?? "",
-                  edit: (text) => ({ type: "update_product", id: product.id, name: text }),
-                }),
-                selectField({
-                  ctx,
-                  bind,
-                  label: t("Category of the product"),
-                  options: categories.map((c) => ({ value: String(c.id), label: c.name })),
-                  get: (v) => String(v.portfolio.products.find((p) => p.id === product.id)?.category ?? ""),
-                  edit: (value) => ({ type: "update_product", id: product.id, category: Number(value) }),
-                }),
-              ),
-              h("td", {}, account.name),
-              h(
-                "td",
-                {},
-                textField({
-                  ctx,
-                  bind,
-                  label: `${product.name} / ${account.name} (${product.currency})`,
-                  get: (v) => holdingOf(v, record.account, record.product)?.value ?? "",
-                  edit: (text) => {
-                    if (text === "") {
-                      return { type: "remove_holding", account: record.account, product: record.product };
-                    }
-                    const value = cleanDecimal(text);
-                    return value === null
-                      ? null
-                      : {
-                          type: "set_holding",
-                          account: record.account,
-                          product: record.product,
-                          value,
-                          quantity: holdingOf(current, record.account, record.product)?.quantity ?? null,
-                        };
-                  },
-                  attrs: { inputmode: "decimal", class: "number" },
-                }),
-                h("span", { class: "muted" }, ` ${product.currency}`),
-              ),
-              quantityCell,
-              priceCell,
-              cells.value,
-              cells.share,
+              { class: "group" },
+              h("th", { scope: "rowgroup", colspan: 2 }, account.name),
+              h("td", {}),
+              h("td", {}),
+              h("td", {}),
+              h("td", {}),
+              h("td", {}),
               h("td", {}),
               h("td", {}),
             ),
           );
+          for (const record of records) {
+            recordRow(record, "category");
+          }
+        }
+      } else {
+        for (const category of categories) {
+          const own = products.filter((p) => p.category === category.id);
+          const records = holdings.filter((x) => own.some((p) => p.id === x.product));
+
+          const subtotal = {
+            value: h("td", { class: "num" }),
+            share: h("td", { class: "num" }),
+            target: h("td", { class: "num" }),
+            difference: h("td", { class: "num" }),
+          };
+          categoryCells.set(category.id, subtotal);
+          rows.push(
+            h(
+              "tr",
+              { class: "group" },
+              h(
+                "th",
+                { scope: "rowgroup", colspan: 2 },
+                textField({
+                  ctx,
+                  bind,
+                  label: t("Category name"),
+                  get: (v) => v.portfolio.categories.find((c) => c.id === category.id)?.name ?? "",
+                  edit: (text) => ({ type: "update_category", id: category.id, name: text }),
+                }),
+              ),
+              h("td", {}),
+              h("td", {}),
+              h("td", {}),
+              subtotal.value,
+              subtotal.share,
+              subtotal.target,
+              subtotal.difference,
+            ),
+          );
+          for (const record of records) {
+            recordRow(record, "account");
+          }
         }
       }
 
@@ -193,7 +236,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 "tr",
                 {},
                 h("th", {}, t("Product")),
-                h("th", {}, t("Account")),
+                h("th", {}, groupBy === "account" ? t("Category") : t("Account")),
                 h("th", {}, t("Amount")),
                 h("th", {}, t("Quantity")),
                 h("th", {}, t("Price")),
@@ -211,30 +254,54 @@ export function holdingsTablePanel(ctx: Context): Panel {
   );
   table.el.append(note);
 
+  const switcher = h(
+    "select",
+    { "aria-label": t("Group by") },
+    h("option", { value: "category" }, t("By category")),
+    h("option", { value: "account" }, t("By account")),
+  );
+  switcher.addEventListener("change", () => {
+    groupBy = switcher.value === "account" ? "account" : "category";
+    if (lastView) {
+      table.render(lastView);
+      // The rebuilt cells are empty until the valuation is put into them again.
+      if (lastOverview) {
+        showOverview(lastView, lastOverview);
+      }
+    }
+  });
+  table.el.querySelector("h2")?.after(h("label", { class: "group-by" }, `${t("Group by")} `, switcher));
+
+  function showOverview(_view: PortfolioView, overview: Overview): void {
+    lastOverview = overview;
+    note.textContent = "";
+    note.classList.remove("error");
+    for (const record of overview.holdings) {
+      const cells = holdingCells.get(`${record.account}:${record.product}`);
+      if (cells) {
+        cells.value.textContent = yen(record.value);
+        cells.share.textContent = percent(record.share);
+      }
+    }
+    for (const category of overview.categories) {
+      const cells = categoryCells.get(category.category);
+      if (cells) {
+        cells.value.textContent = yen(category.current);
+        cells.share.textContent = percent(category.current_share);
+        cells.target.textContent = percent(category.target_share);
+        cells.difference.textContent = points(category.difference);
+        cells.difference.className = `num ${differenceClass(category.difference)}`;
+      }
+    }
+  }
+
   return {
     el: table.el,
-    render: table.render,
-    showOverview(_view: PortfolioView, overview: Overview) {
-      note.textContent = "";
-      note.classList.remove("error");
-      for (const record of overview.holdings) {
-        const cells = holdingCells.get(`${record.account}:${record.product}`);
-        if (cells) {
-          cells.value.textContent = yen(record.value);
-          cells.share.textContent = percent(record.share);
-        }
-      }
-      for (const category of overview.categories) {
-        const cells = categoryCells.get(category.category);
-        if (cells) {
-          cells.value.textContent = yen(category.current);
-          cells.share.textContent = percent(category.current_share);
-          cells.target.textContent = percent(category.target_share);
-          cells.difference.textContent = points(category.difference);
-          cells.difference.className = `num ${differenceClass(category.difference)}`;
-        }
-      }
+    render(view) {
+      lastView = view;
+      table.render(view);
     },
+    showOverview,
     overviewFailed(error) {
       note.classList.add("error");
       note.textContent = t("Could not load: {reason}", { reason: String(error) });

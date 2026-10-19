@@ -7,13 +7,14 @@ _最終更新: 2026-10-15_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `index.html` | HTML のエントリ | `src/main.ts`, `src/styles.css` |
-| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、パネルの組み立て | `src/api.ts`, `src/views/*` |
+| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、タブとパネルの組み立て | `src/api.ts`, `src/views/*` |
 | `src/api.ts` | Rust のコマンド（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）の呼び出し | `@tauri-apps/api/core` |
 | `src/types.ts` | Rust の JSON に対応する型（金額は十進数の文字列） | — |
 | `src/decimal.ts` | 十進数の文字列の変換（％ ↔ 小数、桁区切り表示）。浮動小数点を使わない | — |
 | `src/i18n.ts` | 画面の文言（英語がキー、日本語は翻訳） | — |
 | `src/panel.ts`, `src/fields.ts`, `src/dom.ts` | パネルの描画、入力部品、DOM の補助 | `src/i18n.ts` |
-| `src/views/holdings-table.ts` | 中央パネル。カテゴリ別の保有の一覧、小計、その場の編集 | `src/panel.ts`, `src/fields.ts` |
+| `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別の一覧、小計、その場の編集 | `src/panel.ts`, `src/fields.ts` |
+| `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
 | `src/views/account-tabs.ts` | 右パネル。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（全体のバランスと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
