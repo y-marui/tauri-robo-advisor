@@ -1,6 +1,6 @@
 import { cleanDecimal, formatAmount, fractionToPercent } from "../decimal.ts";
 import { h } from "../dom.ts";
-import { textField } from "../fields.ts";
+import { selectField, textField } from "../fields.ts";
 import { getLanguage, t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Holding, Overview, PortfolioView } from "../types.ts";
@@ -78,7 +78,17 @@ export function holdingsTablePanel(ctx: Context): Panel {
           h(
             "tr",
             { class: "group" },
-            h("th", { scope: "rowgroup", colspan: 2 }, category.name),
+            h(
+              "th",
+              { scope: "rowgroup", colspan: 2 },
+              textField({
+                ctx,
+                bind,
+                label: t("Category name"),
+                get: (v) => v.portfolio.categories.find((c) => c.id === category.id)?.name ?? "",
+                edit: (text) => ({ type: "update_category", id: category.id, name: text }),
+              }),
+            ),
             h("td", {}),
             h("td", {}),
             h("td", {}),
@@ -110,7 +120,25 @@ export function holdingsTablePanel(ctx: Context): Panel {
             h(
               "tr",
               {},
-              h("th", { scope: "row" }, product.name),
+              h(
+                "th",
+                { scope: "row", class: "product-cell" },
+                textField({
+                  ctx,
+                  bind,
+                  label: t("Product name"),
+                  get: (v) => v.portfolio.products.find((p) => p.id === product.id)?.name ?? "",
+                  edit: (text) => ({ type: "update_product", id: product.id, name: text }),
+                }),
+                selectField({
+                  ctx,
+                  bind,
+                  label: t("Category of the product"),
+                  options: categories.map((c) => ({ value: String(c.id), label: c.name })),
+                  get: (v) => String(v.portfolio.products.find((p) => p.id === product.id)?.category ?? ""),
+                  edit: (value) => ({ type: "update_product", id: product.id, category: Number(value) }),
+                }),
+              ),
               h("td", {}, account.name),
               h(
                 "td",
