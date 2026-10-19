@@ -321,6 +321,9 @@ export const MESSAGES = {
   "Add an account first (in the Accounts card), then add the preset.": {
     ja: "先に「口座」のカードで口座を追加してから、組み込みのレシピを追加してください。",
   },
+  "Category name": { ja: "カテゴリの名前" },
+  "Product name": { ja: "商品の名前" },
+  "Category of the product": { ja: "商品のカテゴリ" },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },
