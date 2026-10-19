@@ -613,11 +613,12 @@ impl AppState {
         // Only fill in the references if the recipe is still the one that ran: an edit made
         // while the page was being read must not be put back the way it was. The check and
         // the write happen under one lock.
-        if recipe.links.iter().any(|l| l.reference.is_none()) {
-            let mut learned = recipe.clone();
-            for (link, reference) in learned.links.iter_mut().zip(references) {
-                link.reference.get_or_insert(reference);
-            }
+        if recipe
+            .links
+            .iter()
+            .any(|l| l.menu.is_none() && l.reference.is_none())
+        {
+            let learned = with_learned_references(&recipe, references);
             // Best effort: the run itself does not depend on it being saved.
             if self
                 .replace_recipe_if_unchanged(&recipe, learned.clone())
@@ -870,6 +871,19 @@ fn lock_shown(
     shown
         .lock()
         .map_err(|_| "The data is temporarily unavailable.".to_owned())
+}
+
+/// The recipe with the destination of each plain link filled in, the first time it is followed.
+/// A menu entry that is clicked has no destination to remember, so it is left as it is (an empty
+/// reference would make the saved recipe differ from the one that ran).
+fn with_learned_references(recipe: &Recipe, references: Vec<String>) -> Recipe {
+    let mut learned = recipe.clone();
+    for (link, reference) in learned.links.iter_mut().zip(references) {
+        if link.menu.is_none() {
+            link.reference.get_or_insert(reference);
+        }
+    }
+    learned
 }
 
 #[cfg(test)]
@@ -1520,6 +1534,8 @@ mod tests {
             links: vec![FetchLink {
                 text: "List".to_owned(),
                 reference: None,
+                menu: None,
+                heading: None,
             }],
             ..domestic_recipe(main)
         };
@@ -1826,8 +1842,21 @@ mod tests {
             })
             .unwrap();
         let recipe = state.view().unwrap().portfolio.recipes[0].clone();
-        assert!(recipe.links.is_empty() && recipe.following_tables && !recipe.all_tables);
+        assert!(recipe.following_tables && !recipe.all_tables);
         assert_eq!(recipe.start_site, "connect-sec.co.jp");
+        // It opens the list of holdings by a click on its menu entry, and the texts pass the same
+        // rules as any link.
+        assert_eq!(recipe.links.len(), 1);
+        let link = &recipe.links[0];
+        assert!(link.menu.is_some() && link.heading.is_some());
+        assert_eq!(recipe.allowed_sites, vec!["connect-sec.co.jp".to_owned()]);
+        for text in [
+            link.text.as_str(),
+            link.menu.as_deref().unwrap(),
+            link.heading.as_deref().unwrap(),
+        ] {
+            assert_eq!(browser::link_text_allowed(text), Ok(()), "{text}");
+        }
 
         let table = crate::browser_session::pick_table_for_test(
             raw,
@@ -1895,6 +1924,28 @@ mod tests {
     }
 
     #[test]
+    fn a_clicked_menu_link_learns_no_reference_and_the_recipe_stays_the_saved_one() {
+        let (state, main, _, _, _) = recipe_state("daiwa-learn");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "daiwa-connect-cash".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        let saved = state.view().unwrap().portfolio.recipes[0].clone();
+        // What a successful click run hands back: one empty reference per clicked link.
+        let learned = with_learned_references(&saved, vec![String::new()]);
+        assert_eq!(learned, saved, "a menu link keeps no reference");
+
+        // A plain link still learns where it goes.
+        let mut plain = saved.clone();
+        plain.links[0].menu = None;
+        plain.links[0].heading = None;
+        let learned = with_learned_references(&plain, vec!["h:abc".to_owned()]);
+        assert_eq!(learned.links[0].reference.as_deref(), Some("h:abc"));
+    }
+
+    #[test]
     fn the_daiwa_cash_preset_reads_only_the_yen_balance_of_a_page_like_the_real_one() {
         // A made-up page with the layout of the real one: a table of label and amount pairs
         // (the yen balance first, then valuations and the total) and a second table.
@@ -1921,7 +1972,17 @@ mod tests {
             })
             .unwrap();
         let recipe = state.view().unwrap().portfolio.recipes[0].clone();
-        assert!(recipe.links.is_empty() && !recipe.following_tables);
+        assert!(!recipe.following_tables);
+        assert_eq!(recipe.links.len(), 1);
+        let link = &recipe.links[0];
+        assert!(link.menu.is_some() && link.heading.is_some());
+        for text in [
+            link.text.as_str(),
+            link.menu.as_deref().unwrap(),
+            link.heading.as_deref().unwrap(),
+        ] {
+            assert_eq!(browser::link_text_allowed(text), Ok(()), "{text}");
+        }
 
         let table =
             crate::browser_session::pick_table_for_test(raw, &recipe.table_starts_with, false);

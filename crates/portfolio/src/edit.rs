@@ -253,7 +253,7 @@ impl ImportMapping {
 /// (never a domain that many unrelated owners share, such as a blog or hosting service), added
 /// here after the company and its pages were checked. A list of what to refuse could never be
 /// complete, so only these are accepted; adding a site is a change to this list and its review.
-pub const VETTED_SITES: &[&str] = &["sbisec.co.jp", "monex.co.jp"];
+pub const VETTED_SITES: &[&str] = &["sbisec.co.jp", "monex.co.jp", "connect-sec.co.jp"];
 const MAX_ALLOWED_SITES: usize = 3;
 
 /// Checks the allowed sites of a recipe: each must be one of the vetted sites (trimmed and
@@ -333,7 +333,35 @@ impl Recipe {
                     "a link reference is not acceptable".to_owned(),
                 ));
             }
-            links.push(FetchLink { text, reference });
+            let clean = |value: Option<String>| {
+                value.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty())
+            };
+            let (menu, heading) = (clean(link.menu), clean(link.heading));
+            // A menu entry is clicked, so it names its group and the heading to expect on arrival
+            // together (and has no saved destination: a script link has none to remember).
+            if menu.is_some() != heading.is_some() || (menu.is_some() && reference.is_some()) {
+                return Err(Error::Invalid("a menu link is not acceptable".to_owned()));
+            }
+            if [&menu, &heading]
+                .into_iter()
+                .flatten()
+                .any(|v| v.chars().count() > MAX_LINK_TEXT_CHARS || v.chars().any(char::is_control))
+            {
+                return Err(Error::Invalid("a menu link is not acceptable".to_owned()));
+            }
+            links.push(FetchLink {
+                text,
+                reference,
+                menu,
+                heading,
+            });
+        }
+        // Clicks are made only on the vetted sites, and a recipe either clicks all its links or
+        // follows them all (a page reached by a click cannot be gone back from, so the two are
+        // not mixed).
+        let clicks = links.iter().filter(|l| l.menu.is_some()).count();
+        if clicks != 0 && (clicks != links.len() || self.allowed_sites.is_empty()) {
+            return Err(Error::Invalid("a menu link is not acceptable".to_owned()));
         }
         let table_starts_with = self.table_starts_with.trim().to_owned();
         if table_starts_with.is_empty()

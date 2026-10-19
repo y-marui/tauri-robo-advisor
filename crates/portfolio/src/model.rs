@@ -10,10 +10,11 @@ use serde::{Deserialize, Serialize};
 /// mapping (`max_records`). Version 7 dropped the funding of an account (cash or points), which
 /// nothing used (an older app needs the field, so it refuses). Version 8 moved the relative
 /// weight of a product onto the record of the product in an account (an older app would read
-/// every weight as missing, so it refuses).
+/// every weight as missing, so it refuses). Version 9 added the menu click of a link (`menu` and
+/// `heading`: an older app would try to follow it as a plain link, so it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -202,6 +203,15 @@ pub struct FetchLink {
     pub text: String,
     #[serde(default)]
     pub reference: Option<String>,
+    /// For a menu entry that the page handles by its own script (a site that works by form posts):
+    /// the text of the heading link of the menu group the entry is in. The entry is then clicked,
+    /// not followed (only on vetted sites; see `heading`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub menu: Option<String>,
+    /// For a menu entry: the first heading the page must show after the click, otherwise the
+    /// batch stops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heading: Option<String>,
 }
 
 /// A saved way to fetch one table after the user has logged in: follow these

@@ -219,7 +219,34 @@ impl BrowserSession {
         // reach the other hosts of its own site, never another company's.
         let sites = browser::sites_covering(&browser::origin_of(&start), allowed_sites);
         let mut references = Vec::with_capacity(links.len());
+        let mut clicked = false;
         for (index, link) in links.iter().enumerate() {
+            // A menu entry of a vetted site is clicked, not followed. Nothing is gone back from
+            // afterwards (a page that was posted cannot be restored): the tab stays on the page
+            // that was reached, and the batch takes that page as its own.
+            if let (Some(group), Some(heading)) = (&link.menu, &link.heading) {
+                match cdp.click_menu_link(&session, group, &link.text, heading, &sites) {
+                    Ok(()) => {
+                        clicked = true;
+                        references.push(String::new());
+                        continue;
+                    }
+                    // Nothing was clicked, so the page is where it was.
+                    Err(error @ (browser::Error::LinkNotFound | browser::Error::LinkRefused)) => {
+                        return Err(if clicked {
+                            format!("{STOP_BATCH}Link {}: {error}", index + 1)
+                        } else {
+                            format!("Link {}: {error}", index + 1)
+                        });
+                    }
+                    Err(error) => {
+                        return Err(format!(
+                            "{STOP_BATCH}Link {}: {error}; the page may have moved, so the remaining recipes were not run.",
+                            index + 1
+                        ));
+                    }
+                }
+            }
             match cdp.follow_link(&session, &link.text, link.reference.as_deref(), &sites) {
                 Ok(followed) => references.push(followed.reference),
                 Err(browser::Error::LinkAmbiguous(choices)) => {
@@ -266,12 +293,21 @@ impl BrowserSession {
             }
         }
 
+        if clicked {
+            let now = cdp.current_href(&session).map_err(|e| e.to_string())?;
+            lock(&self.pinned)?.insert(page_id.to_owned(), now);
+        }
         let read = cdp
             .read_tables(&session)
             .map_err(|e| e.to_string())
             .and_then(|raw| pick_table(raw, title, merge, follow));
-        // Every run ends on the page it started from, so the next recipe starts there too.
-        let restored = cdp.go_back(&session, links.len(), &start);
+        // Every run ends on the page it started from, so the next recipe starts there too. After a
+        // click there is no way back, and the next recipe starts from the page that was reached.
+        let restored = if clicked {
+            Ok(())
+        } else {
+            cdp.go_back(&session, links.len(), &start)
+        };
         // A failed restoration takes precedence: the batch must stop before the next recipe
         // reads the wrong page.
         restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;

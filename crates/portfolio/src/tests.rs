@@ -850,10 +850,14 @@ fn recipe_for(account: AccountId) -> Recipe {
             FetchLink {
                 text: " Account ".to_owned(),
                 reference: None,
+                menu: None,
+                heading: None,
             },
             FetchLink {
                 text: "Yen account".to_owned(),
                 reference: Some("/a/list".to_owned()),
+                menu: None,
+                heading: None,
             },
         ],
         table_starts_with: " Stocks (".to_owned(),
@@ -904,21 +908,27 @@ fn bad_recipes_are_rejected_and_change_nothing() {
     assert!(with(&|r| r.links = vec![
         FetchLink {
             text: "x".repeat(61),
-            reference: None
+            reference: None,
+            menu: None,
+            heading: None,
         };
         1
     ]));
     assert!(with(&|r| r.links = vec![
         FetchLink {
             text: "".to_owned(),
-            reference: None
+            reference: None,
+            menu: None,
+            heading: None,
         };
         1
     ]));
     assert!(with(&|r| r.links = vec![
         FetchLink {
             text: "a".to_owned(),
-            reference: None
+            reference: None,
+            menu: None,
+            heading: None,
         };
         6
     ]));
@@ -1662,4 +1672,80 @@ fn the_weight_of_a_product_does_not_overflow_when_its_records_add_up() {
     assert_eq!(p.product_weight(prod), Some(rust_decimal::Decimal::MAX));
     // The issues are worked out on every view, so they must not panic either.
     let _ = p.issues();
+}
+
+#[test]
+fn a_menu_link_needs_its_heading_a_vetted_site_and_no_mixing() {
+    let (mut p, _, _, acc) = sample();
+    let menu = |text: &str| FetchLink {
+        text: text.to_owned(),
+        reference: None,
+        menu: Some("Group".to_owned()),
+        heading: Some("Heading".to_owned()),
+    };
+    let plain = |text: &str| FetchLink {
+        text: text.to_owned(),
+        reference: None,
+        menu: None,
+        heading: None,
+    };
+    let before = p.clone();
+    let mut with = |change: &dyn Fn(&mut Recipe)| {
+        let mut r = recipe_for(acc);
+        r.allowed_sites = vec!["connect-sec.co.jp".to_owned()];
+        r.links = vec![menu("Entry")];
+        change(&mut r);
+        p.apply(Edit::SetRecipe { recipe: r }).is_err()
+    };
+    // The good one is accepted (and a menu link with no extra change is a plain recipe edit).
+    assert!(!with(&|_| {}));
+    // A group without a heading, or a heading without a group.
+    assert!(with(&|r| r.links[0].heading = None));
+    assert!(with(&|r| r.links[0].menu = None));
+    assert!(with(&|r| r.links[0].heading = Some("  ".to_owned())));
+    // A control character, or too long.
+    assert!(with(&|r| r.links[0].menu = Some("a\nb".to_owned())));
+    assert!(with(&|r| r.links[0].heading = Some("x".repeat(61))));
+    // A script link has no saved destination.
+    assert!(with(&|r| r.links[0].reference = Some("abc".to_owned())));
+    // Clicks only on a vetted site, and never mixed with plain links.
+    assert!(with(&|r| r.allowed_sites = vec![]));
+    assert!(with(&|r| r.allowed_sites = vec!["example.com".to_owned()]));
+    assert!(with(&|r| r.links = vec![plain("A"), menu("B")]));
+    assert!(with(&|r| r.links = vec![menu("B"), plain("A")]));
+    assert_ne!(p, before, "the good recipe was saved");
+}
+
+#[test]
+fn the_daiwa_presets_click_their_menu_entries_on_the_vetted_site() {
+    let (mut p, _, _, acc) = sample();
+    for id in ["daiwa-connect-stocks", "daiwa-connect-cash"] {
+        apply(
+            &mut p,
+            Edit::AddPresetRecipe {
+                preset: id.to_owned(),
+                account: acc,
+            },
+        );
+    }
+    let daiwa: Vec<_> = p
+        .recipes
+        .iter()
+        .filter(|r| r.start_site == "connect-sec.co.jp")
+        .collect();
+    assert_eq!(daiwa.len(), 2);
+    for r in daiwa {
+        assert_eq!(r.links.len(), 1);
+        assert!(r.links[0].menu.is_some() && r.links[0].heading.is_some());
+        assert_eq!(r.allowed_sites, vec!["connect-sec.co.jp".to_owned()]);
+        assert!(crate::edit::VETTED_SITES.contains(&"connect-sec.co.jp"));
+    }
+    // The other presets still follow plain links (or none), never clicks.
+    for r in p
+        .recipes
+        .iter()
+        .filter(|r| r.start_site != "connect-sec.co.jp")
+    {
+        assert!(r.links.iter().all(|l| l.menu.is_none()));
+    }
 }

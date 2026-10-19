@@ -633,6 +633,44 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin, target) 
   return 'navigated';
 })"#;
 
+/// Clicks one entry of a menu whose links are handled by the page's own script (`javascript:`,
+/// `#`, or no address), for the sites the app has vetted. The entry is found by its exact text and
+/// by the exact text of the heading link of the menu group it is in (the nearest enclosing list
+/// item that has a link of its own), and it must be the only one: a menu entry that is not a
+/// scripted link, opens another tab, or downloads is refused, so is anything on another site than
+/// the one the Rust side accepted. It is the only place where a link is clicked, and it does
+/// nothing else in the page. The texts are passed in as data, JSON-encoded.
+pub(crate) const CLICK_MENU: &str = r#"((group, text, origin) => {
+  const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+  if (!origin || origin !== location.origin) return 'gone';
+  const hits = [];
+  for (const a of document.querySelectorAll('a')) {
+    if (clean(a.textContent) !== text) continue;
+    let item = a.closest('li');
+    let owner = null;
+    while (item) {
+      const head = [...item.children].find((c) => c.tagName === 'A' && c !== a);
+      if (head && clean(head.textContent) !== '') { owner = clean(head.textContent); break; }
+      item = item.parentElement ? item.parentElement.closest('li') : null;
+    }
+    if (owner === group) hits.push(a);
+  }
+  if (hits.length === 0) return 'none';
+  if (hits.length > 1) return 'ambiguous';
+  const a = hits[0];
+  const raw = a.getAttribute('href') ?? '';
+  const scripted = raw === '' || raw.startsWith('#') || raw.toLowerCase().startsWith('javascript:');
+  if (!scripted || (a.target && a.target !== '_self') || a.hasAttribute('download')) return 'refused';
+  a.click();
+  return 'clicked';
+})"#;
+
+/// The text of the first level-one heading of the page, as read after a click.
+pub(crate) const FIRST_HEADING: &str = r#"(() => {
+  const h = document.querySelector('h1');
+  return h ? String(h.innerText ?? h.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 100) : '';
+})()"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
