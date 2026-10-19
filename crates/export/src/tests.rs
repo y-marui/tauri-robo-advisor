@@ -171,21 +171,21 @@ fn holdings_have_one_row_per_holding_with_jpy_values_and_shares() {
 
     assert_eq!(
         rows[0],
-        "account_id,account,account_kind,product_id,product,category_id,category,currency,value,quantity,price,price_unit,value_jpy,share_of_total"
+        "account_id,account,account_kind,product_id,product,category_id,category,currency,value,quantity,price,price_unit,relative_weight,value_jpy,share_of_total"
     );
     assert_eq!(rows.len(), 4);
     // Total = 500,000 + 150,000 (1,000 USD at 150) + 100,000 = 750,000.
     assert_eq!(
         rows[1],
-        "6,Main,taxable,3,Stock Fund,1,Stocks,JPY,500000,,,1,500000,0.666667"
+        "6,Main,taxable,3,Stock Fund,1,Stocks,JPY,500000,,,1,,500000,0.666667"
     );
     assert_eq!(
         rows[2],
-        "6,Main,taxable,4,US Fund,1,Stocks,USD,1000,,,1,150000,0.2"
+        "6,Main,taxable,4,US Fund,1,Stocks,USD,1000,,,1,,150000,0.2"
     );
     assert_eq!(
         rows[3],
-        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,JPY,100000,,,1,100000,0.133333"
+        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,JPY,100000,,,1,,100000,0.133333"
     );
 }
 
@@ -204,10 +204,10 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["products.csv"]),
         [
-            "product_id,product,category_id,category,currency,relative_weight,value_jpy",
-            "3,Stock Fund,1,Stocks,JPY,,500000",
-            "4,US Fund,1,Stocks,USD,,150000",
-            "5,Bond Fund,2,Bonds,JPY,,100000",
+            "product_id,product,category_id,category,currency,value_jpy",
+            "3,Stock Fund,1,Stocks,JPY,500000",
+            "4,US Fund,1,Stocks,USD,150000",
+            "5,Bond Fund,2,Bonds,JPY,100000",
         ]
     );
     assert_eq!(
@@ -258,6 +258,7 @@ fn a_weighted_category_exports_its_targeting_and_product_weights() {
     let mut p = sample();
     let stocks = p.categories[0].id;
     let s1 = p.products[0].id;
+    let acc = p.accounts[0].id;
     apply(
         &mut p,
         Edit::UpdateCategory {
@@ -269,15 +270,20 @@ fn a_weighted_category_exports_its_targeting_and_product_weights() {
     );
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: s1,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: s1,
             weight: Some(dec!(2.50)),
         },
     );
     let f = files(&p);
 
     assert!(lines(&f["categories.csv"])[1].contains(",weighted,"));
-    assert!(lines(&f["products.csv"])[1].contains(",2.5,"));
+    assert!(
+        lines(&f["holdings.csv"])
+            .iter()
+            .any(|l| l.contains(",2.5,"))
+    );
 }
 
 #[test]
@@ -395,7 +401,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
     assert!(
         holdings
             .iter()
-            .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,"))
+            .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,,"))
     );
     assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,0.75,free,,");
     assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,taxable,true,1,all,");
@@ -410,7 +416,7 @@ fn a_missing_usd_rate_leaves_usd_values_empty() {
 
     let f = files(&p);
 
-    assert!(lines(&f["holdings.csv"])[2].ends_with(",USD,1000,,,1,,"));
+    assert!(lines(&f["holdings.csv"])[2].ends_with(",USD,1000,,,1,,,"));
     assert_eq!(lines(&f["settings.csv"])[2], "usd_jpy,");
 }
 

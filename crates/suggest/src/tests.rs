@@ -318,15 +318,17 @@ fn weighted_products_fill_toward_their_relative_weights() {
     );
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: a,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: a,
             weight: Some(dec!(3)),
         },
     );
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: b,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: b,
             weight: Some(dec!(1)),
         },
     );
@@ -826,8 +828,9 @@ fn huge_holdings_and_weights_are_refused_instead_of_overflowing() {
     let mut f = fixture();
     apply(
         &mut f.portfolio,
-        Edit::SetProductWeight {
-            id: f.s1,
+        Edit::SetHoldingWeight {
+            account: f.main,
+            product: f.s1,
             weight: Some(MAX_WEIGHT + dec!(1)),
         },
     );
@@ -969,15 +972,17 @@ fn weighted_pair() -> (Portfolio, AccountId, ProductId, ProductId, CategoryId) {
     );
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: a,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: a,
             weight: Some(dec!(3)),
         },
     );
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: b,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: b,
             weight: Some(dec!(1)),
         },
     );
@@ -1027,8 +1032,9 @@ fn account_balance_only_spreads_over_products_the_account_holds_or_can_buy() {
     let other = product(&mut p, "C", c, "JPY");
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: other,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: other,
             weight: Some(dec!(4)),
         },
     );
@@ -1088,4 +1094,42 @@ fn account_balance_targets_add_up_to_the_category_total() {
     assert_eq!(sum, dec!(100));
     let shortfalls: Decimal = line.products.iter().filter_map(|x| x.shortfall).sum();
     assert_eq!(shortfalls, Decimal::ZERO);
+}
+
+#[test]
+fn the_same_product_has_its_own_weight_in_each_account() {
+    let (mut p, acc, a, b, c) = weighted_pair();
+    let other = account(&mut p, "Second", AccountKind::Taxable);
+    hold(&mut p, other, a, dec!(100000));
+    hold(&mut p, other, b, dec!(100000));
+    // In the second account B is wanted three times as much as A.
+    apply(
+        &mut p,
+        Edit::SetHoldingWeight {
+            account: other,
+            product: a,
+            weight: Some(dec!(1)),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetHoldingWeight {
+            account: other,
+            product: b,
+            weight: Some(dec!(3)),
+        },
+    );
+
+    let target = |account, product| {
+        let balance = account_balance(&p, account).unwrap();
+        let line = balance.categories.iter().find(|x| x.category == c).unwrap();
+        line.products
+            .iter()
+            .find(|x| x.product == product)
+            .unwrap()
+            .target
+    };
+    assert_eq!(target(acc, a), Some(dec!(150000)));
+    assert_eq!(target(other, a), Some(dec!(50000)));
+    assert_eq!(target(other, b), Some(dec!(150000)));
 }

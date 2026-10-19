@@ -86,7 +86,7 @@ export const MESSAGES = {
   "Taxes are not taken into account in suggestions.": {
     ja: "提案では税金を考慮していません。",
   },
-  "Relative weight inside the category": { ja: "カテゴリ内の相対比率" },
+  "Relative weight inside the category: {account}": { ja: "カテゴリ内の相対比率: {account}" },
   "Amounts are in each product’s currency.": {
     ja: "金額は、各商品の通貨で入力します。",
   },

@@ -69,9 +69,9 @@ impl<'a> Book<'a> {
             .find(|a| a.id == request.account)
             .ok_or(Error::UnknownAccount)?;
         if portfolio
-            .products
+            .holdings
             .iter()
-            .any(|p| p.weight.is_some_and(|w| w > MAX_WEIGHT))
+            .any(|h| h.weight.is_some_and(|w| w > MAX_WEIGHT))
         {
             return Err(Error::TooLarge);
         }
@@ -194,7 +194,7 @@ impl<'a> Book<'a> {
                         cap: None,
                     },
                     ProductTargeting::Weighted => Item {
-                        weight: p.weight.unwrap_or_default(),
+                        weight: self.portfolio.product_weight(p.id).unwrap_or_default(),
                         current: value,
                         cap: None,
                     },
@@ -224,7 +224,10 @@ impl<'a> Book<'a> {
                 let (weight, current) = match category.targeting {
                     ProductTargeting::Free => (*here, -*here),
                     ProductTargeting::Equal => (Decimal::ONE, -value),
-                    ProductTargeting::Weighted => (p.weight.unwrap_or_default(), -value),
+                    ProductTargeting::Weighted => (
+                        self.portfolio.product_weight(p.id).unwrap_or_default(),
+                        -value,
+                    ),
                     ProductTargeting::KeepCurrent => (value, -value),
                 };
                 Item {

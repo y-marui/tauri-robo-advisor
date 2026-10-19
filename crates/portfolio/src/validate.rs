@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use rust_decimal::Decimal;
 
-use crate::{Error, Issue, Portfolio, ProductTargeting, SCHEMA_VERSION};
+use crate::{Error, Issue, MIN_SCHEMA_VERSION, Portfolio, ProductTargeting, SCHEMA_VERSION};
 
 /// The most recipes a data file may hold.
 const MAX_RECIPES_ALLOWED: usize = 50;
@@ -69,13 +69,13 @@ impl Portfolio {
     /// every loaded file, because the file is not trusted to be well formed.
     pub fn validate_integrity(&self) -> Result<(), Error> {
         let corrupt = |message: &str| Err(Error::Corrupt(message.to_owned()));
-        if self.schema_version > SCHEMA_VERSION {
+        if self.schema_version == 0 {
+            return corrupt("the schema version is missing");
+        }
+        if !(MIN_SCHEMA_VERSION..=SCHEMA_VERSION).contains(&self.schema_version) {
             return Err(Error::UnsupportedVersion {
                 found: self.schema_version,
             });
-        }
-        if self.schema_version == 0 {
-            return corrupt("the schema version is missing");
         }
 
         let mut ids = HashSet::new();
@@ -101,9 +101,6 @@ impl Portfolio {
             if !self.categories.iter().any(|c| c.id == product.category) {
                 return corrupt("a product refers to a missing category");
             }
-            if let Some(weight) = product.weight {
-                positive(weight, "product weight").map_err(into_corrupt)?;
-            }
         }
         for account in &self.accounts {
             name(&account.name, "account").map_err(into_corrupt)?;
@@ -123,6 +120,9 @@ impl Portfolio {
             }
             if let Some(price) = holding.price {
                 non_negative(price, "price").map_err(into_corrupt)?;
+            }
+            if let Some(weight) = holding.weight {
+                positive(weight, "weight").map_err(into_corrupt)?;
             }
             if holding.price_unit == 0 {
                 return corrupt("a holding has a price unit of zero");
@@ -199,7 +199,7 @@ impl Portfolio {
                 });
             }
             if category.targeting == ProductTargeting::Weighted
-                && products.iter().any(|p| p.weight.is_none())
+                && products.iter().any(|p| self.product_weight(p.id).is_none())
             {
                 issues.push(Issue::WeightedProductMissingWeight {
                     category: category.id,

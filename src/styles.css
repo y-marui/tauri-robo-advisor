@@ -470,3 +470,6 @@ textarea {
   gap: 2px;
   margin-right: 6px;
 }
+
+.record-weights { display: flex; flex-direction: column; gap: 0.25rem; }
+.record-weight { display: flex; align-items: center; gap: 0.5rem; }

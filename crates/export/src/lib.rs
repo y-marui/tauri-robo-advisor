@@ -140,6 +140,7 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
         "quantity",
         "price",
         "price_unit",
+        "relative_weight",
         "value_jpy",
         "share_of_total",
     ]);
@@ -161,6 +162,7 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
             optional_number(holding.quantity),
             optional_number(holding.price),
             plain_cell(&holding.price_unit.to_string()),
+            optional_number(holding.weight),
             optional_number(*jpy),
             optional_number(values.share(*jpy)),
         ]);
@@ -200,7 +202,6 @@ fn products(portfolio: &Portfolio, values: &Values) -> Table {
         "category_id",
         "category",
         "currency",
-        "relative_weight",
         "value_jpy",
     ]);
     for product in &portfolio.products {
@@ -215,7 +216,6 @@ fn products(portfolio: &Portfolio, values: &Values) -> Table {
             plain_cell(&product.category.0.to_string()),
             text_cell(category.map_or("", |c| &c.name)),
             plain_cell(&product.currency),
-            optional_number(product.weight),
             optional_number(value),
         ]);
     }
@@ -321,9 +321,9 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          \n\
          Files\n\
          -----\n\
-         holdings.csv     One row per product held in an account (the amounts you entered).\n\
+         holdings.csv     One row per record of a product in an account (the amounts and relative weight you entered).\n\
          categories.csv   Categories with their target weight and current value.\n\
-         products.csv     Products with category, currency, and relative weight.\n\
+         products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
          accounts.csv     Accounts with their rules (sellable, tradable products, rounding unit).\n\
          settings.csv     Exchange rate, tolerances, and the rebalancing account.\n\
