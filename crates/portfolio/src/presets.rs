@@ -18,6 +18,9 @@ struct Layout {
     value_column: usize,
     price_column: Option<usize>,
     price_unit: u64,
+    /// Which value of the price cell to read when the cell holds several (the price, then its
+    /// change); the whole cell when `None`.
+    price_part: Option<usize>,
     header_rows: usize,
     rows_per_record: usize,
     name_row: usize,
@@ -84,6 +87,7 @@ const fn sbi_layout(price_unit: u64) -> Layout {
         value_column: 0,
         price_column: Some(2),
         price_unit,
+        price_part: None,
         header_rows: 2,
         rows_per_record: 2,
         name_row: 0,
@@ -129,12 +133,13 @@ const PRESETS: &[Preset] = &[
     // with the same heading cell (name), so the title runs over the first cells of the heading row
     // to pick the investment trust table. It is a heading row and then one row per holding: name,
     // account type, price, one more column, units, cost, evaluation, profit, and a last column.
-    // Only the evaluation and the units are read: the evaluation from its column, the units
-    // recorded next to it.
+    // Only the units and the price are read, and the value is the units times the price per
+    // 10,000 units (as for SBI): the units from their column, the price from the price column (the
+    // first value of its cell, which also shows the day's change).
     Preset {
         id: "monex-funds",
         label: "Monex Securities: investment trusts",
-        description: "Starts from the top page of Monex Securities (after logging in): follows \"残高照会\" and reads the investment trust table (evaluation and units held).",
+        description: "Starts from the top page of Monex Securities (after logging in): follows \"残高照会\" and reads the investment trust table (units x price per 10,000 units).",
         links: &["残高照会"],
         menu: None,
         table_starts_with: "銘柄 口座区分預り区分 基準価額（円）前日比 分配金の取扱い 保有数（口）",
@@ -146,15 +151,16 @@ const PRESETS: &[Preset] = &[
         layout: Layout {
             source: "Monex",
             name_column: 0,
-            value_column: 6,
-            price_column: None,
-            price_unit: 1,
+            value_column: 4,
+            price_column: Some(2),
+            price_unit: 10_000,
+            price_part: Some(0),
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
             value_row: 0,
             loose_numbers: false,
-            quantity_column: Some(4),
+            quantity_column: None,
             max_records: None,
         },
     },
@@ -165,9 +171,10 @@ const PRESETS: &[Preset] = &[
     // heading row, a holding is one visible row: the kind, name, account type, units, cost, price,
     // and a cell with the evaluation (first line) and the profit. The page also has a summary
     // table by kind with hidden detail rows, which does not start with the same cells. Only the
-    // evaluation (first number of its cell) and the units are read; "9,999円" and "9,999口" are
-    // numbers with a unit. The page shows amounts in yen; a holding in a foreign currency is not
-    // covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
+    // evaluation (first number of its cell) and the units are read, not the price: the price is
+    // per 10,000 units for a trust but per share for a stock, and the table holds both kinds, so
+    // the value is taken from the evaluation column; "9,999円" and "9,999口" are numbers with a unit. The page shows amounts in yen; a holding in a
+    // foreign currency is not covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
     // button), and the page shows no count to check them against (its total is in a hidden row,
     // which is not read), so the person checks the rows shown before applying them.
     Preset {
@@ -188,6 +195,7 @@ const PRESETS: &[Preset] = &[
             value_column: 6,
             price_column: None,
             price_unit: 1,
+            price_part: None,
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
@@ -224,6 +232,7 @@ const PRESETS: &[Preset] = &[
             value_column: 6,
             price_column: None,
             price_unit: 1,
+            price_part: None,
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
@@ -259,6 +268,7 @@ const PRESETS: &[Preset] = &[
             value_column: 1,
             price_column: None,
             price_unit: 1,
+            price_part: None,
             header_rows: 0,
             rows_per_record: 1,
             name_row: 0,
@@ -346,7 +356,7 @@ impl Preset {
                 value_row: layout.value_row,
                 name_part: None,
                 value_part: None,
-                price_part: None,
+                price_part: layout.price_part,
                 loose_numbers: layout.loose_numbers,
                 quantity_column: layout.quantity_column,
                 quantity_part: None,

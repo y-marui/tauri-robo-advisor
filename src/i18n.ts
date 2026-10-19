@@ -357,8 +357,8 @@ export const MESSAGES = {
     ja: "「{recipe}」には、{site} の開いているページが要ります。ブラウザでログインして、先にそのページを開いてください。",
   },
   "Monex Securities: investment trusts": { ja: "マネックス証券: 投資信託" },
-  "Starts from the top page of Monex Securities (after logging in): follows \"残高照会\" and reads the investment trust table (evaluation and units held).": {
-    ja: "ログイン後のマネックス証券のトップのページから始め、「残高照会」を辿って、投資信託の表を読みます（評価額と保有数）。",
+  "Starts from the top page of Monex Securities (after logging in): follows \"残高照会\" and reads the investment trust table (units x price per 10,000 units).": {
+    ja: "ログイン後のマネックス証券のトップのページから始め、「残高照会」を辿って、投資信託の表を読みます（口数 × 1万口あたりの基準価額）。",
   },
   "Rakuten Securities: all holdings": { ja: "楽天証券: すべての保有" },
   "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (evaluation and units held). Only holdings in yen are covered, not holdings in a foreign currency such as foreign stocks.": {
