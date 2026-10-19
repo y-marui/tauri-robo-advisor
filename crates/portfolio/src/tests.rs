@@ -856,6 +856,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         account,
         mapping: mapping_for(" SBI "),
         all_tables: false,
+        allowed_sites: Vec::new(),
     }
 }
 
@@ -1313,4 +1314,59 @@ fn a_preset_is_never_added_twice_for_one_account() {
     add(&mut p, b);
     assert_eq!(p.recipes.len(), 1);
     assert_eq!(p.recipes[0].account, b);
+}
+
+#[test]
+fn allowed_sites_of_a_recipe_are_checked() {
+    let (mut p, _, _, acc) = sample();
+    let with = |sites: &[&str]| {
+        let mut recipe = recipe_for(acc);
+        recipe.allowed_sites = sites.iter().map(|s| (*s).to_owned()).collect();
+        recipe
+    };
+
+    // Plain host names are kept (trimmed, lower-cased, no duplicates).
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: with(&[" Example.CO.jp ", "example.co.jp", "example.com"]),
+        },
+    );
+    assert_eq!(
+        p.recipes[0].allowed_sites,
+        vec!["example.co.jp", "example.com"]
+    );
+
+    // Anything that is not a plain host with two labels, a suffix shared by many owners, and too
+    // many sites are refused, and nothing changes.
+    let before = p.clone();
+    for bad in [
+        "co.jp",
+        "com",
+        "https://example.com",
+        "example.com/path",
+        "example.com:8443",
+        "*.example.com",
+        "user@example.com",
+        "-example.com",
+        "example..com",
+        "exa mple.com",
+        "github.io",
+        "",
+    ] {
+        assert!(
+            p.apply(Edit::SetRecipe {
+                recipe: with(&[bad])
+            })
+            .is_err(),
+            "{bad}"
+        );
+    }
+    assert!(
+        p.apply(Edit::SetRecipe {
+            recipe: with(&["a.example", "b.example", "c.example", "d.example"]),
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
 }

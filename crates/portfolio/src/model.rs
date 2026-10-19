@@ -209,6 +209,11 @@ pub struct Recipe {
     /// account on a page) and put their rows together; off: exactly one table must match.
     #[serde(default)]
     pub all_tables: bool,
+    /// Sites (like `example.co.jp`) whose other hosts the recipe may follow links to. Only a site
+    /// that contains the host the recipe starts on counts: the recipe can reach the other hosts
+    /// of its own company, never another site.
+    #[serde(default)]
+    pub allowed_sites: Vec<String>,
     pub currency: String,
     pub account: AccountId,
     pub mapping: ImportMapping,
