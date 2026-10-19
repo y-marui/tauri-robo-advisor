@@ -114,15 +114,18 @@ export function checkboxField(opts: CheckboxOptions): HTMLInputElement {
  * A delete button that asks twice: the first click arms it, the second within
  * a few seconds deletes. (`window.confirm` is not reliable in the Tauri webview.)
  */
-export function deleteButton(onConfirm: () => void): HTMLButtonElement {
-  const button = h("button", { type: "button", class: "danger" }, t("Delete"));
+export function deleteButton(
+  onConfirm: () => void,
+  label: string = t("Delete"),
+): HTMLButtonElement {
+  const button = h("button", { type: "button", class: "danger" }, label);
   let timer: number | undefined;
   button.addEventListener("click", () => {
     if (timer === undefined) {
       button.textContent = t("Confirm delete");
       button.classList.add("armed");
       timer = window.setTimeout(() => {
-        button.textContent = t("Delete");
+        button.textContent = label;
         button.classList.remove("armed");
         timer = undefined;
       }, 4000);

@@ -9,7 +9,6 @@ import { categoriesPanel } from "./views/categories.ts";
 import { groupsPanel } from "./views/groups.ts";
 import { dataFolderPanel } from "./views/data-folder.ts";
 import { importStepsPanel } from "./views/import-steps.ts";
-import { holdingsPanel } from "./views/holdings.ts";
 import { accountTabsPanel } from "./views/account-tabs.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
@@ -17,7 +16,7 @@ import { suggestionsPanel } from "./views/suggestions.ts";
 import { HOLDINGS_SUBTABS, pickSubTab, stepSubTab, type HoldingsSubTab } from "./subtabs.ts";
 import { dataNotes } from "./views/data-folder.ts";
 import { issuesList } from "./views/issues.ts";
-import { productsPanel } from "./views/products.ts";
+import { recordsPanel } from "./views/records.ts";
 import { tableImportPanel } from "./views/table-import.ts";
 import { recipesPanel } from "./views/recipes.ts";
 import { settingsPanel } from "./views/settings.ts";
@@ -199,9 +198,8 @@ function build(): void {
   const bitflyer = bitflyerPanel(context);
   const groups = groupsPanel(context);
   const categories = categoriesPanel(context);
-  const products = productsPanel(context);
+  const records = recordsPanel(context);
   const accounts = accountsPanel(context);
-  const holdingsEntry = holdingsPanel(context);
   const settings = settingsPanel(context);
   const dataFolder = dataFolderPanel(context);
   panels = [
@@ -215,9 +213,8 @@ function build(): void {
     bitflyer,
     groups,
     categories,
-    products,
+    records,
     accounts,
-    holdingsEntry,
     settings,
     dataFolder,
   ];
@@ -282,9 +279,8 @@ function build(): void {
       { class: "pane grid", role: "tabpanel", id: "pane-settings" },
       groups.el,
       categories.el,
-      products.el,
+      records.el,
       accounts.el,
-      holdingsEntry.el,
       settings.el,
       dataFolder.el,
     ),

@@ -353,7 +353,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
 }
 
 /** The price a holding was worked out from, with its unit when it is not 1 (a fund's price per 10,000 units). */
-function priceText(holding: Holding | undefined): string {
+export function priceText(holding: Holding | undefined): string {
   if (!holding || holding.price === null) {
     return "";
   }

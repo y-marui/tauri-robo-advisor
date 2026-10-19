@@ -499,8 +499,60 @@ td.clip {
   margin-right: 6px;
 }
 
-.record-weights { display: flex; flex-direction: column; gap: 0.25rem; }
-.record-weight { display: flex; align-items: center; gap: 0.5rem; }
+/* The Records card: a heading row per product, then one row per record. */
+.records-tools {
+  margin-bottom: 8px;
+}
+
+.records-filter {
+  width: 14rem;
+  max-width: 100%;
+  margin-top: 8px;
+  box-sizing: border-box;
+}
+
+table.records th.records-category,
+tbody.records-category th {
+  font-weight: 600;
+  color: var(--strong);
+  background: var(--field);
+  border-top: 2px solid var(--line);
+}
+
+tbody.record-product td.record-head-cell {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  white-space: normal;
+}
+
+.record-head,
+.record-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.record-add {
+  margin-left: auto;
+}
+
+.record-head input.product-name {
+  width: 12rem;
+  text-overflow: ellipsis;
+}
+
+table.records input.number {
+  width: 6rem;
+}
+
+table.records td.num {
+  text-align: right;
+}
+
+table.records td.clip {
+  max-width: 9rem;
+}
 
 /* The main tabs and their panes. Only the chosen pane is shown. */
 .main-tabs {
