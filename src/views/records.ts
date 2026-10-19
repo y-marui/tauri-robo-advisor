@@ -54,7 +54,7 @@ export function recordsPanel(ctx: Context): Panel {
     (view) =>
       [
         view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.targeting}`).join(","),
-        view.portfolio.products.map((p) => `${p.id}:${p.category}`).join(","),
+        view.portfolio.products.map((p) => `${p.id}:${p.category}:${p.currency}`).join(","),
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
         view.portfolio.holdings.map((r) => `${r.account}:${r.product}`).join(","),
       ].join("|"),
@@ -380,7 +380,7 @@ export function recordsPanel(ctx: Context): Panel {
     h(
       "p",
       { class: "note" },
-      t("Every product and every record, as saved. Edit here; the Holdings tab only shows them."),
+      t("Every product and every record, as saved. Edit them here."),
       " ",
       t("Amounts are in each product’s currency."),
     ),

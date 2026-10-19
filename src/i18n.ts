@@ -98,8 +98,8 @@ export const MESSAGES = {
   "No records": { ja: "レコードはありません" },
   "Filter products": { ja: "商品を絞り込む" },
   "Delete product": { ja: "商品を削除" },
-  "Every product and every record, as saved. Edit here; the Holdings tab only shows them.": {
-    ja: "保存されている商品とレコードのすべて。編集はここで行い、保有タブは表示だけです。",
+  "Every product and every record, as saved. Edit them here.": {
+    ja: "保存されている商品とレコードのすべて。ここで編集します。",
   },
   "Enter an amount (0 is allowed). To remove a record, use its Delete button.": {
     ja: "金額を入力してください（0 も可）。レコードを消すには、その行の削除ボタンを使います。",
