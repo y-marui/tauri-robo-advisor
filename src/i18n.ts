@@ -337,6 +337,7 @@ export const MESSAGES = {
   "Recipe name": { ja: "レシピの名前" },
   "Links to follow, one per line (empty: the open page)": { ja: "たどるリンク（1行に1つ。空なら今のページ）" },
   "Text the table’s first cell starts with": { ja: "表の先頭のセルの書き出し" },
+  "Sites the recipe may follow links to (optional)": { ja: "リンクをたどってよいサイト（任意。例: sbisec.co.jp）" },
   "Save recipe": { ja: "レシピを保存" },
   "The recipe was saved.": { ja: "レシピを保存しました。" },
   "Choose an account and enter the recipe name and the table title first.": {

@@ -546,6 +546,9 @@ pub(crate) fn parse_candidates(value: &serde_json::Value) -> Result<Vec<Candidat
 pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
   const rendered = (a) => { if (a.getClientRects().length === 0) return false; for (let e = a; e; e = e.parentElement) { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false; } return true; };
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+  // A link whose address carries a user name, or an explicit port to another site, is not
+  // taken for the site it names: the URL API drops both from the origin.
+  const authority = (raw) => { const m = String(raw).trim().match(/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\/([^\/?#\\]*)/); return m ? m[1] : null; };
   const seen = new Map();
   const shown = rendered;
   [...document.querySelectorAll('a')].forEach((a, i) => {
@@ -560,8 +563,11 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
       try {
         const url = new URL(raw, location.href);
         const web = url.protocol === 'https:' || url.protocol === 'http:';
-        sameSite = web && url.origin === location.origin;
-        target = web ? url.origin : '';
+        const auth = authority(raw);
+        const userInfo = auth !== null && auth.includes('@');
+        const explicitPort = auth !== null && /:\d*$/.test(auth);
+        sameSite = web && !userInfo && url.origin === location.origin;
+        target = web && !userInfo && (url.origin === location.origin || !explicitPort) ? url.origin : '';
         const full = url.pathname + url.search + url.hash;
         tooLong = full.length > 500;
         href = full.slice(0, 500);
@@ -581,12 +587,18 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
 pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin, target) => {
   const rendered = (a) => { if (a.getClientRects().length === 0) return false; for (let e = a; e; e = e.parentElement) { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false; } return true; };
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+  // A link whose address carries a user name, or an explicit port to another site, is not
+  // taken for the site it names: the URL API drops both from the origin.
+  const authority = (raw) => { const m = String(raw).trim().match(/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\/([^\/?#\\]*)/); return m ? m[1] : null; };
   if (!origin || origin !== location.origin) return 'gone';
   const a = document.querySelectorAll('a')[index];
   if (!a || !rendered(a)) return 'gone';
   if (clean(a.innerText ?? a.textContent) !== wanted) return 'gone';
   let url;
-  try { url = new URL(a.getAttribute('href') ?? '', location.href); } catch (e) { return 'gone'; }
+  const raw = a.getAttribute('href') ?? '';
+  try { url = new URL(raw, location.href); } catch (e) { return 'gone'; }
+  const auth = authority(raw);
+  if (auth !== null && (auth.includes('@') || (url.origin !== location.origin && /:\d*$/.test(auth)))) return 'gone';
   // The site the link goes to must be exactly the one the Rust side accepted.
   if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !target || url.origin !== target) return 'gone';
   if (url.pathname + url.search + url.hash !== expected) return 'gone';
