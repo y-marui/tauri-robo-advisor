@@ -84,10 +84,16 @@ export function holdingsTablePanel(ctx: Context): Panel {
           quantityCell.textContent = held?.quantity ?? "";
           priceCell.textContent = priceText(held);
         };
+        // A record that only carries a weight (a product to start buying) has no value yet; the
+        // label follows every refresh, since an edit or an import can change either.
+        const weightOnlyLabel = h("span", { class: "muted weight-only" }, ` (${t("No value yet")})`);
+        const showWeightOnly = (): void => {
+          const held = holdingOf(current, record.account, record.product);
+          weightOnlyLabel.hidden = !(held && held.weight !== null && Number(held.value) === 0);
+        };
         showQuantityAndPrice();
-        refreshers.push(showQuantityAndPrice);
-        // A record that only carries a weight (a product to start buying) has no value yet.
-        const weightOnly = record.weight !== null && Number(record.value) === 0;
+        showWeightOnly();
+        refreshers.push(showQuantityAndPrice, showWeightOnly);
         rows.push(
           h(
             "tr",
@@ -144,7 +150,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 attrs: { inputmode: "decimal", class: "number" },
               }),
               h("span", { class: "muted" }, ` ${product.currency}`),
-              weightOnly ? h("span", { class: "muted weight-only" }, ` (${t("No value yet")})`) : null,
+              weightOnlyLabel,
             ),
             quantityCell,
             priceCell,
@@ -299,10 +305,13 @@ export function holdingsTablePanel(ctx: Context): Panel {
     el: table.el,
     render(view) {
       lastView = view;
+      // A valuation belongs to the state it was worked out from.
+      lastOverview = null;
       table.render(view);
     },
     showOverview,
     overviewFailed(error) {
+      lastOverview = null;
       note.classList.add("error");
       note.textContent = t("Could not load: {reason}", { reason: String(error) });
     },
