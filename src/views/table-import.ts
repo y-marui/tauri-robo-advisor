@@ -87,6 +87,8 @@ export function tableImportPanel(ctx: Context): Panel {
   const namePartInput = partInput(t("Value of the name cell"));
   const valuePartInput = partInput(t("Value of the number cell"));
   const pricePartInput = partInput(t("Value of the price cell"));
+  const quantitySelect = h("select", { "aria-label": t("Quantity column to record") });
+  const quantityPartInput = partInput(t("Value of the number cell"));
   const looseInput = h("input", { type: "checkbox", "aria-label": t("Allow text around numbers") });
   const saveMapping = h("button", { type: "button" }, t("Save columns"));
   const planButton = h("button", { type: "button" }, t("Preview import"));
@@ -108,6 +110,8 @@ export function tableImportPanel(ctx: Context): Panel {
       h("label", { class: "field" }, h("span", {}, t("Value of the name cell")), namePartInput),
       h("label", { class: "field" }, h("span", {}, t("Value of the number cell")), valuePartInput),
       h("label", { class: "field price-only" }, h("span", {}, t("Value of the price cell")), pricePartInput),
+      h("label", { class: "field column-only" }, h("span", {}, t("Quantity column to record")), quantitySelect),
+      h("label", { class: "field column-only" }, h("span", {}, t("Value of the number cell")), quantityPartInput),
       h("label", { class: "field" }, h("span", {}, t("Allow text around numbers")), looseInput),
       h("label", { class: "field" }, h("span", {}, t("Account to update")), accountSelect),
     ),
@@ -161,8 +165,13 @@ export function tableImportPanel(ctx: Context): Panel {
   const mapping = (): ColumnMapping | null => {
     const header = Number(headerInput.value);
     const product = modeSelect.value === "product";
-    const parts = [part(namePartInput), part(valuePartInput), part(pricePartInput)];
-    if (parts[0] === undefined || parts[1] === undefined || (product && parts[2] === undefined)) {
+    const parts = [part(namePartInput), part(valuePartInput), part(pricePartInput), part(quantityPartInput)];
+    if (
+      parts[0] === undefined ||
+      parts[1] === undefined ||
+      (product && parts[2] === undefined) ||
+      (!product && quantitySelect.value !== "" && parts[3] === undefined)
+    ) {
       return null; // a part that is not a whole number from 0 to 19 is not guessed at
     }
     if (
@@ -187,6 +196,8 @@ export function tableImportPanel(ctx: Context): Panel {
       value_part: parts[1],
       price_part: product ? parts[2] : null,
       loose_numbers: looseInput.checked,
+      quantity: !product && quantitySelect.value !== "" ? Number(quantitySelect.value) : null,
+      quantity_part: !product && quantitySelect.value !== "" ? parts[3] : null,
     };
   };
   /** Which value of a cell (counted from 0); empty: the whole cell; anything else that is not 0 to 19: `undefined`. */
@@ -205,6 +216,9 @@ export function tableImportPanel(ctx: Context): Panel {
     valueLabel.textContent = product ? t("Quantity column") : t("Value column");
     for (const field of mappingBox.querySelectorAll<HTMLElement>(".price-only")) {
       field.hidden = !product;
+    }
+    for (const field of mappingBox.querySelectorAll<HTMLElement>(".column-only")) {
+      field.hidden = product;
     }
     const perRecord = Number(perRecordSelect.value);
     for (const select of [nameRowSelect, valueRowSelect]) {
@@ -241,6 +255,8 @@ export function tableImportPanel(ctx: Context): Panel {
       valuePartInput.value = saved.value_part == null ? "" : String(saved.value_part);
       pricePartInput.value = saved.price_part == null ? "" : String(saved.price_part);
       looseInput.checked = saved.loose_numbers === true;
+      quantitySelect.value = saved.quantity_column == null || saved.quantity_column >= loaded.columns ? "" : String(saved.quantity_column);
+      quantityPartInput.value = saved.quantity_part == null ? "" : String(saved.quantity_part);
     }
   }
 
@@ -270,6 +286,12 @@ export function tableImportPanel(ctx: Context): Panel {
     valuePartInput.value = "";
     pricePartInput.value = "";
     looseInput.checked = false;
+    quantityPartInput.value = "";
+    quantitySelect.replaceChildren(
+      h("option", { value: "" }, t("none")),
+      ...columns.map((i) => h("option", { value: String(i) }, label(i))),
+    );
+    quantitySelect.value = "";
     syncControls();
     useSavedMapping();
 
@@ -367,6 +389,8 @@ export function tableImportPanel(ctx: Context): Panel {
       value_part: chosen.value_part,
       price_part: chosen.price_part,
       loose_numbers: chosen.loose_numbers,
+      quantity_column: chosen.quantity,
+      quantity_part: chosen.quantity_part,
     });
   });
 
@@ -450,6 +474,8 @@ export function tableImportPanel(ctx: Context): Panel {
             value_part: chosen.value_part,
             price_part: chosen.price_part,
             loose_numbers: chosen.loose_numbers,
+            quantity_column: chosen.quantity,
+            quantity_part: chosen.quantity_part,
           },
         },
       })
@@ -536,9 +562,11 @@ export function tableImportPanel(ctx: Context): Panel {
         sourceList.replaceChildren(...[...known].sort().map((s) => h("option", { value: s })));
         const previous = currencySelect.value;
         currencySelect.replaceChildren(
+          h("option", { value: "" }, t("(the product’s currency)")),
           ...[...currencies].sort().map((c) => h("option", { value: c }, c)),
         );
-        currencySelect.value = currencies.has(previous) ? previous : "JPY";
+        // The default is the currency of each product the rows are linked to.
+        currencySelect.value = previous === "" || currencies.has(previous) ? previous : "";
       }
 
       // An alias was linked or unlinked: show the new result.

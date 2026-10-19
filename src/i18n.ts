@@ -131,6 +131,11 @@ export const MESSAGES = {
   "Holdings by category": { ja: "カテゴリ別の保有" },
   "Account": { ja: "口座" },
   "Amount": { ja: "金額" },
+  "Quantity": { ja: "数量" },
+  "Price": { ja: "価格" },
+  "Quantity column to record": { ja: "記録する数量の列" },
+  "none": { ja: "なし" },
+  "(the product’s currency)": { ja: "（商品の通貨）" },
   "Value (JPY)": { ja: "評価額 (円)" },
   "Share": { ja: "構成比" },
   "Difference (points)": { ja: "目標との差 (ポイント)" },
@@ -166,6 +171,7 @@ export const MESSAGES = {
   "Linked to a product that is not in {currency}, so they are left out: {names}": {
     ja: "{currency} 建てでない商品に対応づけられているため、除外します: {names}",
   },
+  "Add a product first.": { ja: "先に商品を追加してください。" },
   "Value ({currency})": { ja: "評価額 ({currency})" },
   "No JPY market, so these could not be valued and are left out: {names}": {
     ja: "円の市場がなく評価できないため、除外します: {names}",

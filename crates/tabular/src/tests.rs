@@ -18,6 +18,8 @@ fn mapping(name: usize, value: usize, header_rows: usize) -> ColumnMapping {
         value_part: None,
         price_part: None,
         loose_numbers: false,
+        quantity: None,
+        quantity_part: None,
     }
 }
 
@@ -537,4 +539,32 @@ fn a_no_break_space_inside_a_number_is_a_thousands_separator_not_a_split() {
     };
 
     assert_eq!(extract(&table, &by_part).rows[0].value, dec!(1234));
+}
+
+#[test]
+fn quantity_and_price_are_kept_next_to_the_value() {
+    // Quantity x price: both are kept.
+    let table = cells(&[&["Alpha", "10", "12.50"], &["Beta", "x", "1"]]);
+    let by_price = ColumnMapping {
+        price: Some(2),
+        ..mapping(0, 1, 0)
+    };
+    let result = extract(&table, &by_price);
+    assert_eq!(result.rows[0].quantity, Some(dec!(10)));
+    assert_eq!(result.rows[0].price, Some(dec!(12.50)));
+    assert_eq!(result.rows[0].value, dec!(125.00));
+
+    // An evaluation column with a recorded quantity column: the value is the column's.
+    let table = cells(&[&["Alpha", "17,440", "100"], &["Beta", "5,000", "n/a"]]);
+    let recorded = ColumnMapping {
+        quantity: Some(2),
+        ..mapping(0, 1, 0)
+    };
+    let result = extract(&table, &recorded);
+    assert_eq!(result.rows[0].value, dec!(17440));
+    assert_eq!(result.rows[0].quantity, Some(dec!(100)));
+    assert_eq!(result.rows[0].price, None);
+    // An unreadable quantity is left out, the row stays.
+    assert_eq!(result.rows[1].value, dec!(5000));
+    assert_eq!(result.rows[1].quantity, None);
 }

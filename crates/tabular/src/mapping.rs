@@ -47,6 +47,11 @@ pub struct ColumnMapping {
     /// "150.25（10/15）"). Off: the cell must be only a number.
     #[serde(default)]
     pub loose_numbers: bool,
+    /// A quantity column to record when the value is read from an evaluation column.
+    #[serde(default)]
+    pub quantity: Option<usize>,
+    #[serde(default)]
+    pub quantity_part: Option<usize>,
 }
 
 /// A row that was read.
@@ -54,6 +59,11 @@ pub struct ColumnMapping {
 pub struct Extracted {
     pub name: String,
     pub value: Decimal,
+    /// What the value was worked out from, when the table gave it: the quantity and the
+    /// price (quantity x price / `price_unit`), or the quantity of a column that was
+    /// recorded next to an evaluation column.
+    pub quantity: Option<Decimal>,
+    pub price: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -152,6 +162,22 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 parse_amount(text)
             }
         };
+        let recordable = |n: Decimal| (n >= Decimal::ZERO && n <= MAX_VALUE).then_some(n);
+        // What is kept next to the value: quantity and price, or only a recorded quantity.
+        let (quantity, price) = match &second {
+            None => (
+                mapping
+                    .quantity
+                    .and_then(|column| value_cells.get(column))
+                    .and_then(|cell| read(&pick(cell, mapping.quantity_part, false)))
+                    .and_then(recordable),
+                None,
+            ),
+            Some(price) => (
+                read(&first).and_then(recordable),
+                read(price).and_then(recordable),
+            ),
+        };
         let value = match second {
             None => read(&first),
             Some(price) => match (read(&first), read(&price)) {
@@ -181,7 +207,12 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 skip(&mut skipped, SkipReason::OutOfRange);
                 start = record + 1;
             }
-            Some(value) => rows.push(Extracted { name, value }),
+            Some(value) => rows.push(Extracted {
+                name,
+                value,
+                quantity,
+                price,
+            }),
         }
     }
     Extraction { rows, skipped }

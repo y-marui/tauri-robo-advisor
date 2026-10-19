@@ -1,6 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rebalance::Holding;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +14,16 @@ use crate::transport::{Request, Response, Transport};
 const BALANCE_PATH: &str = "/v1/me/getbalance";
 const JPY: &str = "JPY";
 
-/// Balances valued in JPY, ready for `rebalance::propose`.
+/// One balance valued in JPY: the currency, the value in JPY, and the amount held.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Holding {
+    pub symbol: String,
+    pub value: Decimal,
+    /// How much of the currency is held (kept so an import can record the quantity).
+    pub amount: Decimal,
+}
+
+/// Balances valued in JPY.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Holdings {
     pub holdings: Vec<Holding>,
@@ -76,6 +84,7 @@ impl<T: Transport> Client<T> {
             holdings.push(Holding {
                 symbol: balance.currency_code,
                 value,
+                amount: balance.amount,
             });
         }
         holdings.sort_by(|a, b| a.symbol.cmp(&b.symbol));
@@ -251,11 +260,13 @@ mod tests {
             vec![
                 Holding {
                     symbol: "BTC".to_owned(),
-                    value: dec!(2000000)
+                    value: dec!(2000000),
+                    amount: dec!(0.5)
                 },
                 Holding {
                     symbol: "JPY".to_owned(),
-                    value: dec!(100000)
+                    value: dec!(100000),
+                    amount: dec!(100000)
                 },
             ]
         );

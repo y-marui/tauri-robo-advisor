@@ -138,6 +138,8 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
         "currency",
         "value",
         "quantity",
+        "price",
+        "price_unit",
         "value_jpy",
         "share_of_total",
     ]);
@@ -157,6 +159,8 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
             plain_cell(product.map_or("", |p| &p.currency)),
             number(holding.value),
             optional_number(holding.quantity),
+            optional_number(holding.price),
+            plain_cell(&holding.price_unit.to_string()),
             optional_number(*jpy),
             optional_number(values.share(*jpy)),
         ]);

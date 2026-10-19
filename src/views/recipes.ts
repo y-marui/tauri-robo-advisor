@@ -254,7 +254,7 @@ export function recipesPanel(ctx: Context): Panel {
           h(
             "span",
             {},
-            `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency})`,
+            `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`,
           ),
           deleteButton(() => void ctx.apply({ type: "remove_recipe", name: recipe.name })),
         ),

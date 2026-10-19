@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 
 /// The on-disk schema version. A file with a newer version is refused rather
 /// than guessed at, so an older app never rewrites data it does not understand.
-/// Version 2 added the saved import mappings, the revision, and the fetch recipes
-/// (all with defaults, so a version 1 file loads and is saved as version 2).
-pub const SCHEMA_VERSION: u32 = 2;
+/// Version 2 added the saved import mappings, the revision, and the fetch recipes.
+/// Version 3 added the price (and its unit) of a holding and the recorded quantity column
+/// of a mapping. Everything new has a default, so an older file loads and is saved as the
+/// current version, and an older app refuses a newer file instead of dropping its fields.
+pub const SCHEMA_VERSION: u32 = 3;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -109,6 +111,13 @@ pub struct Holding {
     pub value: Decimal,
     #[serde(default)]
     pub quantity: Option<Decimal>,
+    /// The price the value was worked out from, in the product's currency, when it is known
+    /// (an import of quantity x price). Per `price_unit` units.
+    #[serde(default)]
+    pub price: Option<Decimal>,
+    /// How many units the price is quoted for: 1, or 10,000 for a fund's price per 10,000 units.
+    #[serde(default = "one")]
+    pub price_unit: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -169,6 +178,12 @@ pub struct ImportMapping {
     /// Read the first number of a cell that has other text around it ("123.45US$").
     #[serde(default)]
     pub loose_numbers: bool,
+    /// A quantity column to record when the value is read from an evaluation column (when
+    /// the value is quantity x price, the value column is the quantity).
+    #[serde(default)]
+    pub quantity_column: Option<usize>,
+    #[serde(default)]
+    pub quantity_part: Option<usize>,
 }
 
 /// One link to follow, by its visible text. `reference` says which of several

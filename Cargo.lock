@@ -317,7 +317,6 @@ name = "bitflyer"
 version = "0.1.0"
 dependencies = [
  "hmac 0.12.1",
- "rebalance",
  "reqwest",
  "rust_decimal",
  "serde",

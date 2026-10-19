@@ -121,6 +121,12 @@ impl Portfolio {
             if let Some(quantity) = holding.quantity {
                 non_negative(quantity, "quantity").map_err(into_corrupt)?;
             }
+            if let Some(price) = holding.price {
+                non_negative(price, "price").map_err(into_corrupt)?;
+            }
+            if holding.price_unit == 0 {
+                return corrupt("a holding has a price unit of zero");
+            }
             if !self.accounts.iter().any(|a| a.id == holding.account)
                 || !self.products.iter().any(|p| p.id == holding.product)
             {

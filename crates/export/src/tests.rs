@@ -171,21 +171,21 @@ fn holdings_have_one_row_per_holding_with_jpy_values_and_shares() {
 
     assert_eq!(
         rows[0],
-        "account_id,account,account_kind,product_id,product,category_id,category,currency,value,quantity,value_jpy,share_of_total"
+        "account_id,account,account_kind,product_id,product,category_id,category,currency,value,quantity,price,price_unit,value_jpy,share_of_total"
     );
     assert_eq!(rows.len(), 4);
     // Total = 500,000 + 150,000 (1,000 USD at 150) + 100,000 = 750,000.
     assert_eq!(
         rows[1],
-        "6,Main,taxable,3,Stock Fund,1,Stocks,JPY,500000,,500000,0.666667"
+        "6,Main,taxable,3,Stock Fund,1,Stocks,JPY,500000,,,1,500000,0.666667"
     );
     assert_eq!(
         rows[2],
-        "6,Main,taxable,4,US Fund,1,Stocks,USD,1000,,150000,0.2"
+        "6,Main,taxable,4,US Fund,1,Stocks,USD,1000,,,1,150000,0.2"
     );
     assert_eq!(
         rows[3],
-        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,JPY,100000,,100000,0.133333"
+        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,JPY,100000,,,1,100000,0.133333"
     );
 }
 
@@ -243,7 +243,7 @@ fn aliases_and_settings_are_exported() {
         lines(&f["settings.csv"]),
         [
             "setting,value",
-            "schema_version,2",
+            "schema_version,3",
             "usd_jpy,150",
             "category_tolerance,0.01",
             "product_tolerance,0",
@@ -395,7 +395,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
     assert!(
         holdings
             .iter()
-            .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,"))
+            .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,"))
     );
     assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,0.75,free,,");
     assert_eq!(
@@ -413,7 +413,7 @@ fn a_missing_usd_rate_leaves_usd_values_empty() {
 
     let f = files(&p);
 
-    assert!(lines(&f["holdings.csv"])[2].ends_with(",USD,1000,,,"));
+    assert!(lines(&f["holdings.csv"])[2].ends_with(",USD,1000,,,1,,"));
     assert_eq!(lines(&f["settings.csv"])[2], "usd_jpy,");
 }
 

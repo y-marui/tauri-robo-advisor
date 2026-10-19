@@ -44,6 +44,9 @@ export interface Holding {
   product: number;
   value: string;
   quantity: string | null;
+  /** The price the value was worked out from, per `price_unit` units; null when not known. */
+  price: string | null;
+  price_unit: number;
 }
 
 /** Which columns of a source's table hold the name and the value (counted from 0). */
@@ -65,6 +68,9 @@ export interface ImportMapping {
   price_part?: number | null;
   /** Read the first number of a cell that has other text around it ("123.45US$"). */
   loose_numbers?: boolean;
+  /** A quantity column to record next to an evaluation column. */
+  quantity_column?: number | null;
+  quantity_part?: number | null;
 }
 
 /** One link of a recipe, by its visible text. */
@@ -170,7 +176,7 @@ export type Edit =
       quantity: string | null;
     }
   | { type: "remove_holding"; account: number; product: number }
-  | { type: "replace_holdings"; account: number; holdings: { product: number; value: string }[] }
+  | { type: "replace_holdings"; account: number; holdings: { product: number; value: string; quantity?: string | null; price?: string | null; price_unit?: number }[] }
   | {
       type: "set_import_mapping";
       source: string;
@@ -186,6 +192,8 @@ export type Edit =
       value_part?: number | null;
       price_part?: number | null;
       loose_numbers?: boolean;
+      quantity_column?: number | null;
+      quantity_part?: number | null;
     }
   | { type: "remove_import_mapping"; source: string }
   | { type: "set_recipe"; recipe: Recipe }
@@ -290,12 +298,20 @@ export interface AccountBalance {
 export interface ImportRow {
   name: string;
   value: string;
+  quantity?: string | null;
+  price?: string | null;
+  price_unit?: number;
 }
 
 export interface MatchedRow {
   names: string[];
   product: number;
   value: string;
+  /** Added up when every row had one. */
+  quantity: string | null;
+  /** Kept when every row had the same price. */
+  price: string | null;
+  price_unit: number;
 }
 
 export interface ImportPlan {
@@ -306,7 +322,7 @@ export interface ImportPlan {
 
 /** What the bitFlyer command returns: balances in JPY, and what could not be valued. */
 export interface BitflyerHoldings {
-  holdings: { symbol: string; value: string }[];
+  holdings: { symbol: string; value: string; /** How much of the currency is held. */ amount: string }[];
   unpriced: string[];
 }
 
@@ -332,6 +348,8 @@ export interface ColumnMapping {
   value_part?: number | null;
   price_part?: number | null;
   loose_numbers?: boolean;
+  quantity?: number | null;
+  quantity_part?: number | null;
 }
 
 export type SkipReason = "missing_column" | "no_name" | "not_a_number" | "out_of_range";
