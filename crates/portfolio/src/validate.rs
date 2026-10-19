@@ -164,15 +164,17 @@ impl Portfolio {
             return corrupt("there are too many recipes");
         }
         for recipe in &self.recipes {
-            // A recipe whose preset is not in this version of the app is kept as it is (and shown
-            // as an error where it is used): it only has to be a reference to an account.
-            let unknown_preset = recipe
-                .preset
-                .as_deref()
-                .is_some_and(|id| Preset::find(id).is_none());
-            let valid = if unknown_preset {
-                self.accounts.iter().any(|a| a.id == recipe.account)
-                    && name(&recipe.name, "recipe").as_ref() == Ok(&recipe.name)
+            // A recipe that refers to a preset is only a reference (what it stores is not compared
+            // with what the current preset would make of it: an app update may have dropped a
+            // link whose destination it remembers). When the preset is not in this version of the
+            // app, it is kept as it is, and is an error only where it is used.
+            let valid = if recipe.preset.is_some() {
+                name(&recipe.name, "recipe").as_ref() == Ok(&recipe.name)
+                    && recipe.is_clean_preset_reference()
+                    && match recipe.preset.as_deref().and_then(Preset::find) {
+                        Some(_) => recipe.clone().validated(self).is_ok(),
+                        None => self.accounts.iter().any(|a| a.id == recipe.account),
+                    }
             } else {
                 recipe.clone().validated(self).as_ref() == Ok(recipe)
             };

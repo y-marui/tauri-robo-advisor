@@ -1449,6 +1449,34 @@ fn an_unknown_preset_is_refused_on_save_but_kept_when_the_file_has_it() {
 }
 
 #[test]
+fn a_link_destination_of_a_link_the_preset_no_longer_has_does_not_make_the_file_invalid() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-funds".to_owned(),
+            account: acc,
+        },
+    );
+    // What an older version of the preset's link left behind.
+    p.recipes[0].links = vec![FetchLink {
+        text: "A link the preset used to follow".to_owned(),
+        reference: Some("h:0123456789abcdef".to_owned()),
+        menu: None,
+        heading: None,
+    }];
+    p.validate_integrity().unwrap();
+    assert!(
+        p.recipes[0].effective().unwrap().links[0]
+            .reference
+            .is_none()
+    );
+    // A stored definition is still refused.
+    p.recipes[0].table_starts_with = "Smuggled".to_owned();
+    assert!(p.validate_integrity().is_err());
+}
+
+#[test]
 fn a_custom_recipe_stays_next_to_a_preset_one_and_a_preset_can_be_detached() {
     let (mut p, _, _, acc) = sample();
     apply(

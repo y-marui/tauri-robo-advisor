@@ -328,6 +328,28 @@ impl Recipe {
             .into_preset_reference())
     }
 
+    /// Whether a stored recipe that refers to a preset holds only what a reference may: no
+    /// definition of its own, and links that are only a text and a remembered destination.
+    pub(crate) fn is_clean_preset_reference(&self) -> bool {
+        let bare = |recipe: &Recipe| Recipe {
+            links: Vec::new(),
+            ..recipe.clone()
+        };
+        let bounded = |value: &str, max: usize| {
+            value.chars().count() <= max && !value.chars().any(char::is_control)
+        };
+        self.links.len() <= MAX_RECIPE_LINKS
+            && self.links.iter().all(|l| {
+                l.menu.is_none()
+                    && l.heading.is_none()
+                    && bounded(&l.text, MAX_LINK_TEXT_CHARS)
+                    && l.reference
+                        .as_deref()
+                        .is_some_and(|r| !r.is_empty() && bounded(r, MAX_LINK_REFERENCE_CHARS))
+            })
+            && bare(self) == bare(&self.clone().into_preset_reference())
+    }
+
     fn validated_definition(self, portfolio: &Portfolio) -> Result<Self, Error> {
         let recipe_name = name(&self.name, "recipe")?;
         if self.links.len() > MAX_RECIPE_LINKS {
