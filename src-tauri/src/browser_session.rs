@@ -328,6 +328,13 @@ fn pick_table(
             .is_some_and(|cell| words(cell).starts_with(&title))
     };
     if follow {
+        // The rows come from the tables after the heading: if the page was cut off at the limit,
+        // holdings may be missing, and a result that is applied would delete them.
+        if raw.len() >= browser::MAX_TABLES {
+            return Err(
+                "The page has too many tables to be sure the whole list was read.".to_owned(),
+            );
+        }
         let heads: Vec<usize> = (0..raw.len()).filter(|&i| matches_title(&raw[i])).collect();
         let head = match heads.as_slice() {
             [] => {
@@ -532,5 +539,19 @@ mod tests {
         let mut twice = raw;
         twice.push(one_row(&["Code / Name 2", "Account", "Quantity"]));
         assert!(pick_table(twice, "Code", None, true).is_err());
+    }
+
+    #[test]
+    fn a_page_cut_off_at_the_table_limit_is_not_accepted_for_following_tables() {
+        let one_row =
+            |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>()];
+        let mut raw = vec![one_row(&["Code", "Account"])];
+        while raw.len() < browser::MAX_TABLES {
+            raw.push(one_row(&["A", "Taxable"]));
+        }
+
+        assert!(pick_table(raw.clone(), "Code", None, true).is_err());
+        raw.pop();
+        assert!(pick_table(raw, "Code", None, true).is_ok());
     }
 }
