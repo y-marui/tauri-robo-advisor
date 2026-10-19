@@ -103,7 +103,7 @@ export function bitflyerPanel(ctx: Context): Panel {
     result.replaceChildren(h("p", { class: "note" }, t("Fetching…")));
     fetchBitflyerHoldings()
       .then((fetched) => {
-        rows = fetched.holdings.map((x) => ({ name: x.symbol, value: x.value }));
+        rows = fetched.holdings.map((x) => ({ name: x.symbol, value: x.value, quantity: x.amount }));
         unpriced = fetched.unpriced;
         return showPlan();
       })

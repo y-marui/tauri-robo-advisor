@@ -322,7 +322,7 @@ export interface ImportPlan {
 
 /** What the bitFlyer command returns: balances in JPY, and what could not be valued. */
 export interface BitflyerHoldings {
-  holdings: { symbol: string; value: string }[];
+  holdings: { symbol: string; value: string; /** How much of the currency is held. */ amount: string }[];
   unpriced: string[];
 }
 
