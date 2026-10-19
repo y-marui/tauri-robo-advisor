@@ -533,7 +533,7 @@ impl Portfolio {
                     } else {
                         Funding::Cash
                     },
-                    rounding_unit: Decimal::new(1000, 0),
+                    rounding_unit: Decimal::ONE,
                 });
             }
             Edit::UpdateAccount {

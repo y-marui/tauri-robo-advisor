@@ -4,6 +4,7 @@
 
 ### Changed
 
+- The rounding unit of a new account now defaults to 1 yen (it was 1,000 yen), since many investment trusts can be bought in 1 yen steps. Existing accounts keep the unit they have, and it can still be changed per account.
 - The app identifier is now `y.marui.Robo-Advisor`, in the same form as the Swift apps (`y.marui.<App-Name>`). The data folder (and the default browser profile inside it) moves to `~/Library/Application Support/y.marui.Robo-Advisor` on macOS; a portfolio file or browser profile in the old `dev.marui.robo-advisor` folder is not read any more and has to be moved by hand. The keychain service name for the bitFlyer key is unchanged, so a saved key keeps working.
 
 ### Added

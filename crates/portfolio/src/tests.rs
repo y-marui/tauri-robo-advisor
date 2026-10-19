@@ -212,7 +212,7 @@ fn nisa_accounts_default_to_no_selling_and_points_accounts_to_points() {
     assert!(!find(nisa).sellable);
     assert_eq!(find(points).funding, Funding::Points);
     assert!(find(taxable).sellable);
-    assert_eq!(find(taxable).rounding_unit, dec!(1000));
+    assert_eq!(find(taxable).rounding_unit, dec!(1));
 }
 
 #[test]
