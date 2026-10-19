@@ -60,6 +60,13 @@ export function accountsPanel(ctx: Context): Panel {
           ),
         );
 
+        // The order of the accounts is the order everywhere (the tabs, the tables, the choices).
+        const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
+        const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
+        up.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: true }));
+        down.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: false }));
+        const order = h("span", { class: "order" }, up, down);
+
         return h(
           "tr",
           {},
@@ -121,7 +128,7 @@ export function accountsPanel(ctx: Context): Panel {
             }),
           ),
           h("td", {}, canBuy),
-          h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_account", id }))),
+          h("td", {}, order, deleteButton(() => void ctx.apply({ type: "remove_account", id }))),
         );
       });
 
