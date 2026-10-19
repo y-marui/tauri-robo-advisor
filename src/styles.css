@@ -452,17 +452,29 @@ textarea {
   align-items: center;
 }
 
-/* The name and the category of a product are edited in its row. */
+/* The name of a product is edited in its row; a long name is clipped inside the field. */
 .product-cell {
-  display: grid;
-  gap: 2px;
-  min-width: 11rem;
+  min-width: 9rem;
+  max-width: 14rem;
 }
 
-.product-cell input,
-.product-cell select {
+.product-cell input {
   width: 100%;
   box-sizing: border-box;
+  text-overflow: ellipsis;
+}
+
+/* The category select sits in its own column and keeps its width; a long name is clipped. */
+td select {
+  max-width: 11rem;
+  text-overflow: ellipsis;
+}
+
+/* Text that must not widen its column: clipped with an ellipsis inside the cell. */
+td.clip {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .order {
@@ -487,18 +499,42 @@ textarea {
    width and scrolls sideways itself when it is still too wide. */
 .holdings-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
 
 .holdings-layout .side {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
 }
 
-@media (max-width: 900px) {
+/* A card never grows past its grid cell (the charts and the selects used to push it out and
+   run over the next panel). */
+.holdings-layout > *,
+.holdings-layout .side > * {
+  min-width: 0;
+}
+
+/* Stacked panels are wide; the charts keep a readable size instead of scaling with them. */
+.overview .chart:not(.pie) {
+  max-width: 26rem;
+}
+
+.holdings-layout td input.number {
+  width: 7rem;
+}
+
+.overview select,
+.account-tabs select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* A narrower window stacks the panels (the table keeps the full width). */
+@media (max-width: 1000px) {
   .holdings-layout {
     grid-template-columns: minmax(0, 1fr);
   }
