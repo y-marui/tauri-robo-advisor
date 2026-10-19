@@ -1317,7 +1317,7 @@ fn a_preset_is_never_added_twice_for_one_account() {
 }
 
 #[test]
-fn allowed_sites_of_a_recipe_are_checked() {
+fn allowed_sites_of_a_recipe_must_be_vetted_sites() {
     let (mut p, _, _, acc) = sample();
     let with = |sites: &[&str]| {
         let mut recipe = recipe_for(acc);
@@ -1325,33 +1325,31 @@ fn allowed_sites_of_a_recipe_are_checked() {
         recipe
     };
 
-    // Plain host names are kept (trimmed, lower-cased, no duplicates).
+    // A vetted site is kept (trimmed, lower-cased, no duplicates).
     apply(
         &mut p,
         Edit::SetRecipe {
-            recipe: with(&[" Example.CO.jp ", "example.co.jp", "example.com"]),
+            recipe: with(&[" SBISEC.co.jp ", "sbisec.co.jp", "monex.co.jp"]),
         },
     );
     assert_eq!(
         p.recipes[0].allowed_sites,
-        vec!["example.co.jp", "example.com"]
+        vec!["sbisec.co.jp", "monex.co.jp"]
     );
 
-    // Anything that is not a plain host with two labels, a suffix shared by many owners, and too
-    // many sites are refused, and nothing changes.
+    // Anything else is refused, whatever it looks like: another company, a shared domain, a
+    // look-alike, a parent, or a value with a scheme or a path. Nothing changes.
     let before = p.clone();
     for bad in [
-        "co.jp",
-        "com",
-        "https://example.com",
-        "example.com/path",
-        "example.com:8443",
-        "*.example.com",
-        "user@example.com",
-        "-example.com",
-        "example..com",
-        "exa mple.com",
+        "example.com",
+        "blogspot.com",
         "github.io",
+        "co.jp",
+        "evil-sbisec.co.jp",
+        "sbisec.co.jp.evil.test",
+        "www.sbisec.co.jp",
+        "https://sbisec.co.jp",
+        "sbisec.co.jp/path",
         "",
     ] {
         assert!(
@@ -1364,9 +1362,10 @@ fn allowed_sites_of_a_recipe_are_checked() {
     }
     assert!(
         p.apply(Edit::SetRecipe {
-            recipe: with(&["a.example", "b.example", "c.example", "d.example"]),
+            recipe: with(&["sbisec.co.jp", "monex.co.jp", "sbisec.co.jp", "monex.co.jp"]),
         })
-        .is_err()
+        .is_err(),
+        "too many entries"
     );
     assert_eq!(p, before);
 }

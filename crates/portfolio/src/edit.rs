@@ -226,50 +226,16 @@ impl ImportMapping {
     }
 }
 
-/// Sites that are shared by many unrelated owners, so a recipe may not be allowed to follow
-/// links across all of them. (The list is short on purpose: the site must also contain the host
-/// the recipe starts on, which is checked when the recipe runs.)
-const SHARED_SUFFIXES: &[&str] = &[
-    "co.jp",
-    "or.jp",
-    "ne.jp",
-    "ac.jp",
-    "go.jp",
-    "ed.jp",
-    "gr.jp",
-    "lg.jp",
-    "ad.jp",
-    "co.uk",
-    "org.uk",
-    "ac.uk",
-    "gov.uk",
-    "com.au",
-    "net.au",
-    "org.au",
-    "co.nz",
-    "com.cn",
-    "com.hk",
-    "com.tw",
-    "co.kr",
-    "co.in",
-    "com.br",
-    "com.sg",
-    "github.io",
-    "herokuapp.com",
-    "cloudfront.net",
-    "amazonaws.com",
-    "azurewebsites.net",
-    "appspot.com",
-    "pages.dev",
-    "vercel.app",
-    "netlify.app",
-];
+/// The sites a recipe may be allowed to cross to. Each is a registered domain of one company
+/// (never a domain that many unrelated owners share, such as a blog or hosting service), added
+/// here after the company and its pages were checked. A list of what to refuse could never be
+/// complete, so only these are accepted; adding a site is a change to this list and its review.
+pub const VETTED_SITES: &[&str] = &["sbisec.co.jp", "monex.co.jp"];
 const MAX_ALLOWED_SITES: usize = 3;
 
-/// Checks the allowed sites of a recipe: plain lower-case host names with at least two labels
-/// (no scheme, path, port, or wildcard), not a suffix shared by many owners. Duplicates go.
+/// Checks the allowed sites of a recipe: each must be one of the vetted sites (trimmed and
+/// lower-cased); duplicates go.
 fn allowed_sites(sites: &[String]) -> Result<Vec<String>, Error> {
-    let bad = || Error::Invalid("an allowed site is not acceptable".to_owned());
     if sites.len() > MAX_ALLOWED_SITES {
         return Err(Error::Invalid(
             "a recipe has too many allowed sites".to_owned(),
@@ -278,19 +244,10 @@ fn allowed_sites(sites: &[String]) -> Result<Vec<String>, Error> {
     let mut out: Vec<String> = Vec::new();
     for site in sites {
         let site = site.trim().to_lowercase();
-        let labels: Vec<&str> = site.split('.').collect();
-        let plain = site.len() <= 100
-            && labels.len() >= 2
-            && labels.iter().all(|l| {
-                !l.is_empty()
-                    && l.len() <= 63
-                    && !l.starts_with('-')
-                    && !l.ends_with('-')
-                    && l.bytes()
-                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-            });
-        if !plain || SHARED_SUFFIXES.contains(&site.as_str()) {
-            return Err(bad());
+        if !VETTED_SITES.contains(&site.as_str()) {
+            return Err(Error::Invalid(
+                "that site is not one the app may follow links to".to_owned(),
+            ));
         }
         if !out.contains(&site) {
             out.push(site);
