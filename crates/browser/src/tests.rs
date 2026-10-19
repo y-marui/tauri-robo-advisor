@@ -196,7 +196,10 @@ fn fake_browser_logged(
 
 #[test]
 fn pages_are_listed_attached_read_and_closed() {
-    let endpoint = fake_browser(json!([[["a", "1"], ["b", "2"]]]));
+    let endpoint = fake_browser(json!({
+        "leaf": [[["a", "1"], ["b", "2"]]],
+        "outer": [[["c", "3"]]],
+    }));
     let mut cdp = Cdp::connect(&endpoint).unwrap();
 
     let pages = cdp.pages().unwrap();
@@ -205,7 +208,9 @@ fn pages_are_listed_attached_read_and_closed() {
 
     let session = cdp.attach(&pages[0]).unwrap();
     let tables = cdp.read_tables(&session).unwrap();
-    assert_eq!(tables, vec![vec![vec!["a", "1"], vec!["b", "2"]]]);
+    assert_eq!(tables.leaf, vec![vec![vec!["a", "1"], vec!["b", "2"]]]);
+    assert_eq!(tables.outer, vec![vec![vec!["c", "3"]]]);
+    assert_eq!(tables.len(), 2);
 
     cdp.close().unwrap();
 }
@@ -253,7 +258,14 @@ fn a_page_answer_of_the_wrong_shape_is_refused() {
         json!("text"),
         json!([["a"]]),
         json!([[[1, 2]]]),
-        json!([[["x".repeat(2000)]]]),
+        json!({"leaf": [[[1, 2]]], "outer": []}),
+        json!({"leaf": [[["x".repeat(2000)]]], "outer": []}),
+        json!({"leaf": []}),
+        // Both groups together are held to the limit.
+        json!({
+            "leaf": vec![json!([["a"]]); MAX_TABLES],
+            "outer": [[["a"]]],
+        }),
         Value::Null,
     ] {
         let endpoint = fake_browser(wrong.clone());
