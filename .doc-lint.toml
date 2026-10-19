@@ -1,0 +1,15 @@
+# Markdown size and frontmatter warnings (warnings only; they never stop a commit).
+# The format is defined in the dotfiles specification (doc-lint).
+scope = "default"
+
+# The entry files for other tools and the repository docs are plain Markdown, not notes with
+# frontmatter, so the frontmatter check is skipped for them.
+exempt_frontmatter = [
+  "*.md",
+  "docs/**",
+]
+
+# The changelog is long by nature and is not read as context; its size is not checked.
+exempt_size = [
+  "CHANGELOG.md",
+]
