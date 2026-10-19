@@ -167,6 +167,10 @@ button.danger.armed {
   outline-offset: 1px;
 }
 
+.unmatched {
+  margin-bottom: 8px;
+}
+
 .add-row {
   display: flex;
   flex-wrap: wrap;

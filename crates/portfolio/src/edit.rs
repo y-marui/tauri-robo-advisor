@@ -13,6 +13,15 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Edit {
+    /// Adds a product and links a name of an import source to it in one step (a name the import
+    /// did not know yet becomes a product). Both or neither.
+    AddProductWithAlias {
+        name: String,
+        category: CategoryId,
+        currency: String,
+        source: String,
+        alias: String,
+    },
     AddCategory {
         name: String,
         target_weight: Decimal,
@@ -357,6 +366,65 @@ const MAX_PRICE_UNIT: u64 = 1_000_000_000;
 const MAX_ALIASES_PER_PRODUCT: usize = 50;
 
 impl Portfolio {
+    /// Adds a product and returns its id.
+    fn add_product(
+        &mut self,
+        new_name: &str,
+        category: CategoryId,
+        code: &str,
+    ) -> Result<ProductId, Error> {
+        self.check_capacity(self.products.len())?;
+        let new_name = name(new_name, "product")?;
+        let code = currency(code)?;
+        self.category(category)?;
+        self.ensure_product_name_free(&new_name, None)?;
+        let id = ProductId(self.take_id());
+        self.products.push(Product {
+            id,
+            name: new_name,
+            category,
+            currency: code,
+            weight: None,
+            aliases: Vec::new(),
+        });
+        Ok(id)
+    }
+
+    /// Links a name of an import source to a product (once; another product may not have it).
+    fn add_alias(
+        &mut self,
+        product: ProductId,
+        source: &str,
+        alias_name: &str,
+    ) -> Result<(), Error> {
+        let alias = Alias {
+            source: name(source, "alias source")?,
+            name: name(alias_name, "alias")?,
+        };
+        self.product(product)?;
+        if let Some(owner) = self
+            .products
+            .iter()
+            .find(|p| p.aliases.contains(&alias))
+            .map(|p| p.id)
+        {
+            if owner == product {
+                return Ok(());
+            }
+            return Err(Error::Conflict(
+                "this name is already linked to another product".to_owned(),
+            ));
+        }
+        let product = self.product_mut(product)?;
+        if product.aliases.len() >= MAX_ALIASES_PER_PRODUCT {
+            return Err(Error::Invalid(
+                "too many aliases for one product".to_owned(),
+            ));
+        }
+        product.aliases.push(alias);
+        Ok(())
+    }
+
     /// Applies one edit. The edit is fully validated before anything changes,
     /// so a rejected edit leaves the portfolio untouched.
     pub fn apply(&mut self, edit: Edit) -> Result<(), Error> {
@@ -416,20 +484,24 @@ impl Portfolio {
                 category,
                 currency: code,
             } => {
-                self.check_capacity(self.products.len())?;
-                let new_name = name(&new_name, "product")?;
-                let code = currency(&code)?;
-                self.category(category)?;
-                self.ensure_product_name_free(&new_name, None)?;
-                let id = ProductId(self.take_id());
-                self.products.push(Product {
-                    id,
-                    name: new_name,
-                    category,
-                    currency: code,
-                    weight: None,
-                    aliases: Vec::new(),
-                });
+                self.add_product(&new_name, category, &code)?;
+            }
+            Edit::AddProductWithAlias {
+                name: new_name,
+                category,
+                currency: code,
+                source,
+                alias,
+            } => {
+                // Both or neither: an alias that cannot be added leaves no new product behind.
+                let before = self.clone();
+                let result = self
+                    .add_product(&new_name, category, &code)
+                    .and_then(|product| self.add_alias(product, &source, &alias));
+                if let Err(error) = result {
+                    *self = before;
+                    return Err(error);
+                }
             }
             Edit::UpdateProduct {
                 id,
@@ -476,31 +548,7 @@ impl Portfolio {
                 source,
                 name: alias_name,
             } => {
-                let alias = Alias {
-                    source: name(&source, "alias source")?,
-                    name: name(&alias_name, "alias")?,
-                };
-                self.product(product)?;
-                if let Some(owner) = self
-                    .products
-                    .iter()
-                    .find(|p| p.aliases.contains(&alias))
-                    .map(|p| p.id)
-                {
-                    if owner == product {
-                        return Ok(());
-                    }
-                    return Err(Error::Conflict(
-                        "this name is already linked to another product".to_owned(),
-                    ));
-                }
-                let product = self.product_mut(product)?;
-                if product.aliases.len() >= MAX_ALIASES_PER_PRODUCT {
-                    return Err(Error::Invalid(
-                        "too many aliases for one product".to_owned(),
-                    ));
-                }
-                product.aliases.push(alias);
+                self.add_alias(product, &source, &alias_name)?;
             }
             Edit::RemoveAlias {
                 product,

@@ -222,6 +222,7 @@ export type Edit =
   | { type: "remove_recipe"; name: string }
   | { type: "add_preset_recipe"; preset: string; account: number }
   | { type: "add_alias"; product: number; source: string; name: string }
+  | { type: "add_product_with_alias"; name: string; category: number; currency: string; source: string; alias: string }
   | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
   | { type: "set_tolerances"; category: string; product: string }
