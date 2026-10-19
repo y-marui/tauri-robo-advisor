@@ -185,7 +185,6 @@ export const MESSAGES = {
   "(the product’s currency)": { ja: "（商品の通貨）" },
   "Value (JPY)": { ja: "評価額 (円)" },
   "Share": { ja: "構成比" },
-  "Difference (points)": { ja: "目標との差 (ポイント)" },
   "By account": { ja: "口座ごと" },
   "Balance inside the account": { ja: "口座内の商品バランス" },
   "Add to this account": { ja: "この口座への追加" },

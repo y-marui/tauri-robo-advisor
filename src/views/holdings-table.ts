@@ -5,32 +5,19 @@ import { getLanguage, t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Holding, Overview, PortfolioView } from "../types.ts";
 
-// The center panel: holding records grouped by category, each group closed by
-// a subtotal row. The amounts are edited in place (in the product's own
-// currency); the JPY values, shares, and differences come from Rust.
+// The center panel: holding records grouped by category (or by account), each group opened by
+// a subtotal row. The amounts are edited in place (in the product's own currency); the JPY
+// values and shares come from Rust. A record is one line: the name field, the account, and
+// the category select (the way to move a product to another category).
 
 const percent = (fraction: string): string => `${fractionToPercent(fraction)}%`;
 const yen = (amount: string): string => formatAmount(amount, getLanguage());
-
-/** "+17.78" or "-5" percentage points; the sign carries the meaning, not only the color. */
-function points(difference: string): string {
-  const text = fractionToPercent(difference);
-  return text.startsWith("-") || text === "0" ? text : `+${text}`;
-}
-
-/** Below target would be corrected by buying, above target by selling. */
-function differenceClass(difference: string): string {
-  return difference.startsWith("-") ? "delta-buy" : difference === "0" ? "" : "delta-sell";
-}
 
 export function holdingsTablePanel(ctx: Context): Panel {
   // Cells that show Rust's valuation, found again by key after each refresh.
   let holdingCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
   let accountCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
-  let categoryCells = new Map<
-    number,
-    { value: HTMLElement; share: HTMLElement; target: HTMLElement; difference: HTMLElement }
-  >();
+  let categoryCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
   const note = h("p", { class: "note", role: "status" });
   let groupBy: "category" | "account" = "category";
   let lastView: PortfolioView | null = null;
@@ -71,7 +58,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
 
       const rows: HTMLElement[] = [];
 
-      const recordRow = (record: Holding, secondColumn: "account" | "category"): void => {
+      const recordRow = (record: Holding): void => {
         const product = products.find((p) => p.id === record.product);
         const account = accounts.find((a) => a.id === record.account);
         if (!product || !account) {
@@ -110,6 +97,11 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 get: (v) => v.portfolio.products.find((p) => p.id === product.id)?.name ?? "",
                 edit: (text) => ({ type: "update_product", id: product.id, name: text }),
               }),
+            ),
+            ...(groupBy === "category" ? [h("td", { class: "clip" }, account.name)] : []),
+            h(
+              "td",
+              {},
               selectField({
                 ctx,
                 bind,
@@ -118,13 +110,6 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 get: (v) => String(v.portfolio.products.find((p) => p.id === product.id)?.category ?? ""),
                 edit: (value) => ({ type: "update_product", id: product.id, category: Number(value) }),
               }),
-            ),
-            h(
-              "td",
-              {},
-              secondColumn === "account"
-                ? account.name
-                : (categories.find((c) => c.id === product.category)?.name ?? ""),
             ),
             h(
               "td",
@@ -158,8 +143,6 @@ export function holdingsTablePanel(ctx: Context): Panel {
             priceCell,
             cells.value,
             cells.share,
-            h("td", {}),
-            h("td", {}),
           ),
         );
       };
@@ -182,12 +165,10 @@ export function holdingsTablePanel(ctx: Context): Panel {
               h("td", {}),
               subtotal.value,
               subtotal.share,
-              h("td", {}),
-              h("td", {}),
             ),
           );
           for (const record of records) {
-            recordRow(record, "category");
+            recordRow(record);
           }
         }
       } else {
@@ -195,12 +176,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
           const own = products.filter((p) => p.category === category.id);
           const records = holdings.filter((x) => own.some((p) => p.id === x.product));
 
-          const subtotal = {
-            value: h("td", { class: "num" }),
-            share: h("td", { class: "num" }),
-            target: h("td", { class: "num" }),
-            difference: h("td", { class: "num" }),
-          };
+          const subtotal = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
           categoryCells.set(category.id, subtotal);
           rows.push(
             h(
@@ -208,7 +184,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
               { class: "group" },
               h(
                 "th",
-                { scope: "rowgroup", colspan: 2 },
+                { scope: "rowgroup", colspan: 3 },
                 textField({
                   ctx,
                   bind,
@@ -222,12 +198,10 @@ export function holdingsTablePanel(ctx: Context): Panel {
               h("td", {}),
               subtotal.value,
               subtotal.share,
-              subtotal.target,
-              subtotal.difference,
             ),
           );
           for (const record of records) {
-            recordRow(record, "account");
+            recordRow(record);
           }
         }
       }
@@ -246,14 +220,13 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 "tr",
                 {},
                 h("th", {}, t("Product")),
-                h("th", {}, groupBy === "account" ? t("Category") : t("Account")),
+                ...(groupBy === "category" ? [h("th", {}, t("Account"))] : []),
+                h("th", {}, t("Category")),
                 h("th", {}, t("Amount")),
                 h("th", {}, t("Quantity")),
                 h("th", {}, t("Price")),
                 h("th", {}, t("Value (JPY)")),
                 h("th", {}, t("Share")),
-                h("th", {}, t("Target")),
-                h("th", {}, t("Difference (points)")),
               ),
             ),
             h("tbody", {}, ...rows),
@@ -305,9 +278,6 @@ export function holdingsTablePanel(ctx: Context): Panel {
       if (cells) {
         cells.value.textContent = yen(category.current);
         cells.share.textContent = percent(category.current_share);
-        cells.target.textContent = percent(category.target_share);
-        cells.difference.textContent = points(category.difference);
-        cells.difference.className = `num ${differenceClass(category.difference)}`;
       }
     }
   }
