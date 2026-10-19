@@ -2101,15 +2101,16 @@ mod tests {
     }
 
     #[test]
-    fn the_rakuten_funds_preset_reads_the_outer_table_whose_cells_hold_small_tables() {
-        // A made-up page with the layout of the real one: the holdings are one table whose
-        // amount cells hold small tables, so it is an outer table; the small tables are leaf
-        // tables of their own (an amount alone, no name). After the heading row a holding is a
-        // data row and a note row.
+    fn the_rakuten_all_preset_reads_every_holding_of_the_outer_table_and_not_the_summary() {
+        // A made-up page with the layout of the real one: the holdings of every kind are one table
+        // (an outer table: some of its cells hold small tables, which are leaf tables of their own
+        // with an amount and no name), with one visible row per holding after the heading row, and
+        // a row of one empty cell at the end. Next to it is a summary table by kind that does not
+        // start with the same cells. The evaluation cell has two lines (the evaluation, the profit).
         let (state, main, _, _, _) = recipe_state("rakuten");
         state
             .apply(Edit::AddPresetRecipe {
-                preset: "rakuten-funds".to_owned(),
+                preset: "rakuten-all".to_owned(),
                 account: main,
             })
             .unwrap();
@@ -2123,35 +2124,34 @@ mod tests {
         let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
         let heading = {
             let mut cells = vec![recipe.table_starts_with.as_str()];
-            cells.resize(9, "");
+            cells.resize(7, "");
             row(&cells)
         };
-        let holding = |name: &str, units: &str, value: &str| {
-            vec![
-                row(&[
-                    "",
-                    name,
-                    "Taxable",
-                    units,
-                    "5,000.00 円\n6,000 円",
-                    "10,000 円\n+5 円",
-                    value,
-                    "+1,000 円",
-                    "x",
-                ]),
-                row(&["", "Note", "", "", "", "", "", "", ""]),
-            ]
+        let holding = |kind: &str, name: &str, units: &str, value: &str| {
+            row(&[
+                kind,
+                name,
+                "Taxable",
+                units,
+                "5,000.00 円\n6,000 円",
+                "10,000 円\n+5 円",
+                value,
+            ])
         };
-        let mut holdings = vec![heading];
-        holdings.extend(holding("Alpha Fund", "5,000 口", "6,000 円\n+100 円"));
-        holdings.extend(holding("Beta Fund", "1,500 口", "3,000 円\n-50 円"));
+        let holdings = vec![
+            heading,
+            holding("Fund", "Alpha Fund", "5,000 口", "6,000 円\n+100 円"),
+            holding("Fund", "Beta Fund", "1,500 口", "3,000 円\n-50 円"),
+            holding("Stock", "Gamma Corp", "250 株", "700 円\n+1 円"),
+            row(&[""]),
+        ];
         let page = browser::PageTables {
             leaf: vec![
                 vec![row(&["6,000 円"])],
                 vec![row(&["+1,000 円"])],
                 vec![row(&["Total", "9,000 円"])],
             ],
-            outer: vec![vec![row(&["Menu", "Other"])], holdings],
+            outer: vec![vec![row(&["Kind", "Total", "Gain"])], holdings],
         };
 
         let table = crate::browser_session::pick_page_table_for_test(
@@ -2161,6 +2161,8 @@ mod tests {
         );
         let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
 
+        // Every holding is read, whatever its kind; the empty row at the end is dropped when the
+        // table is made.
         assert_eq!(result.skipped, vec![]);
         let got: Vec<(String, String, String)> = result
             .rows
@@ -2182,6 +2184,7 @@ mod tests {
                     "5000".to_owned()
                 ),
                 ("Beta Fund".to_owned(), "3000".to_owned(), "1500".to_owned()),
+                ("Gamma Corp".to_owned(), "700".to_owned(), "250".to_owned()),
             ]
         );
     }

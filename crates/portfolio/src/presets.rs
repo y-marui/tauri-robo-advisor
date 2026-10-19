@@ -151,22 +151,25 @@ const PRESETS: &[Preset] = &[
             max_records: None,
         },
     },
-    // Rakuten Securities, the investment trust holdings list: the page of the member site that
-    // the top page links to with a plain link on the same host (the pages of the company are
-    // spread over several hosts). The holdings are one table whose cells hold small tables (the
-    // amounts), so it is an outer table (see `browser::PageTables`) and is found by its heading
-    // cells. After a heading row, a holding is two rows: the data row (a cell for a mark, name,
-    // account type, units, cost, price, evaluation, profit, and a last cell; the cost, the price,
-    // and the evaluation cells hold two lines, and the first line is the amount) and a row with a
-    // note. Only the evaluation (first line of its cell) and the units are read: "9,999円",
-    // "9,999口" are numbers with a unit.
+    // Rakuten Securities, the page 保有商品一覧-すべて (all holdings): the top page after logging in
+    // links to it with a plain link on the same host (the pages of the company are spread over
+    // several hosts). The holdings of every kind are one table, found by its heading cells (its
+    // cells are outer-table cells: some hold small tables, see `browser::PageTables`). After the
+    // heading row, a holding is one visible row: the kind, name, account type, units, cost, price,
+    // and a cell with the evaluation (first line) and the profit. The page also has a summary
+    // table by kind with hidden detail rows, which does not start with the same cells. Only the
+    // evaluation (first number of its cell) and the units are read; "9,999円" and "9,999口" are
+    // numbers with a unit. The page shows amounts in yen; a holding in a foreign currency is not
+    // covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
+    // button), and the page shows no count to check them against (its total is in a hidden row,
+    // which is not read), so the person checks the rows shown before applying them.
     Preset {
-        id: "rakuten-funds",
-        label: "Rakuten Securities: investment trusts",
-        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-投資信託\" and reads the investment trust holdings table (evaluation and units held).",
-        links: &["保有商品一覧-投資信託"],
+        id: "rakuten-all",
+        label: "Rakuten Securities: all holdings",
+        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (evaluation and units held). Only holdings in yen are covered, not holdings in a foreign currency such as foreign stocks.",
+        links: &["保有商品一覧-すべて"],
         menu: None,
-        table_starts_with: "注文 ファンド 分配金 コース (変更)",
+        table_starts_with: "種別 銘柄 口座",
         allowed_sites: &["rakuten-sec.co.jp"],
         start_site: "rakuten-sec.co.jp",
         following_tables: false,
@@ -178,7 +181,7 @@ const PRESETS: &[Preset] = &[
             price_column: None,
             price_unit: 1,
             header_rows: 1,
-            rows_per_record: 2,
+            rows_per_record: 1,
             name_row: 0,
             value_row: 0,
             loose_numbers: true,

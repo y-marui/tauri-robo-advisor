@@ -205,7 +205,8 @@ impl BrowserSession {
         {
             let mut pinned = lock(&self.pinned)?;
             match pinned.get(page_id) {
-                Some(href) if *href != start => {
+                // The same page, though a session identifier or the query may have changed.
+                Some(href) if browser::page_identity(href) != browser::page_identity(&start) => {
                     return Err(format!(
                         "{STOP_BATCH}The page changed while the recipes were running. Fetch again."
                     ));

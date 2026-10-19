@@ -360,9 +360,9 @@ export const MESSAGES = {
   "Starts from the top page of Monex Securities (after logging in): follows \"残高照会\" and reads the investment trust table (evaluation and units held).": {
     ja: "ログイン後のマネックス証券のトップのページから始め、「残高照会」を辿って、投資信託の表を読みます（評価額と保有数）。",
   },
-  "Rakuten Securities: investment trusts": { ja: "楽天証券: 投資信託" },
-  "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-投資信託\" and reads the investment trust holdings table (evaluation and units held).": {
-    ja: "ログイン後の楽天証券のホームのページから始め、「保有商品一覧-投資信託」を辿って、投資信託の保有の表を読みます（評価額と保有数）。",
+  "Rakuten Securities: all holdings": { ja: "楽天証券: すべての保有" },
+  "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (evaluation and units held). Only holdings in yen are covered, not holdings in a foreign currency such as foreign stocks.": {
+    ja: "ログイン後の楽天証券のホームのページから始め、「保有商品一覧-すべて」を辿って、すべての保有の表を読みます（評価額と保有数）。対象は円建ての保有だけで、外国株などの外貨建ては対象外です。",
   },
   "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (evaluation and quantity).": {
     ja: "大和コネクト証券にログインしたあと、メニューの「国内株式」の「保有銘柄一覧」（現物取引保有銘柄一覧）をクリックして開き、保有の各行を読みます（評価額と数量）。",

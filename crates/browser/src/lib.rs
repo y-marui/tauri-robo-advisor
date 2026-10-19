@@ -21,7 +21,7 @@ pub use error::{Error, LinkChoice};
 pub use launch::{Endpoint, parse_active_port, start};
 pub use links::{
     fingerprint, host_within, link_text_allowed, login_url_ok, normalize_href, origin_of,
-    sites_covering,
+    page_identity, sites_covering,
 };
 
 #[cfg(test)]
