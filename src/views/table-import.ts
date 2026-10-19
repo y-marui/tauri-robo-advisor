@@ -460,9 +460,10 @@ export function tableImportPanel(ctx: Context): Panel {
       .map((line) => line.trim())
       .filter((line) => line !== "")
       .map((text) => ({ text, reference: null }));
-    // Saving over a recipe of the same name (a preset, for example) keeps what this form does not
-    // show: reading every table, the following tables, and the start site.
-    const existing = current?.portfolio.recipes.find((r) => r.name === recipeName.value.trim());
+    // Saving over a recipe of the same name (a preset, for example, which then becomes an ordinary
+    // recipe) keeps what this form does not show: reading every table, the following tables, and
+    // the start site.
+    const existing = current?.recipes.find((r) => r.name === recipeName.value.trim());
     const typedSites = allowedSitesInput.value.split(/[\s,]+/).filter((site) => site !== "");
     void ctx
       .apply({

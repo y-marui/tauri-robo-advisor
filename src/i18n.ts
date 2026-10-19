@@ -375,6 +375,14 @@ export const MESSAGES = {
   "Move down": { ja: "下へ" },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
+  "Detach as a custom recipe": { ja: "自分のレシピにする" },
+  "Makes an ordinary recipe of it with the definition it has now. It no longer follows app updates, and can be edited.": {
+    ja: "今の定義のまま、普通のレシピにします。以後はアプリの更新に追従せず、編集できます。",
+  },
+  "built-in, read-only": { ja: "組み込み・編集不可" },
+  "“{recipe}” refers to a preset that this version of the app does not have. Remove the recipe.": {
+    ja: "「{recipe}」は、このバージョンのアプリにない組み込みのレシピを指しています。レシピを削除してください。",
+  },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },
   "Fetch recipes": { ja: "取得レシピ" },
   "The recipe was changed or removed in the meantime. Fetch again.": {

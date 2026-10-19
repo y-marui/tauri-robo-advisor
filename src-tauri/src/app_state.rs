@@ -37,14 +37,43 @@ pub struct DataInfo {
 #[derive(Debug, Serialize)]
 pub struct PortfolioView {
     pub portfolio: Portfolio,
+    /// The recipes as they are run: a recipe made from a preset with the definition of the preset
+    /// the app has now (the stored one only refers to it).
+    pub recipes: Vec<RecipeView>,
     pub issues: Vec<Issue>,
     pub data: DataInfo,
+}
+
+/// One recipe for the screen: its effective definition. When the preset it refers to does not
+/// exist in this version of the app, `preset_missing` is set and the definition is empty (the
+/// stored recipe is kept untouched; it can be removed).
+#[derive(Debug, Clone, Serialize)]
+pub struct RecipeView {
+    #[serde(flatten)]
+    pub recipe: Recipe,
+    pub preset_missing: bool,
+}
+
+impl RecipeView {
+    fn new(stored: &Recipe) -> Self {
+        match stored.effective() {
+            Ok(recipe) => Self {
+                recipe,
+                preset_missing: false,
+            },
+            Err(_) => Self {
+                recipe: stored.clone(),
+                preset_missing: true,
+            },
+        }
+    }
 }
 
 impl PortfolioView {
     fn new(portfolio: &Portfolio, data: DataInfo) -> Self {
         Self {
             portfolio: portfolio.clone(),
+            recipes: portfolio.recipes.iter().map(RecipeView::new).collect(),
             issues: portfolio.issues(),
             data,
         }
@@ -505,16 +534,19 @@ impl AppState {
     fn recipe(&self, name: &str) -> Result<Recipe, String> {
         let guard = self.lock()?;
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
-        portfolio
+        let stored = portfolio
             .recipes
             .iter()
             .find(|r| r.name == name)
-            .cloned()
-            .ok_or_else(|| "That recipe does not exist.".to_owned())
+            .ok_or_else(|| "That recipe does not exist.".to_owned())?;
+        stored.effective().map_err(|_| {
+            "The preset of this recipe does not exist in this version of the app. Remove the recipe."
+                .to_owned()
+        })
     }
 
-    /// Saves `new` in place of the recipe `expected` only if the stored recipe is still
-    /// exactly `expected`; the check and the write are made under one lock, so an edit
+    /// Saves `new` in place of the recipe `expected` (an effective recipe) only if the stored recipe
+    /// still stands for exactly `expected`; the check and the write are made under one lock, so an edit
     /// made meanwhile is never put back and a recipe removed meanwhile is never recreated.
     fn replace_recipe_if_unchanged(
         &self,
@@ -524,7 +556,11 @@ impl AppState {
         let mut guard = self.lock()?;
         let mut disk = self.lock_disk()?;
         let mut next = guard.as_ref().map_err(Clone::clone)?.clone();
-        if !next.recipes.iter().any(|r| r == expected) {
+        if !next
+            .recipes
+            .iter()
+            .any(|r| r.effective().as_ref() == Ok(expected))
+        {
             return Err(
                 "The recipe was changed or removed in the meantime. Fetch again.".to_owned(),
             );
@@ -557,7 +593,7 @@ impl AppState {
             let guard = self.lock()?;
             let portfolio = guard.as_ref().map_err(Clone::clone)?;
             let mut sites: Vec<String> = Vec::new();
-            for recipe in &portfolio.recipes {
+            for recipe in portfolio.recipes.iter().filter_map(|r| r.effective().ok()) {
                 if !recipe.start_site.is_empty() && !sites.contains(&recipe.start_site) {
                     sites.push(recipe.start_site.clone());
                 }
@@ -684,7 +720,12 @@ impl AppState {
             let guard = self.lock()?;
             guard
                 .as_ref()
-                .map(|p| p.recipes.clone())
+                .map(|p| {
+                    p.recipes
+                        .iter()
+                        .filter_map(|r| r.effective().ok())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         };
         let before = runs.len();
@@ -1354,6 +1395,7 @@ mod tests {
                     start_site: String::new(),
                     allowed_sites: Vec::new(),
                     currency: "JPY".to_owned(),
+                    preset: None,
                     account: main,
                     mapping: ImportMapping {
                         source: "SBI".to_owned(),
@@ -1423,6 +1465,7 @@ mod tests {
             start_site: String::new(),
             allowed_sites: Vec::new(),
             currency: "JPY".to_owned(),
+            preset: None,
             account,
             mapping: ImportMapping {
                 source: "SBI".to_owned(),
@@ -1671,7 +1714,13 @@ mod tests {
                 })
                 .unwrap();
         }
-        let recipes = state.view().unwrap().portfolio.recipes;
+        let recipes: Vec<Recipe> = state
+            .view()
+            .unwrap()
+            .recipes
+            .into_iter()
+            .map(|r| r.recipe)
+            .collect();
         assert_eq!(recipes.len(), portfolio::presets().len());
         for recipe in &recipes {
             assert!(recipe.all_tables || recipe.following_tables);
@@ -1684,7 +1733,7 @@ mod tests {
                 );
             }
         }
-        // The same preset again replaces it; for another account the name carries the account.
+        // The same preset again changes nothing; for another account the name carries the account.
         state
             .apply(Edit::AddPresetRecipe {
                 preset: "sbi-funds".to_owned(),
@@ -1752,7 +1801,7 @@ mod tests {
                 account: main,
             })
             .unwrap();
-        let recipe = state.view().unwrap().portfolio.recipes[0].clone();
+        let recipe = state.view().unwrap().recipes[0].recipe.clone();
         let mut rows = a.clone();
         rows.extend(b.into_iter().skip(recipe.mapping.header_rows));
         let table = tabular::from_rows(rows).unwrap();
@@ -1841,7 +1890,7 @@ mod tests {
                 account: main,
             })
             .unwrap();
-        let recipe = state.view().unwrap().portfolio.recipes[0].clone();
+        let recipe = state.view().unwrap().recipes[0].recipe.clone();
         assert!(recipe.following_tables && !recipe.all_tables);
         assert_eq!(recipe.start_site, "connect-sec.co.jp");
         // It opens the list of holdings by a click on its menu entry, and the texts pass the same
@@ -1932,7 +1981,7 @@ mod tests {
                 account: main,
             })
             .unwrap();
-        let saved = state.view().unwrap().portfolio.recipes[0].clone();
+        let saved = state.view().unwrap().recipes[0].recipe.clone();
         // What a successful click run hands back: one empty reference per clicked link.
         let learned = with_learned_references(&saved, vec![String::new()]);
         assert_eq!(learned, saved, "a menu link keeps no reference");
@@ -1943,6 +1992,59 @@ mod tests {
         plain.links[0].heading = None;
         let learned = with_learned_references(&plain, vec!["h:abc".to_owned()]);
         assert_eq!(learned.links[0].reference.as_deref(), Some("h:abc"));
+    }
+
+    #[test]
+    fn a_preset_recipe_is_run_from_the_current_preset_and_an_unknown_one_fails_alone() {
+        let (state, main, other, _, _) = recipe_state("preset-ref");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "sbi-funds".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        save_recipe(&state, "Custom", other);
+        let view = state.view().unwrap();
+        // The stored recipe only refers to the preset; the screen gets the definition.
+        assert!(view.portfolio.recipes[0].table_starts_with.is_empty());
+        assert_eq!(view.recipes[0].recipe.table_starts_with, "投資信託（金額/");
+        assert!(!view.recipes[0].preset_missing);
+        assert_eq!(view.recipes[1].recipe, view.portfolio.recipes[1]);
+
+        // The question about a link is answered against what the recipe stands for, and only
+        // the destination is stored.
+        let effective = view.recipes[0].recipe.clone();
+        let view = state
+            .set_link_reference(&effective, 0, Some("h:0123456789abcdef".to_owned()))
+            .unwrap();
+        assert!(view.portfolio.recipes[0].table_starts_with.is_empty());
+        assert_eq!(
+            view.recipes[0].recipe.links[0].reference.as_deref(),
+            Some("h:0123456789abcdef")
+        );
+        // Asked again about the old state: refused.
+        assert!(state.set_link_reference(&effective, 0, None).is_err());
+
+        // Running a recipe whose preset is gone is an error of that recipe only.
+        let mut gone = state.portfolio_snapshot().unwrap();
+        gone.recipes[0].preset = Some("removed-in-a-later-version".to_owned());
+        *state.portfolio.lock().unwrap() = Ok(gone);
+        let view = state.view().unwrap();
+        assert!(view.recipes[0].preset_missing);
+        assert!(!view.recipes[1].preset_missing);
+        assert!(
+            state
+                .run_recipe(&view.recipes[0].recipe.name, "page")
+                .unwrap_err()
+                .contains("preset")
+        );
+        // The other recipe is not affected (it only fails here for lack of a browser).
+        assert!(
+            !state
+                .run_recipe("Custom", "page")
+                .unwrap_err()
+                .contains("preset")
+        );
     }
 
     #[test]
@@ -1971,7 +2073,7 @@ mod tests {
                 account: main,
             })
             .unwrap();
-        let recipe = state.view().unwrap().portfolio.recipes[0].clone();
+        let recipe = state.view().unwrap().recipes[0].recipe.clone();
         assert!(!recipe.following_tables);
         assert_eq!(recipe.links.len(), 1);
         let link = &recipe.links[0];

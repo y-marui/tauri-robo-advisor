@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use rust_decimal::Decimal;
 
+use crate::presets::Preset;
 use crate::{Error, Issue, MIN_SCHEMA_VERSION, Portfolio, ProductTargeting, SCHEMA_VERSION};
 
 /// The most recipes a data file may hold.
@@ -163,9 +164,21 @@ impl Portfolio {
             return corrupt("there are too many recipes");
         }
         for recipe in &self.recipes {
-            if !names.insert(recipe.name.clone())
-                || recipe.clone().validated(self).as_ref() != Ok(recipe)
-            {
+            // A recipe that refers to a preset is only a reference (what it stores is not compared
+            // with what the current preset would make of it: an app update may have dropped a
+            // link whose destination it remembers). When the preset is not in this version of the
+            // app, it is kept as it is, and is an error only where it is used.
+            let valid = if recipe.preset.is_some() {
+                name(&recipe.name, "recipe").as_ref() == Ok(&recipe.name)
+                    && recipe.is_clean_preset_reference()
+                    && match recipe.preset.as_deref().and_then(Preset::find) {
+                        Some(_) => recipe.clone().validated(self).is_ok(),
+                        None => self.accounts.iter().any(|a| a.id == recipe.account),
+                    }
+            } else {
+                recipe.clone().validated(self).as_ref() == Ok(recipe)
+            };
+            if !names.insert(recipe.name.clone()) || !valid {
                 return corrupt("a recipe is not valid");
             }
         }

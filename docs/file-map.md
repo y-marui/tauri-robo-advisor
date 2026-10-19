@@ -1,6 +1,6 @@
 # File Map
 
-_最終更新: 2026-10-15_
+_最終更新: 2026-10-19_
 
 ## Frontend
 
@@ -70,7 +70,7 @@ _最終更新: 2026-10-15_
 | `crates/tabular/src/decode.rs` | バイト列の文字コード判別（UTF-8 か Shift-JIS）。バイナリは拒否する | `encoding_rs` |
 | `crates/tabular/src/parse.rs` | CSV・タブ区切りの解析（引用符、サイズの上限） | — |
 | `crates/tabular/src/mapping.rs` | 名前・評価額の列の選択と、金額の読み取り。読めない行は理由つきで返す | `rust_decimal` |
-| `crates/portfolio/src/presets.rs` | 組み込みのレシピ（プリセット）のデータ。口座を渡すと普通のレシピになる | `portfolio` |
+| `crates/portfolio/src/presets.rs` | 組み込みのレシピ（プリセット）のデータ。口座を渡すレシピの定義と、レシピが指すプリセットの定義を返す `Recipe::effective` | `portfolio` |
 | `crates/portfolio/src/import.rs` | 取り込んだ行を別名で商品へ対応づける（`plan_import`） | `portfolio` |
 | `crates/export/src/lib.rs` | 保有・カテゴリ・商品・別名・口座・設定の CSV、全データの JSON、README の生成 | `portfolio` |
 | `crates/export/src/csv.rs` | CSV の書き出し（BOM、CRLF、引用、数式の無効化） | — |

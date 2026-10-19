@@ -150,13 +150,20 @@ pub enum Edit {
     RemoveRecipe {
         name: String,
     },
-    /// Adds a recipe that ships with the app (see `presets`) for an account. The recipe is an
-    /// ordinary one afterwards: the user can read it, change it, or remove it. A recipe of the
-    /// same name for the same account is replaced; for another account, the account's name is
-    /// added to the recipe's name.
+    /// Adds a recipe that ships with the app (see `presets`) for an account. The recipe refers to
+    /// the preset and keeps only the account: its definition is read from the app's current preset
+    /// data each time, so it cannot be edited (it can be removed or detached). Adding the same
+    /// preset for the same account again does nothing; a copy of it made by an older version (an
+    /// ordinary recipe that does the same) is turned into a reference. For a second account, the
+    /// account's name is added to the recipe's name.
     AddPresetRecipe {
         preset: String,
         account: AccountId,
+    },
+    /// Makes an ordinary recipe of a recipe that refers to a preset, with the definition the preset
+    /// has now (for good: it no longer follows the preset, and can be edited).
+    DetachPresetRecipe {
+        name: String,
     },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
@@ -307,8 +314,43 @@ fn start_site(site: &str) -> Result<String, Error> {
 }
 
 impl Recipe {
-    /// Checks a recipe and trims its names.
+    /// Checks a recipe and trims its names. A recipe that refers to a preset is checked as the
+    /// definition it stands for (the vetted sites, the click rules, and the rest apply to that),
+    /// and what is kept is only the reference: whatever else it carried is dropped.
     pub(crate) fn validated(self, portfolio: &Portfolio) -> Result<Self, Error> {
+        if self.preset.is_none() {
+            return self.validated_definition(portfolio);
+        }
+        Ok(self
+            .effective()
+            .map_err(|_| Error::Invalid("that preset does not exist".to_owned()))?
+            .validated_definition(portfolio)?
+            .into_preset_reference())
+    }
+
+    /// Whether a stored recipe that refers to a preset holds only what a reference may: no
+    /// definition of its own, and links that are only a text and a remembered destination.
+    pub(crate) fn is_clean_preset_reference(&self) -> bool {
+        let bare = |recipe: &Recipe| Recipe {
+            links: Vec::new(),
+            ..recipe.clone()
+        };
+        let bounded = |value: &str, max: usize| {
+            value.chars().count() <= max && !value.chars().any(char::is_control)
+        };
+        self.links.len() <= MAX_RECIPE_LINKS
+            && self.links.iter().all(|l| {
+                l.menu.is_none()
+                    && l.heading.is_none()
+                    && bounded(&l.text, MAX_LINK_TEXT_CHARS)
+                    && l.reference
+                        .as_deref()
+                        .is_some_and(|r| !r.is_empty() && bounded(r, MAX_LINK_REFERENCE_CHARS))
+            })
+            && bare(self) == bare(&self.clone().into_preset_reference())
+    }
+
+    fn validated_definition(self, portfolio: &Portfolio) -> Result<Self, Error> {
         let recipe_name = name(&self.name, "recipe")?;
         if self.links.len() > MAX_RECIPE_LINKS {
             return Err(Error::Invalid("a recipe has too many links".to_owned()));
@@ -872,13 +914,22 @@ impl Portfolio {
             Edit::AddPresetRecipe { preset, account } => {
                 let preset = Preset::find(preset.trim())
                     .ok_or_else(|| Error::Invalid("that preset does not exist".to_owned()))?;
-                let mut recipe = preset.recipe(account);
                 let account_name = self.account(account)?.name.clone();
-                // The same preset for the same account is found by what it does, not by its
-                // name (the name may have been suffixed, or changed by the user): it is replaced
-                // in place, so the account never gets two copies that would add up twice.
-                let same = self.recipes.iter().position(|r| {
-                    r.account == account
+                let mut recipe = preset.recipe(account);
+                recipe.preset = Some(preset.id.to_owned());
+                if self
+                    .recipes
+                    .iter()
+                    .any(|r| r.account == account && r.preset.as_deref() == Some(preset.id))
+                {
+                    return Ok(());
+                }
+                // A copy made by an older version is found by what it does, not by its name (the
+                // name may have been suffixed or changed): it becomes the reference in place, so
+                // the account never gets the same preset twice (the rows would add up twice).
+                let copy = self.recipes.iter().position(|r| {
+                    r.preset.is_none()
+                        && r.account == account
                         && r.table_starts_with == recipe.table_starts_with
                         && r.mapping.source == recipe.mapping.source
                         && r.links
@@ -886,7 +937,7 @@ impl Portfolio {
                             .map(|l| &l.text)
                             .eq(recipe.links.iter().map(|l| &l.text))
                 });
-                if let Some(index) = same {
+                if let Some(index) = copy {
                     recipe.name = self.recipes[index].name.clone();
                     self.recipes[index] = recipe.validated(self)?;
                 } else {
@@ -904,6 +955,19 @@ impl Portfolio {
                     }
                     self.recipes.push(recipe);
                 }
+            }
+            Edit::DetachPresetRecipe { name } => {
+                let name = name.trim();
+                let index = self
+                    .recipes
+                    .iter()
+                    .position(|r| r.name == name && r.preset.is_some())
+                    .ok_or(Error::NotFound("recipe of a preset"))?;
+                let mut recipe = self.recipes[index]
+                    .effective()
+                    .map_err(|_| Error::Invalid("that preset does not exist".to_owned()))?;
+                recipe.preset = None;
+                self.recipes[index] = recipe.validated(self)?;
             }
             Edit::RemoveRecipe { name } => {
                 let name = name.trim();

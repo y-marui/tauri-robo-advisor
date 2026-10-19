@@ -868,6 +868,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         following_tables: false,
         start_site: String::new(),
         allowed_sites: Vec::new(),
+        preset: None,
     }
 }
 
@@ -1326,13 +1327,222 @@ fn a_preset_is_never_added_twice_for_one_account() {
     assert_eq!(p.recipes.len(), 2);
     assert_ne!(p.recipes[0].name, p.recipes[1].name);
 
-    // The first account's recipe goes away; adding the preset to the second account again
-    // replaces its recipe (found by what it does, not by its name), it does not add a copy.
+    // Adding it again, even after the name was changed by a rename of the account, does nothing.
+    let before = p.clone();
+    add(&mut p, a);
+    add(&mut p, b);
+    assert_eq!(p, before);
+
+    // Once the first account's recipe is removed, the preset can be added to it again.
     let first = p.recipes[0].name.clone();
     apply(&mut p, Edit::RemoveRecipe { name: first });
-    add(&mut p, b);
+    add(&mut p, a);
+    assert_eq!(p.recipes.len(), 2);
+}
+
+#[test]
+fn a_preset_recipe_stores_only_the_reference_and_the_account() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "daiwa-connect-stocks".to_owned(),
+            account: acc,
+        },
+    );
+    let stored = &p.recipes[0];
+    assert_eq!(stored.preset.as_deref(), Some("daiwa-connect-stocks"));
+    assert_eq!(stored.account, acc);
+    assert!(stored.links.is_empty());
+    assert!(stored.table_starts_with.is_empty() && stored.allowed_sites.is_empty());
+    let json = serde_json::to_value(stored).unwrap();
+    assert_eq!(json["preset"], "daiwa-connect-stocks");
+
+    // The definition is the app's current preset.
+    let effective = stored.effective().unwrap();
+    assert_eq!(effective.name, stored.name);
+    assert_eq!(effective.account, acc);
+    assert_eq!(effective.start_site, "connect-sec.co.jp");
+    assert!(effective.links[0].menu.is_some());
+    assert_eq!(effective.preset.as_deref(), Some("daiwa-connect-stocks"));
+
+    // It survives a round trip and is a valid file.
+    let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+    assert_eq!(back, p);
+    back.validate_integrity().unwrap();
+    assert_eq!(SCHEMA_VERSION, 10);
+}
+
+#[test]
+fn what_a_preset_recipe_carries_besides_its_account_is_ignored() {
+    let (mut p, _, _, acc) = sample();
+    // A recipe that names a preset but also writes its own definition (a site that is not vetted,
+    // a link to click) gets the preset's definition, and nothing of what it wrote.
+    let mut recipe = recipe_for(acc);
+    recipe.preset = Some("sbi-funds".to_owned());
+    recipe.allowed_sites = vec!["evil.example".to_owned()];
+    recipe.start_site = "evil.example".to_owned();
+    recipe.table_starts_with = "Other".to_owned();
+    apply(&mut p, Edit::SetRecipe { recipe });
+    let stored = &p.recipes[0];
+    assert!(stored.table_starts_with.is_empty() && stored.allowed_sites.is_empty());
+    assert!(stored.start_site.is_empty());
+    let effective = stored.effective().unwrap();
+    assert_eq!(effective.start_site, "sbisec.co.jp");
+    assert_eq!(effective.table_starts_with, "投資信託（金額/");
+    // Only a remembered link destination is kept (matched to the preset's link by its text).
+    assert!(stored.links.iter().all(|l| l.reference.is_some()));
+}
+
+#[test]
+fn an_unknown_preset_is_refused_on_save_but_kept_when_the_file_has_it() {
+    let (mut p, _, _, acc) = sample();
+    let mut recipe = recipe_for(acc);
+    recipe.preset = Some("no-such-preset".to_owned());
+    assert!(p.apply(Edit::SetRecipe { recipe }).is_err());
+    assert!(
+        p.apply(Edit::AddPresetRecipe {
+            preset: "no-such-preset".to_owned(),
+            account: acc
+        })
+        .is_err()
+    );
+
+    // A file that refers to a preset this version does not have is still opened, the other
+    // recipes still work, and the recipe is an error only where it is used.
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-funds".to_owned(),
+            account: acc,
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    p.recipes[0].preset = Some("removed-in-a-later-version".to_owned());
+    p.validate_integrity().unwrap();
+    assert!(p.recipes[0].effective().is_err());
+    assert!(p.recipes[1].effective().is_ok());
+    let before = p.clone();
+    // Other edits go through and the recipe is kept as it was.
+    apply(
+        &mut p,
+        Edit::AddCategory {
+            name: "Another".to_owned(),
+            target_weight: rust_decimal::dec!(0),
+        },
+    );
+    assert_eq!(p.recipes, before.recipes);
+    assert!(
+        p.apply(Edit::DetachPresetRecipe {
+            name: p.recipes[0].name.clone()
+        })
+        .is_err()
+    );
+    let name = p.recipes[0].name.clone();
+    apply(&mut p, Edit::RemoveRecipe { name });
     assert_eq!(p.recipes.len(), 1);
-    assert_eq!(p.recipes[0].account, b);
+}
+
+#[test]
+fn a_link_destination_of_a_link_the_preset_no_longer_has_does_not_make_the_file_invalid() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-funds".to_owned(),
+            account: acc,
+        },
+    );
+    // What an older version of the preset's link left behind.
+    p.recipes[0].links = vec![FetchLink {
+        text: "A link the preset used to follow".to_owned(),
+        reference: Some("h:0123456789abcdef".to_owned()),
+        menu: None,
+        heading: None,
+    }];
+    p.validate_integrity().unwrap();
+    assert!(
+        p.recipes[0].effective().unwrap().links[0]
+            .reference
+            .is_none()
+    );
+    // A stored definition is still refused.
+    p.recipes[0].table_starts_with = "Smuggled".to_owned();
+    assert!(p.validate_integrity().is_err());
+}
+
+#[test]
+fn a_custom_recipe_stays_next_to_a_preset_one_and_a_preset_can_be_detached() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-domestic-stocks".to_owned(),
+            account: acc,
+        },
+    );
+    assert_eq!(p.recipes.len(), 2);
+    assert!(p.recipes[0].preset.is_none() && p.recipes[1].preset.is_some());
+    // The custom recipe keeps its own definition.
+    assert_eq!(p.recipes[0].effective().unwrap(), p.recipes[0]);
+
+    let name = p.recipes[1].name.clone();
+    let definition = p.recipes[1].effective().unwrap();
+    apply(&mut p, Edit::DetachPresetRecipe { name: name.clone() });
+    let detached = &p.recipes[1];
+    assert!(detached.preset.is_none());
+    assert_eq!(detached.name, name);
+    assert_eq!(detached.table_starts_with, definition.table_starts_with);
+    assert_eq!(detached.mapping, definition.mapping);
+    assert_eq!(detached.start_site, "sbisec.co.jp");
+    // It is an ordinary recipe now: it cannot be detached again, and the same preset can be
+    // added again for the account (a new reference next to the copy would add the rows twice, so
+    // the copy is turned back into a reference).
+    assert!(p.apply(Edit::DetachPresetRecipe { name }).is_err());
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-domestic-stocks".to_owned(),
+            account: acc,
+        },
+    );
+    assert_eq!(p.recipes.len(), 2);
+    assert!(p.recipes[1].preset.is_some());
+}
+
+#[test]
+fn a_remembered_link_destination_of_a_preset_recipe_is_kept_and_used() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-funds".to_owned(),
+            account: acc,
+        },
+    );
+    let mut effective = p.recipes[0].effective().unwrap();
+    effective.links[0].reference = Some("h:0123456789abcdef".to_owned());
+    apply(&mut p, Edit::SetRecipe { recipe: effective });
+    assert_eq!(p.recipes.len(), 1);
+    assert_eq!(p.recipes[0].links.len(), 1);
+    assert!(p.recipes[0].table_starts_with.is_empty());
+    assert_eq!(
+        p.recipes[0].effective().unwrap().links[0]
+            .reference
+            .as_deref(),
+        Some("h:0123456789abcdef")
+    );
 }
 
 #[test]
@@ -1462,7 +1672,7 @@ fn a_name_becomes_a_product_with_its_alias_in_one_step_or_not_at_all() {
 }
 
 #[test]
-fn the_presets_say_what_identifies_their_recipe() {
+fn every_preset_makes_a_valid_effective_recipe_that_follows_its_data() {
     let (mut p, _, _, acc) = sample();
     for info in presets() {
         apply(
@@ -1475,17 +1685,21 @@ fn the_presets_say_what_identifies_their_recipe() {
         let recipe = p
             .recipes
             .iter()
-            .find(|r| {
-                r.table_starts_with == info.table_starts_with
-                    && r.mapping.source == info.source
-                    && r.links
-                        .iter()
-                        .map(|l| l.text.as_str())
-                        .eq(info.links.iter().copied())
-            })
+            .find(|r| r.preset.as_deref() == Some(info.id))
             .unwrap_or_else(|| panic!("{}", info.id));
         assert_eq!(recipe.account, acc);
+        let effective = recipe.effective().unwrap();
+        assert_eq!(effective.table_starts_with, info.table_starts_with);
+        assert_eq!(effective.mapping.source, info.source);
+        assert!(
+            effective
+                .links
+                .iter()
+                .map(|l| l.text.as_str())
+                .eq(info.links.iter().copied())
+        );
     }
+    p.validate_integrity().unwrap();
 }
 
 #[test]
@@ -1728,8 +1942,8 @@ fn the_daiwa_presets_click_their_menu_entries_on_the_vetted_site() {
             },
         );
     }
-    let daiwa: Vec<_> = p
-        .recipes
+    let effective: Vec<Recipe> = p.recipes.iter().map(|r| r.effective().unwrap()).collect();
+    let daiwa: Vec<_> = effective
         .iter()
         .filter(|r| r.start_site == "connect-sec.co.jp")
         .collect();
@@ -1741,8 +1955,7 @@ fn the_daiwa_presets_click_their_menu_entries_on_the_vetted_site() {
         assert!(crate::edit::VETTED_SITES.contains(&"connect-sec.co.jp"));
     }
     // The other presets still follow plain links (or none), never clicks.
-    for r in p
-        .recipes
+    for r in effective
         .iter()
         .filter(|r| r.start_site != "connect-sec.co.jp")
     {
