@@ -14,7 +14,9 @@ const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_ERROR_CHARS: usize = 200;
 
 /// The limits on what a page may hand back; the script cuts at the same numbers.
-const MAX_TABLES: usize = 200;
+/// The most tables read from one page. A page that has this many may have more, which were
+/// left out.
+pub const MAX_TABLES: usize = 200;
 const MAX_ROWS: usize = 5_000;
 const MAX_COLUMNS: usize = 200;
 const MAX_CELL_CHARS: usize = 1_000;

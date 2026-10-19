@@ -566,6 +566,7 @@ impl AppState {
             &recipe.links,
             &recipe.table_starts_with,
             recipe.all_tables.then_some(recipe.mapping.header_rows),
+            recipe.following_tables,
             &recipe.allowed_sites,
         )?;
         let (table, references) = match read {
@@ -1289,6 +1290,8 @@ mod tests {
                     links: Vec::new(),
                     table_starts_with: "Stocks".to_owned(),
                     all_tables: false,
+                    following_tables: false,
+                    start_site: String::new(),
                     allowed_sites: Vec::new(),
                     currency: "JPY".to_owned(),
                     account: main,
@@ -1355,6 +1358,8 @@ mod tests {
             links: Vec::new(),
             table_starts_with: "Stocks".to_owned(),
             all_tables: false,
+            following_tables: false,
+            start_site: String::new(),
             allowed_sites: Vec::new(),
             currency: "JPY".to_owned(),
             account,
@@ -1585,7 +1590,7 @@ mod tests {
         let recipes = state.view().unwrap().portfolio.recipes;
         assert_eq!(recipes.len(), portfolio::presets().len());
         for recipe in &recipes {
-            assert!(recipe.all_tables);
+            assert!(recipe.all_tables || recipe.following_tables);
             for link in &recipe.links {
                 assert_eq!(
                     browser::link_text_allowed(&link.text),
@@ -1697,6 +1702,97 @@ mod tests {
                     "1000".to_owned()
                 ),
                 ("4444 Delta".to_owned(), "7".to_owned(), "7".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_daiwa_preset_reads_a_page_laid_out_like_the_real_one() {
+        // A made-up page with the layout of the real one: summary tables, a heading table, then
+        // one one-row table per holding (code and name on two lines, account, quantity with a
+        // unit, sellable quantity, cost, price, evaluation with a unit, profit, a trade button).
+        let row = |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>()];
+        let raw = vec![
+            row(&["Total", "+1", "1", "1"]),
+            row(&["Search", ""]),
+            row(&[
+                "コード▲ /[市場]\n銘柄名",
+                "口座",
+                "保有株数",
+                "売付可能株数",
+                "取得単価",
+                "現在値",
+                "評価額",
+                "評価損益",
+                "取引",
+            ]),
+            row(&[
+                "1111 [T]\nAlpha Co",
+                "Taxable",
+                "10株",
+                "10株",
+                "1,000円",
+                "1,250円",
+                "12,500円",
+                "+2,500円",
+                "",
+            ]),
+            row(&[
+                "2222 [T]\nBeta Co",
+                "NISA",
+                "3株",
+                "3株",
+                "2,000.5円",
+                "2,100円",
+                "6,300円",
+                "+298円",
+                "",
+            ]),
+            row(&["Note", "x"]),
+        ];
+        let (state, main, _, _, _) = recipe_state("daiwa");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "daiwa-connect-stocks".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        let recipe = state.view().unwrap().portfolio.recipes[0].clone();
+        assert!(recipe.links.is_empty() && recipe.following_tables && !recipe.all_tables);
+        assert_eq!(recipe.start_site, "connect-sec.co.jp");
+
+        let table = crate::browser_session::pick_table_for_test(
+            raw,
+            &recipe.table_starts_with,
+            recipe.following_tables,
+        );
+        let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
+
+        assert_eq!(result.skipped, vec![]);
+        let got: Vec<(String, String, String)> = result
+            .rows
+            .iter()
+            .map(|r| {
+                (
+                    r.name.clone(),
+                    r.value.to_string(),
+                    r.quantity.map_or(String::new(), |q| q.to_string()),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "1111 [T] Alpha Co".to_owned(),
+                    "12500".to_owned(),
+                    "10".to_owned()
+                ),
+                (
+                    "2222 [T] Beta Co".to_owned(),
+                    "6300".to_owned(),
+                    "3".to_owned()
+                ),
             ]
         );
     }

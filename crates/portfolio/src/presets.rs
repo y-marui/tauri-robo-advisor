@@ -10,6 +10,22 @@ use serde::Serialize;
 
 use crate::{AccountId, FetchLink, ImportMapping, Recipe};
 
+/// How a preset reads its table: the columns and rows of a record. Counted from 0.
+struct Layout {
+    source: &'static str,
+    name_column: usize,
+    /// The evaluation column, or the quantity column when `price_column` is set.
+    value_column: usize,
+    price_column: Option<usize>,
+    price_unit: u64,
+    header_rows: usize,
+    rows_per_record: usize,
+    name_row: usize,
+    value_row: usize,
+    loose_numbers: bool,
+    quantity_column: Option<usize>,
+}
+
 /// A recipe for a known page, waiting for an account.
 pub struct Preset {
     pub id: &'static str,
@@ -21,7 +37,11 @@ pub struct Preset {
     /// Sites whose other hosts the recipe may follow links to (the pages of one company are often
     /// spread over several hosts).
     allowed_sites: &'static [&'static str],
-    price_unit: u64,
+    /// The site of the page it reads, and whether each holding is a table of its own after the
+    /// heading table (otherwise every table that starts with the title is read).
+    start_site: &'static str,
+    following_tables: bool,
+    layout: Layout,
 }
 
 /// What the screen needs to list a preset.
@@ -32,6 +52,25 @@ pub struct PresetInfo {
     pub description: &'static str,
 }
 
+/// SBI Securities: every table is a title row, a heading row, then two rows per holding (a row
+/// with the name, then a row with the quantity, the cost, the price, and the profit; only the
+/// quantity and the price are read).
+const fn sbi_layout(price_unit: u64) -> Layout {
+    Layout {
+        source: "SBI",
+        name_column: 0,
+        value_column: 0,
+        price_column: Some(2),
+        price_unit,
+        header_rows: 2,
+        rows_per_record: 2,
+        name_row: 0,
+        value_row: 1,
+        loose_numbers: false,
+        quantity_column: None,
+    }
+}
+
 const PRESETS: &[Preset] = &[
     Preset {
         id: "sbi-domestic-stocks",
@@ -40,7 +79,9 @@ const PRESETS: &[Preset] = &[
         links: &["保有資産評価"],
         table_starts_with: "株式（現物/",
         allowed_sites: &[],
-        price_unit: 1,
+        start_site: "sbisec.co.jp",
+        following_tables: false,
+        layout: sbi_layout(1),
     },
     Preset {
         id: "sbi-funds",
@@ -49,7 +90,37 @@ const PRESETS: &[Preset] = &[
         links: &["保有資産評価"],
         table_starts_with: "投資信託（金額/",
         allowed_sites: &[],
-        price_unit: 10_000,
+        start_site: "sbisec.co.jp",
+        following_tables: false,
+        layout: sbi_layout(10_000),
+    },
+    // Daiwa Connect Securities: its pages work by form posts and script links, so no link can be
+    // followed: the list of holdings (現物取引保有銘柄一覧) is opened by hand. It is a heading
+    // table (code / name, account, quantity, sellable quantity, cost, price, evaluation, profit,
+    // trade) and then one one-row table per holding. The evaluation is read from its column and
+    // the quantity is recorded next to it ("10株", "1,234円": numbers with a unit).
+    Preset {
+        id: "daiwa-connect-stocks",
+        label: "Daiwa Connect Securities: domestic stocks",
+        description: "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).",
+        links: &[],
+        table_starts_with: "コード",
+        allowed_sites: &[],
+        start_site: "connect-sec.co.jp",
+        following_tables: true,
+        layout: Layout {
+            source: "Daiwa Connect",
+            name_column: 0,
+            value_column: 6,
+            price_column: None,
+            price_unit: 1,
+            header_rows: 1,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            loose_numbers: true,
+            quantity_column: Some(2),
+        },
     },
 ];
 
@@ -70,10 +141,9 @@ impl Preset {
         PRESETS.iter().find(|p| p.id == id)
     }
 
-    /// The recipe this preset stands for. Every SBI table has the same layout: a title row,
-    /// a heading row, then two rows per holding (a row with the name, then a row with the
-    /// quantity, the cost, the price, and the profit; only the quantity and the price are read).
+    /// The recipe this preset stands for.
     pub(crate) fn recipe(&self, account: AccountId) -> Recipe {
+        let layout = &self.layout;
         Recipe {
             name: self.label.to_owned(),
             links: self
@@ -85,26 +155,28 @@ impl Preset {
                 })
                 .collect(),
             table_starts_with: self.table_starts_with.to_owned(),
-            all_tables: true,
+            all_tables: !self.following_tables,
+            following_tables: self.following_tables,
+            start_site: self.start_site.to_owned(),
             allowed_sites: self.allowed_sites.iter().map(|s| (*s).to_owned()).collect(),
             // The values are in the currency of the product they are linked to.
             currency: String::new(),
             account,
             mapping: ImportMapping {
-                source: "SBI".to_owned(),
-                name_column: 0,
-                value_column: 0,
-                price_column: Some(2),
-                price_unit: self.price_unit,
-                header_rows: 2,
-                rows_per_record: 2,
-                name_row: 0,
-                value_row: 1,
+                source: layout.source.to_owned(),
+                name_column: layout.name_column,
+                value_column: layout.value_column,
+                price_column: layout.price_column,
+                price_unit: layout.price_unit,
+                header_rows: layout.header_rows,
+                rows_per_record: layout.rows_per_record,
+                name_row: layout.name_row,
+                value_row: layout.value_row,
                 name_part: None,
                 value_part: None,
                 price_part: None,
-                loose_numbers: false,
-                quantity_column: None,
+                loose_numbers: layout.loose_numbers,
+                quantity_column: layout.quantity_column,
                 quantity_part: None,
             },
         }

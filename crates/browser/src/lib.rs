@@ -13,7 +13,7 @@ mod error;
 mod launch;
 mod links;
 
-pub use cdp::{Cdp, Followed, Page};
+pub use cdp::{Cdp, Followed, MAX_TABLES, Page};
 pub use detect::{Found, Kind, Os, candidate_paths, find_browsers, find_with};
 pub use error::{Error, LinkChoice};
 pub use launch::{Endpoint, parse_active_port, start};

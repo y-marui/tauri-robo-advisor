@@ -458,14 +458,21 @@ export function tableImportPanel(ctx: Context): Panel {
       .map((line) => line.trim())
       .filter((line) => line !== "")
       .map((text) => ({ text, reference: null }));
+    // Saving over a recipe of the same name (a preset, for example) keeps what this form does not
+    // show: reading every table, the following tables, and the start site.
+    const existing = current?.portfolio.recipes.find((r) => r.name === recipeName.value.trim());
+    const typedSites = allowedSitesInput.value.split(/[\s,]+/).filter((site) => site !== "");
     void ctx
       .apply({
         type: "set_recipe",
         recipe: {
           name: recipeName.value.trim(),
           links,
+          all_tables: existing?.all_tables ?? false,
+          following_tables: existing?.following_tables ?? false,
+          start_site: existing?.start_site ?? "",
           // Only the sites the app knows (for example sbisec.co.jp); Rust refuses any other.
-          allowed_sites: allowedSitesInput.value.split(/[\s,]+/).filter((site) => site !== ""),
+          allowed_sites: typedSites.length > 0 ? typedSites : (existing?.allowed_sites ?? []),
           table_starts_with: title,
           currency: currencySelect.value,
           account,

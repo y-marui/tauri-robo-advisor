@@ -87,6 +87,10 @@ export interface Recipe {
   table_starts_with: string;
   /** Read every table that starts with the title and put their rows together. */
   all_tables?: boolean;
+  /** The matching table is a heading and each holding is a table of its own after it. */
+  following_tables?: boolean;
+  /** The site of the page the recipe reads; empty: the page chosen on the screen. */
+  start_site?: string;
   /** Sites whose other hosts the recipe may follow links to (only those containing the host it starts on count). */
   allowed_sites?: string[];
   currency: string;

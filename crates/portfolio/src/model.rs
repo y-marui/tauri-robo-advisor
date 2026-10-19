@@ -5,10 +5,11 @@ use serde::{Deserialize, Serialize};
 /// than guessed at, so an older app never rewrites data it does not understand.
 /// Version 2 added the saved import mappings, the revision, and the fetch recipes.
 /// Version 3 added the price (and its unit) of a holding and the recorded quantity column
-/// of a mapping. Version 4 added the table-merging flag and the allowed sites of a recipe.
+/// of a mapping. Version 4 added the table-merging flag and the allowed sites of a recipe. Version 5 added the
+/// following-tables flag and the start site of a recipe.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -210,6 +211,16 @@ pub struct Recipe {
     /// account on a page) and put their rows together; off: exactly one table must match.
     #[serde(default)]
     pub all_tables: bool,
+    /// The matching table is a heading, and each holding is a table of its own after it (a page
+    /// laid out one table per row): the tables after it that have the same number of columns are
+    /// read as its rows.
+    #[serde(default)]
+    pub following_tables: bool,
+    /// The site (like `example.co.jp`) of the page the recipe reads: with several brokerages open,
+    /// "fetch everything" reads each recipe from the open page of its own site. Empty: the page
+    /// that was chosen on the screen.
+    #[serde(default)]
+    pub start_site: String,
     /// Sites (like `example.co.jp`) whose other hosts the recipe may follow links to. Only a site
     /// that contains the host the recipe starts on counts: the recipe can reach the other hosts
     /// of its own company, never another site.
