@@ -175,6 +175,7 @@ impl BrowserSession {
         page_id: &str,
         links: &[FetchLink],
         title: &str,
+        merge: Option<usize>,
     ) -> Result<RecipeRead, String> {
         let mut cdp = self.connect()?;
         let page = cdp
@@ -250,7 +251,7 @@ impl BrowserSession {
         let read = cdp
             .read_tables(&session)
             .map_err(|e| e.to_string())
-            .and_then(|raw| pick_table(raw, title));
+            .and_then(|raw| pick_table(raw, title, merge));
         // Every run ends on the page it started from, so the next recipe starts there too.
         let restored = cdp.go_back(&session, links.len(), &start);
         // A failed restoration takes precedence: the batch must stop before the next recipe
@@ -295,30 +296,47 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
         .map_err(|_| "The data is temporarily unavailable.".to_owned())
 }
 
-/// The one table whose first cell starts with `title`. More than one (or none)
-/// is an error: the recipe should name the table clearly.
-fn pick_table(raw: Vec<Vec<Vec<String>>>, title: &str) -> Result<Table, String> {
+/// The table whose first cell starts with `title`. By default exactly one must match (more
+/// than one, or none, is an error: the recipe should name the table clearly). With
+/// `merge: Some(header_rows)` every matching table is read and their rows are put together:
+/// a page often has one table per kind of account, all laid out the same way. The first table
+/// is taken whole; of the others the first `header_rows` rows (the title and the headings) are
+/// left out, so they do not show up as rows that were skipped.
+fn pick_table(
+    raw: Vec<Vec<Vec<String>>>,
+    title: &str,
+    merge: Option<usize>,
+) -> Result<Table, String> {
     // Cells keep their line breaks and no-break spaces; the title is compared as plain words.
     let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let title = words(title);
-    let mut matching: Vec<Table> = raw
+    let mut matching: Vec<Vec<Vec<String>>> = raw
         .into_iter()
-        .filter_map(|rows| tabular::from_rows(rows).ok())
-        .filter(|table| {
-            table
-                .rows
-                .first()
+        .filter(|rows| {
+            rows.first()
                 .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
                 .is_some_and(|cell| words(cell).starts_with(&title))
         })
         .collect();
-    match matching.len() {
-        0 => Err("No table on the page starts with the recipe's table title.".to_owned()),
-        1 => Ok(matching.remove(0)),
-        n => Err(format!(
-            "{n} tables on the page start with the recipe's table title; make the title more specific."
-        )),
-    }
+    let rows = match (matching.len(), merge) {
+        (0, _) => {
+            return Err("No table on the page starts with the recipe's table title.".to_owned());
+        }
+        (1, _) => matching.remove(0),
+        (n, None) => {
+            return Err(format!(
+                "{n} tables on the page start with the recipe's table title; make the title more specific."
+            ));
+        }
+        (_, Some(header_rows)) => {
+            let mut all = matching.remove(0);
+            for table in matching {
+                all.extend(table.into_iter().skip(header_rows));
+            }
+            all
+        }
+    };
+    tabular::from_rows(rows).map_err(|e| e.to_string())
 }
 
 /// The profile folder is chosen by the user on their own computer, but it must
@@ -375,7 +393,7 @@ mod tests {
     fn the_table_is_picked_by_the_start_of_its_first_cell() {
         let raw = vec![rows("Menu"), rows("Stocks (cash/taxable)"), rows("Funds")];
 
-        let table = pick_table(raw, " Stocks (").unwrap();
+        let table = pick_table(raw, " Stocks (", None).unwrap();
 
         assert_eq!(table.rows[0][0], "Stocks (cash/taxable)");
     }
@@ -384,15 +402,16 @@ mod tests {
     fn line_breaks_and_no_break_spaces_in_the_first_cell_do_not_hide_the_title() {
         let raw = vec![rows("Menu"), rows("Stocks\n(cash/\u{a0}taxable)")];
 
-        let table = pick_table(raw, "Stocks (cash/ taxable)").unwrap();
+        let table = pick_table(raw, "Stocks (cash/ taxable)", None).unwrap();
 
         assert_eq!(table.rows[0][0], "Stocks\n(cash/\u{a0}taxable)");
     }
 
     #[test]
     fn no_match_and_several_matches_are_errors() {
-        assert!(pick_table(vec![rows("Menu")], "Stocks").is_err());
-        let error = pick_table(vec![rows("Stocks A"), rows("Stocks B")], "Stocks").unwrap_err();
+        assert!(pick_table(vec![rows("Menu")], "Stocks", None).is_err());
+        let error =
+            pick_table(vec![rows("Stocks A"), rows("Stocks B")], "Stocks", None).unwrap_err();
         assert!(error.starts_with("2 tables"));
     }
 
@@ -413,5 +432,33 @@ mod tests {
         assert!(session.close().is_ok());
         assert!(session.take_table(0).is_err());
         assert!(session.pages().is_err(), "needs an open browser");
+    }
+
+    #[test]
+    fn every_matching_table_can_be_read_and_put_together() {
+        let table = |title: &str, name: &str| {
+            vec![
+                vec![title.to_owned(), String::new()],
+                vec!["Quantity".to_owned(), "Price".to_owned()],
+                vec![name.to_owned(), String::new()],
+                vec!["1".to_owned(), "2".to_owned()],
+            ]
+        };
+        let raw = vec![
+            table("Stocks (taxable)", "A"),
+            table("Menu", "X"),
+            table("Stocks (tax-free)", "B"),
+        ];
+
+        // Several match: an error unless the recipe asks for all of them.
+        assert!(pick_table(raw.clone(), "Stocks (", None).is_err());
+        let merged = pick_table(raw, "Stocks (", Some(2)).unwrap();
+
+        // The first table whole, the second without its title and heading rows.
+        let first_cells: Vec<&str> = merged.rows.iter().map(|r| r[0].as_str()).collect();
+        assert_eq!(
+            first_cells,
+            vec!["Stocks (taxable)", "Quantity", "A", "1", "B", "1"]
+        );
     }
 }

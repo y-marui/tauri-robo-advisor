@@ -287,6 +287,17 @@ export const MESSAGES = {
   "The data file was changed on another computer. It has been reloaded; please try again.": {
     ja: "データファイルが、別のコンピューターで変更されました。読み込み直したので、もう一度操作してください。",
   },
+  "SBI Securities: domestic stocks": { ja: "SBI証券: 国内株式" },
+  "SBI Securities: investment trusts": { ja: "SBI証券: 投資信託" },
+  "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the domestic stock tables of every account type (quantity x current price).": {
+    ja: "ログイン後のSBI証券のトップのページから始め、「保有資産評価」を辿って、口座の種類ごとの国内株式の表をすべて読みます（数量 × 現在値）。",
+  },
+  "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the investment trust tables of every account type (units x price per 10,000 units).": {
+    ja: "ログイン後のSBI証券のトップのページから始め、「保有資産評価」を辿って、口座の種類ごとの投資信託の表をすべて読みます（口数 × 1万口あたりの基準価額）。",
+  },
+  "Preset": { ja: "組み込みのレシピ" },
+  "Add the preset": { ja: "追加する" },
+  "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },
   "Fetch recipes": { ja: "取得レシピ" },
   "The recipe was changed or removed in the meantime. Fetch again.": {
     ja: "その間に、レシピが変更または削除されました。もう一度取得してください。",

@@ -1,6 +1,7 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
+use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Funding,
@@ -128,6 +129,14 @@ pub enum Edit {
     },
     RemoveRecipe {
         name: String,
+    },
+    /// Adds a recipe that ships with the app (see `presets`) for an account. The recipe is an
+    /// ordinary one afterwards: the user can read it, change it, or remove it. A recipe of the
+    /// same name for the same account is replaced; for another account, the account's name is
+    /// added to the recipe's name.
+    AddPresetRecipe {
+        preset: String,
+        account: AccountId,
     },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
@@ -655,6 +664,42 @@ impl Portfolio {
                         }
                         self.recipes.push(recipe);
                     }
+                }
+            }
+            Edit::AddPresetRecipe { preset, account } => {
+                let preset = Preset::find(preset.trim())
+                    .ok_or_else(|| Error::Invalid("that preset does not exist".to_owned()))?;
+                let mut recipe = preset.recipe(account);
+                let account_name = self.account(account)?.name.clone();
+                // The same preset for the same account is found by what it does, not by its
+                // name (the name may have been suffixed, or changed by the user): it is replaced
+                // in place, so the account never gets two copies that would add up twice.
+                let same = self.recipes.iter().position(|r| {
+                    r.account == account
+                        && r.table_starts_with == recipe.table_starts_with
+                        && r.mapping.source == recipe.mapping.source
+                        && r.links
+                            .iter()
+                            .map(|l| &l.text)
+                            .eq(recipe.links.iter().map(|l| &l.text))
+                });
+                if let Some(index) = same {
+                    recipe.name = self.recipes[index].name.clone();
+                    self.recipes[index] = recipe.validated(self)?;
+                } else {
+                    if self.recipes.iter().any(|r| r.name == recipe.name) {
+                        recipe.name = format!("{} ({})", recipe.name, account_name);
+                    }
+                    let recipe = recipe.validated(self)?;
+                    if self.recipes.iter().any(|r| r.name == recipe.name) {
+                        return Err(Error::Invalid(
+                            "a recipe with that name exists; rename or remove it first".to_owned(),
+                        ));
+                    }
+                    if self.recipes.len() >= MAX_RECIPES {
+                        return Err(Error::Invalid("too many recipes".to_owned()));
+                    }
+                    self.recipes.push(recipe);
                 }
             }
             Edit::RemoveRecipe { name } => {

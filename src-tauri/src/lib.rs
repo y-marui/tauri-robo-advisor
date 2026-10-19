@@ -302,6 +302,12 @@ fn icloud_data_folder() -> Option<String> {
     data_folder::icloud_folder().map(|p| p.display().to_string())
 }
 
+// The recipes that ship with the app (data, not code). Nothing is changed.
+#[tauri::command]
+fn list_presets() -> Vec<portfolio::PresetInfo> {
+    portfolio::presets()
+}
+
 // A read-only valuation for the balance charts.
 #[tauri::command]
 async fn get_overview(state: State<'_, Arc<AppState>>) -> Result<Overview, String> {
@@ -384,6 +390,7 @@ pub fn run() {
             get_portfolio,
             apply_portfolio_edit,
             get_overview,
+            list_presets,
             plan_import,
             load_table_file,
             load_table_text,

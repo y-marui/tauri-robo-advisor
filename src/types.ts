@@ -85,9 +85,18 @@ export interface Recipe {
   name: string;
   links: FetchLink[];
   table_starts_with: string;
+  /** Read every table that starts with the title and put their rows together. */
+  all_tables?: boolean;
   currency: string;
   account: number;
   mapping: ImportMapping;
+}
+
+/** A recipe that ships with the app. */
+export interface PresetInfo {
+  id: string;
+  label: string;
+  description: string;
 }
 
 export interface Settings {
@@ -198,6 +207,7 @@ export type Edit =
   | { type: "remove_import_mapping"; source: string }
   | { type: "set_recipe"; recipe: Recipe }
   | { type: "remove_recipe"; name: string }
+  | { type: "add_preset_recipe"; preset: string; account: number }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }

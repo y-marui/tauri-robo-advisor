@@ -855,6 +855,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         currency: "JPY".to_owned(),
         account,
         mapping: mapping_for(" SBI "),
+        all_tables: false,
     }
 }
 
@@ -1285,4 +1286,31 @@ fn a_recipe_may_leave_its_currency_empty() {
     apply(&mut p, Edit::SetRecipe { recipe });
 
     assert_eq!(p.recipes[0].currency, "");
+}
+
+#[test]
+fn a_preset_is_never_added_twice_for_one_account() {
+    let (mut p, _, _, a) = sample();
+    let b = account(&mut p, "Account 2", AccountKind::Taxable);
+    let add = |p: &mut Portfolio, account| {
+        apply(
+            p,
+            Edit::AddPresetRecipe {
+                preset: "sbi-funds".to_owned(),
+                account,
+            },
+        )
+    };
+    add(&mut p, a);
+    add(&mut p, b);
+    assert_eq!(p.recipes.len(), 2);
+    assert_ne!(p.recipes[0].name, p.recipes[1].name);
+
+    // The first account's recipe goes away; adding the preset to the second account again
+    // replaces its recipe (found by what it does, not by its name), it does not add a copy.
+    let first = p.recipes[0].name.clone();
+    apply(&mut p, Edit::RemoveRecipe { name: first });
+    add(&mut p, b);
+    assert_eq!(p.recipes.len(), 1);
+    assert_eq!(p.recipes[0].account, b);
 }
