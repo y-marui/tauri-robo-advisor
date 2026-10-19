@@ -8,10 +8,16 @@ use serde::{Deserialize, Serialize};
 /// of a mapping. Version 4 added the table-merging flag and the allowed sites of a recipe. Version 5 added the
 /// following-tables flag and the start site of a recipe. Version 6 added the record limit of a
 /// mapping (`max_records`). Version 7 dropped the funding of an account (cash or points), which
-/// nothing used (an older app needs the field, so it refuses).
+/// nothing used (an older app needs the field, so it refuses). Version 8 moved the relative
+/// weight of a product onto the record of the product in an account (an older app would read
+/// every weight as missing, so it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
+
+/// The oldest version this app opens. Version 8 moved the weights of products into the records
+/// of the accounts, and nothing converts an older file: it is refused and left untouched.
+pub const MIN_SCHEMA_VERSION: u32 = 8;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -38,7 +44,7 @@ pub enum ProductTargeting {
     Equal,
     /// Products keep their current proportions.
     KeepCurrent,
-    /// Products have explicit relative weights (`Product::weight`).
+    /// Products have explicit relative weights (`Holding::weight`, added up over the accounts).
     Weighted,
 }
 
@@ -66,9 +72,6 @@ pub struct Product {
     pub category: CategoryId,
     /// Three upper-case letters, for example `JPY` or `USD`.
     pub currency: String,
-    /// Relative weight inside the category; used when it is `Weighted`.
-    #[serde(default)]
-    pub weight: Option<Decimal>,
     #[serde(default)]
     pub aliases: Vec<Alias>,
 }
@@ -99,7 +102,8 @@ pub struct Account {
     pub rounding_unit: Decimal,
 }
 
-/// A product held in an account. `value` is in the product's own currency.
+/// The record of a product in an account: what is held and how much of it is wanted.
+/// `value` is in the product's own currency.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Holding {
     pub account: AccountId,
@@ -114,6 +118,10 @@ pub struct Holding {
     /// How many units the price is quoted for: 1, or 10,000 for a fund's price per 10,000 units.
     #[serde(default = "one")]
     pub price_unit: u64,
+    /// Relative weight of this record inside its category, used when the category is
+    /// `Weighted`. A record can have a weight and no value yet (a product to start buying).
+    #[serde(default)]
+    pub weight: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -278,5 +286,27 @@ impl Default for Portfolio {
             revision: 0,
             recipes: Vec::new(),
         }
+    }
+}
+
+impl Portfolio {
+    /// The relative weight of a product over the whole portfolio: the weights of its records
+    /// added up. `None` when no record of it has a weight.
+    pub fn product_weight(&self, product: ProductId) -> Option<Decimal> {
+        self.holdings
+            .iter()
+            .filter(|h| h.product == product)
+            .filter_map(|h| h.weight)
+            // Stored weights are only checked to be positive, so the sum saturates rather than
+            // overflowing (the calculations refuse a weight above their own limit).
+            .reduce(|sum, w| sum.checked_add(w).unwrap_or(Decimal::MAX))
+    }
+
+    /// The relative weight of the record of a product in one account.
+    pub fn record_weight(&self, account: AccountId, product: ProductId) -> Option<Decimal> {
+        self.holdings
+            .iter()
+            .find(|h| h.account == account && h.product == product)
+            .and_then(|h| h.weight)
     }
 }

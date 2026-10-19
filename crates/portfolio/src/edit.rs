@@ -46,10 +46,6 @@ pub enum Edit {
         category: Option<CategoryId>,
         currency: Option<String>,
     },
-    SetProductWeight {
-        id: ProductId,
-        weight: Option<Decimal>,
-    },
     RemoveProduct {
         id: ProductId,
     },
@@ -97,6 +93,14 @@ pub enum Edit {
     RemoveHolding {
         account: AccountId,
         product: ProductId,
+    },
+    /// Sets (or clears) the relative weight of the record of a product in an account. A record
+    /// that does not exist yet is made with a value of zero, so a product can be given a weight
+    /// before anything is bought.
+    SetHoldingWeight {
+        account: AccountId,
+        product: ProductId,
+        weight: Option<Decimal>,
     },
     /// Makes the account hold exactly these products, as an import does. The
     /// values are in each product's own currency.
@@ -394,7 +398,6 @@ impl Portfolio {
             name: new_name,
             category,
             currency: code,
-            weight: None,
             aliases: Vec::new(),
         });
         Ok(id)
@@ -539,10 +542,6 @@ impl Portfolio {
                     product.currency = c;
                 }
             }
-            Edit::SetProductWeight { id, weight } => {
-                let weight = weight.map(|w| positive(w, "product weight")).transpose()?;
-                self.product_mut(id)?.weight = weight;
-            }
             Edit::RemoveProduct { id } => {
                 self.product(id)?;
                 self.products.retain(|p| p.id != id);
@@ -684,6 +683,36 @@ impl Portfolio {
                             quantity,
                             price: None,
                             price_unit: 1,
+                            weight: None,
+                        });
+                    }
+                }
+            }
+            Edit::SetHoldingWeight {
+                account,
+                product,
+                weight,
+            } => {
+                let weight = weight.map(|w| positive(w, "weight")).transpose()?;
+                self.account(account)?;
+                self.product(product)?;
+                match self
+                    .holdings
+                    .iter_mut()
+                    .find(|h| h.account == account && h.product == product)
+                {
+                    Some(holding) => holding.weight = weight,
+                    None if weight.is_none() => {}
+                    None => {
+                        self.check_capacity(self.holdings.len())?;
+                        self.holdings.push(Holding {
+                            account,
+                            product,
+                            value: Decimal::ZERO,
+                            quantity: None,
+                            price: None,
+                            price_unit: 1,
+                            weight,
                         });
                     }
                 }
@@ -716,8 +745,30 @@ impl Portfolio {
                             .transpose()?,
                         price: input.price.map(|p| non_negative(p, "price")).transpose()?,
                         price_unit: input.price_unit,
+                        // The weight is the user's wish, not part of what the page says.
+                        weight: self
+                            .holdings
+                            .iter()
+                            .find(|h| h.account == account && h.product == input.product)
+                            .and_then(|h| h.weight),
                     });
                 }
+                // A record that has a weight stays when the page no longer lists the product
+                // (sold out), with nothing held, so its weight is not lost.
+                let kept: Vec<Holding> = self
+                    .holdings
+                    .iter()
+                    .filter(|h| h.account == account && h.weight.is_some())
+                    .filter(|h| !seen.contains(&h.product))
+                    .map(|h| Holding {
+                        value: Decimal::ZERO,
+                        quantity: None,
+                        price: None,
+                        price_unit: 1,
+                        ..h.clone()
+                    })
+                    .collect();
+                next.extend(kept);
                 let others = self
                     .holdings
                     .iter()

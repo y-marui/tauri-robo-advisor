@@ -334,6 +334,7 @@ fn issues_report_weighted_categories_with_missing_weights_or_no_products() {
     let c = category(&mut p, "A", dec!(0.5));
     let empty = category(&mut p, "B", dec!(0.5));
     let prod = product(&mut p, "Fund X", c);
+    let acc = account(&mut p, "Main", AccountKind::Taxable);
     for id in [c, empty] {
         apply(
             &mut p,
@@ -352,8 +353,9 @@ fn issues_report_weighted_categories_with_missing_weights_or_no_products() {
 
     apply(
         &mut p,
-        Edit::SetProductWeight {
-            id: prod,
+        Edit::SetHoldingWeight {
+            account: acc,
+            product: prod,
             weight: Some(dec!(10)),
         },
     );
@@ -1507,4 +1509,157 @@ fn an_account_moves_up_and_down_and_stops_at_the_ends() {
         .is_err()
     );
     assert_eq!(p, before);
+}
+
+fn weight_edit(
+    account: AccountId,
+    product: ProductId,
+    weight: Option<rust_decimal::Decimal>,
+) -> Edit {
+    Edit::SetHoldingWeight {
+        account,
+        product,
+        weight,
+    }
+}
+
+#[test]
+fn a_weight_belongs_to_the_record_of_a_product_in_an_account() {
+    let (mut p, _, prod, acc) = sample();
+    let other = account(&mut p, "Account 2", AccountKind::Nisa);
+
+    apply(&mut p, weight_edit(acc, prod, Some(dec!(3))));
+    // The same product in another account has its own weight; none of it is held yet.
+    apply(&mut p, weight_edit(other, prod, Some(dec!(1))));
+
+    assert_eq!(p.record_weight(acc, prod), Some(dec!(3)));
+    assert_eq!(p.record_weight(other, prod), Some(dec!(1)));
+    assert_eq!(p.product_weight(prod), Some(dec!(4)));
+    let made = p
+        .holdings
+        .iter()
+        .find(|h| h.account == other && h.product == prod)
+        .unwrap();
+    assert_eq!(made.value, dec!(0));
+    p.validate_integrity().unwrap();
+
+    // Clearing a weight keeps the record; a weight that is not positive is refused.
+    apply(&mut p, weight_edit(acc, prod, None));
+    assert_eq!(p.product_weight(prod), Some(dec!(1)));
+    let before = p.clone();
+    assert!(p.apply(weight_edit(acc, prod, Some(dec!(0)))).is_err());
+    assert!(
+        p.apply(weight_edit(AccountId(9999), prod, Some(dec!(1))))
+            .is_err()
+    );
+    assert_eq!(p, before);
+
+    // Clearing the weight of a record that does not exist makes nothing.
+    let third = account(&mut p, "Account 3", AccountKind::Taxable);
+    let count = p.holdings.len();
+    apply(&mut p, weight_edit(third, prod, None));
+    assert_eq!(p.holdings.len(), count);
+    assert_eq!(p.product_weight(prod), Some(dec!(1)));
+}
+
+#[test]
+fn an_import_keeps_the_weights_of_the_records_it_replaces() {
+    let (mut p, c, prod, acc) = sample();
+    let sold = product(&mut p, "Fund Y", c);
+    let gone = product(&mut p, "Fund Z", c);
+    apply(&mut p, weight_edit(acc, prod, Some(dec!(2))));
+    apply(&mut p, weight_edit(acc, sold, Some(dec!(5))));
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: acc,
+            product: sold,
+            value: dec!(700),
+            quantity: Some(dec!(7)),
+        },
+    );
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: acc,
+            product: gone,
+            value: dec!(300),
+            quantity: None,
+        },
+    );
+
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![HoldingInput {
+                product: prod,
+                value: dec!(1500),
+                quantity: None,
+                price: None,
+                price_unit: 1,
+            }],
+        },
+    );
+
+    let record = |product| p.holdings.iter().find(|h| h.product == product);
+    // Listed again: the new value, the old weight.
+    assert_eq!(record(prod).unwrap().value, dec!(1500));
+    assert_eq!(record(prod).unwrap().weight, Some(dec!(2)));
+    // No longer listed but wanted: nothing held, the weight stays.
+    let kept = record(sold).unwrap();
+    assert_eq!(
+        (kept.value, kept.quantity, kept.weight),
+        (dec!(0), None, Some(dec!(5)))
+    );
+    // No longer listed and not wanted: gone.
+    assert!(record(gone).is_none());
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn removing_a_record_removes_its_weight() {
+    let (mut p, _, prod, acc) = sample();
+    apply(&mut p, weight_edit(acc, prod, Some(dec!(2))));
+    apply(
+        &mut p,
+        Edit::RemoveHolding {
+            account: acc,
+            product: prod,
+        },
+    );
+    assert_eq!(p.product_weight(prod), None);
+}
+
+#[test]
+fn only_the_supported_schema_versions_are_opened() {
+    let mut p = Portfolio::default();
+    p.validate_integrity().unwrap();
+    for version in [1, MIN_SCHEMA_VERSION - 1, SCHEMA_VERSION + 1] {
+        p.schema_version = version;
+        assert_eq!(
+            p.validate_integrity(),
+            Err(Error::UnsupportedVersion { found: version })
+        );
+    }
+    p.schema_version = 0;
+    assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+}
+
+#[test]
+fn the_weight_of_a_product_does_not_overflow_when_its_records_add_up() {
+    let (mut p, _, prod, acc) = sample();
+    let other = account(&mut p, "Account 2", AccountKind::Nisa);
+    apply(
+        &mut p,
+        weight_edit(acc, prod, Some(rust_decimal::Decimal::MAX)),
+    );
+    apply(
+        &mut p,
+        weight_edit(other, prod, Some(rust_decimal::Decimal::MAX)),
+    );
+
+    assert_eq!(p.product_weight(prod), Some(rust_decimal::Decimal::MAX));
+    // The issues are worked out on every view, so they must not panic either.
+    let _ = p.issues();
 }

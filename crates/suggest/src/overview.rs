@@ -49,9 +49,9 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
         .validate_integrity()
         .map_err(|_| Error::Inconsistent)?;
     if portfolio
-        .products
+        .holdings
         .iter()
-        .any(|p| p.weight.is_some_and(|w| w > MAX_WEIGHT))
+        .any(|h| h.weight.is_some_and(|w| w > MAX_WEIGHT))
     {
         return Err(Error::TooLarge);
     }

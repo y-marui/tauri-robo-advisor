@@ -53,9 +53,9 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
         .find(|a| a.id == account)
         .ok_or(Error::UnknownAccount)?;
     if portfolio
-        .products
+        .holdings
         .iter()
-        .any(|p| p.weight.is_some_and(|w| w > MAX_WEIGHT))
+        .any(|h| h.weight.is_some_and(|w| w > MAX_WEIGHT))
     {
         return Err(Error::TooLarge);
     }
@@ -102,7 +102,11 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .iter()
                 .map(|p| match category.targeting {
                     ProductTargeting::Equal => Some(Decimal::ONE),
-                    ProductTargeting::Weighted => Some(p.weight.unwrap_or_default()),
+                    ProductTargeting::Weighted => Some(
+                        portfolio
+                            .record_weight(account.id, p.id)
+                            .unwrap_or_default(),
+                    ),
                     ProductTargeting::Free | ProductTargeting::KeepCurrent => None,
                 })
                 .collect();
