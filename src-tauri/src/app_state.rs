@@ -549,6 +549,33 @@ impl AppState {
         self.replace_recipe_if_unchanged(expected, new)
     }
 
+    /// Opens the login page of every site that a recipe reads from (the person logs in by hand),
+    /// unless a tab of that site is already open.
+    pub fn open_login_pages(&self) -> Result<crate::browser_session::LoginPages, String> {
+        let sites: Vec<String> = {
+            let guard = self.lock()?;
+            let portfolio = guard.as_ref().map_err(Clone::clone)?;
+            let mut sites: Vec<String> = Vec::new();
+            for recipe in &portfolio.recipes {
+                if !recipe.start_site.is_empty() && !sites.contains(&recipe.start_site) {
+                    sites.push(recipe.start_site.clone());
+                }
+            }
+            sites
+        };
+        let mut known = Vec::new();
+        let mut unknown = Vec::new();
+        for site in sites {
+            match portfolio::login_url_for(&site) {
+                Some(url) => known.push((site, url.to_owned())),
+                None => unknown.push(site),
+            }
+        }
+        let mut result = self.browser.open_login_pages(&known)?;
+        result.unknown = unknown;
+        Ok(result)
+    }
+
     /// Follows the recipe's links in the browser, reads its table, and keeps the
     /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
     /// without a saved reference gets one now, so the same link is found next time.
@@ -1795,5 +1822,24 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn opening_the_login_pages_needs_the_browser_and_reports_unknown_sites() {
+        let (state, main, _, _, _) = recipe_state("login");
+        // No recipe names a site: there is nothing to open, but the browser is still needed.
+        let error = state.open_login_pages().unwrap_err();
+        assert!(error.contains("Open the browser first"), "{error}");
+
+        for preset in portfolio::presets() {
+            state
+                .apply(Edit::AddPresetRecipe {
+                    preset: preset.id.to_owned(),
+                    account: main,
+                })
+                .unwrap();
+        }
+        let error = state.open_login_pages().unwrap_err();
+        assert!(error.contains("Open the browser first"), "{error}");
     }
 }

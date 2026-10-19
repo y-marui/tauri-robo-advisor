@@ -41,6 +41,9 @@ pub struct Preset {
     /// heading table (otherwise every table that starts with the title is read).
     start_site: &'static str,
     following_tables: bool,
+    /// The page where the person logs in (the app only opens it; nothing is typed). One per
+    /// company: it belongs to the preset of the company's first entry.
+    login_url: &'static str,
     layout: Layout,
 }
 
@@ -81,6 +84,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
         following_tables: false,
+        login_url: "https://www.sbisec.co.jp/ETGate",
         layout: sbi_layout(1),
     },
     Preset {
@@ -92,6 +96,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
         following_tables: false,
+        login_url: "https://www.sbisec.co.jp/ETGate",
         layout: sbi_layout(10_000),
     },
     // Daiwa Connect Securities: its pages work by form posts and script links, so no link can be
@@ -108,6 +113,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "connect-sec.co.jp",
         following_tables: true,
+        login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
         layout: Layout {
             source: "Daiwa Connect",
             name_column: 0,
@@ -134,6 +140,25 @@ pub fn presets() -> Vec<PresetInfo> {
             description: p.description,
         })
         .collect()
+}
+
+/// The login page of a site (the `start_site` of a preset), if one is known.
+pub fn login_url_for(site: &str) -> Option<&'static str> {
+    PRESETS
+        .iter()
+        .find(|p| p.start_site == site && !p.login_url.is_empty())
+        .map(|p| p.login_url)
+}
+
+/// The sites that presets read, with their login pages, in the order of the presets.
+pub fn login_pages() -> Vec<(&'static str, &'static str)> {
+    let mut out: Vec<(&str, &str)> = Vec::new();
+    for p in PRESETS {
+        if !p.login_url.is_empty() && !out.iter().any(|(site, _)| *site == p.start_site) {
+            out.push((p.start_site, p.login_url));
+        }
+    }
+    out
 }
 
 impl Preset {

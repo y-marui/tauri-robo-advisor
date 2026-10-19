@@ -299,9 +299,20 @@ pub fn origin_of(address: &str) -> String {
     }
 }
 
+/// Whether an address may be opened as a login page: plain `https://host/...` (no user name,
+/// port, white space, control character, or back slash), not too long.
+pub fn login_url_ok(url: &str) -> bool {
+    url.len() <= 300
+        && url.starts_with("https://")
+        && !url
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || c == '\\')
+        && https_host(&origin_of(url)).is_some()
+}
+
 /// Whether `host` is `site` or a host below it (`www.example.co.jp` is within `example.co.jp`;
 /// `badexample.co.jp` is not).
-fn host_within(host: &str, site: &str) -> bool {
+pub fn host_within(host: &str, site: &str) -> bool {
     host == site
         || host
             .strip_suffix(site)
@@ -898,5 +909,26 @@ mod tests {
         let there = cross("/list", "https://www.example.co.jp");
         assert_ne!(here.reference(), there.reference());
         assert!(there.label().starts_with("https://www.example.co.jp/"));
+    }
+
+    #[test]
+    fn only_a_plain_https_address_is_a_login_page() {
+        assert!(login_url_ok("https://www.example.co.jp/login.html"));
+        assert!(login_url_ok("https://www.example.co.jp"));
+        for bad in [
+            "http://www.example.co.jp/login",
+            "https://user@www.example.co.jp/login",
+            "https://www.example.co.jp:8443/login",
+            "https://www.example.co.jp/lo gin",
+            "https://www.example.co.jp/\\login",
+            "https://www.example.co.jp/\nlogin",
+            "javascript:alert(1)",
+            "//www.example.co.jp/login",
+            "",
+        ] {
+            assert!(!login_url_ok(bad), "{bad}");
+        }
+        assert!(host_within("www.example.co.jp", "example.co.jp"));
+        assert!(!host_within("badexample.co.jp", "example.co.jp"));
     }
 }

@@ -98,6 +98,13 @@ export interface Recipe {
   mapping: ImportMapping;
 }
 
+/** What opening the login pages did. */
+export interface LoginPages {
+  opened: string[];
+  already_open: string[];
+  unknown: string[];
+}
+
 /** A recipe that ships with the app. */
 export interface PresetInfo {
   id: string;

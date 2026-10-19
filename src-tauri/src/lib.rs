@@ -302,6 +302,18 @@ fn icloud_data_folder() -> Option<String> {
     data_folder::icloud_folder().map(|p| p.display().to_string())
 }
 
+// Opens the login page of each site a recipe reads from, in the browser the app opened. The
+// browser only goes to the address; the person logs in by hand.
+#[tauri::command]
+async fn open_login_pages(
+    state: State<'_, Arc<AppState>>,
+) -> Result<browser_session::LoginPages, String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.open_login_pages())
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 // The recipes that ship with the app (data, not code). Nothing is changed.
 #[tauri::command]
 fn list_presets() -> Vec<portfolio::PresetInfo> {
@@ -391,6 +403,7 @@ pub fn run() {
             apply_portfolio_edit,
             get_overview,
             list_presets,
+            open_login_pages,
             plan_import,
             load_table_file,
             load_table_text,

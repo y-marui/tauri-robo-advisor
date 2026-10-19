@@ -17,7 +17,10 @@ pub use cdp::{Cdp, Followed, MAX_TABLES, Page};
 pub use detect::{Found, Kind, Os, candidate_paths, find_browsers, find_with};
 pub use error::{Error, LinkChoice};
 pub use launch::{Endpoint, parse_active_port, start};
-pub use links::{fingerprint, link_text_allowed, normalize_href, origin_of, sites_covering};
+pub use links::{
+    fingerprint, host_within, link_text_allowed, login_url_ok, normalize_href, origin_of,
+    sites_covering,
+};
 
 #[cfg(test)]
 mod tests;

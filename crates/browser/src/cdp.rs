@@ -167,6 +167,13 @@ impl Cdp {
         }
     }
 
+    /// Opens `url` in a new tab: the browser is sent to the address. Nothing is clicked, typed,
+    /// or submitted, so a login page can be shown and the person logs in by hand.
+    pub fn open_tab(&mut self, url: &str) -> Result<(), Error> {
+        self.call(None, "Target.createTarget", json!({ "url": url }))?;
+        Ok(())
+    }
+
     /// The tabs that are open (not workers, extensions' background pages, or the like).
     pub fn pages(&mut self) -> Result<Vec<Page>, Error> {
         let result = self.call(None, "Target.getTargets", json!({}))?;
