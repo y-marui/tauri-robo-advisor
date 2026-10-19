@@ -84,15 +84,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
+      - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: npx tsc --noEmit
       - run: cargo fmt --all --check
@@ -112,15 +104,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
+      - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: npm test
       - run: mkdir -p dist
@@ -139,15 +123,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
+      - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: npm run tauri build -- --no-bundle
 
