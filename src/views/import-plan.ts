@@ -117,12 +117,18 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
           { "aria-label": t("Category of the new product") },
           ...categories.map((c) => h("option", { value: String(c.id) }, c.name)),
         );
-        const currencySelect = h(
-          "select",
-          { "aria-label": t("Currency of the new product") },
-          ...[...currencies].sort().map((c) => h("option", { value: c }, c)),
-        );
-        currencySelect.value = defaultCurrency;
+        // Any currency code can be typed (the list offers the usual ones); Rust checks the code.
+        const currencyList = h("datalist", {}, ...[...currencies].sort().map((c) => h("option", { value: c })));
+        const listId = `currencies-${Math.random().toString(36).slice(2)}`;
+        currencyList.id = listId;
+        const currencySelect = h("input", {
+          type: "text",
+          autocomplete: "off",
+          class: "currency",
+          list: listId,
+          value: defaultCurrency,
+          "aria-label": t("Currency of the new product"),
+        });
         const create = h("button", { type: "button" }, t("Create a product and link"));
         create.disabled = categories.length === 0;
         create.addEventListener("click", () => {
@@ -130,7 +136,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
             type: "add_product_with_alias",
             name: productName.value.trim(),
             category: Number(categorySelect.value),
-            currency: currencySelect.value,
+            currency: currencySelect.value.trim().toUpperCase(),
             source: source,
             alias: row.name,
           });
@@ -145,7 +151,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
             select,
             link,
           ),
-          h("div", { class: "add-row" }, productName, categorySelect, currencySelect, create),
+          h("div", { class: "add-row" }, productName, categorySelect, currencySelect, currencyList, create),
         );
       }),
       candidates.length === 0
