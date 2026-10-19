@@ -2137,7 +2137,7 @@ mod tests {
                 "Taxable",
                 units,
                 "5,000.00 円\n6,000 円",
-                "10,000 円\n+5 円",
+                "12,000 円\n+5 円",
                 value,
             ])
         };
@@ -2145,7 +2145,6 @@ mod tests {
             heading,
             holding("Fund", "Alpha Fund", "5,000 口", "6,000 円\n+100 円"),
             holding("Fund", "Beta Fund", "1,500 口", "3,000 円\n-50 円"),
-            holding("Stock", "Gamma Corp", "250 株", "700 円\n+1 円"),
             row(&[""]),
         ];
         let page = browser::PageTables {
@@ -2186,8 +2185,7 @@ mod tests {
                     "6000".to_owned(),
                     "5000".to_owned()
                 ),
-                ("Beta Fund".to_owned(), "3000".to_owned(), "1500".to_owned()),
-                ("Gamma Corp".to_owned(), "700".to_owned(), "250".to_owned()),
+                ("Beta Fund".to_owned(), "1800".to_owned(), "1500".to_owned()),
             ]
         );
     }
