@@ -117,6 +117,38 @@ const PRESETS: &[Preset] = &[
         login_url: "https://www.sbisec.co.jp/ETGate",
         layout: sbi_layout(10_000),
     },
+    // Monex Securities, the page 保有残高: the top page after logging in links to it with a plain
+    // link on the same host. Every table of the page begins with the same heading cell (name), so
+    // the title runs over the first cells of the heading row to pick the investment trust table.
+    // It is a heading row and then one row per holding: name, account type, price, a cell for the
+    // one more column, units, cost, evaluation, profit, and a last column. Only the evaluation
+    // and the units are read: the evaluation from its column, the units recorded next to it.
+    Preset {
+        id: "monex-funds",
+        label: "Monex Securities: investment trusts",
+        description: "Starts from the top page of Monex Securities (after logging in): follows \"保有残高\" and reads the investment trust table (evaluation and units held).",
+        links: &["保有残高"],
+        menu: None,
+        table_starts_with: "銘柄 口座区分預り区分 基準価額（円）前日比 分配金の取扱い 保有数（口）",
+        allowed_sites: &["monex.co.jp"],
+        start_site: "monex.co.jp",
+        following_tables: false,
+        login_url: "https://www.monex.co.jp/",
+        layout: Layout {
+            source: "Monex",
+            name_column: 0,
+            value_column: 6,
+            price_column: None,
+            price_unit: 1,
+            header_rows: 1,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            loose_numbers: false,
+            quantity_column: Some(4),
+            max_records: None,
+        },
+    },
     // Daiwa Connect Securities: its pages work by form posts and script links, so the menu entry
     // 国内株式 > 保有銘柄一覧 is clicked (the site is vetted) and the page must then show the heading
     // 現物取引保有銘柄一覧. The page is a heading
