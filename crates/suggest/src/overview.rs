@@ -34,12 +34,23 @@ pub struct HoldingOverview {
     pub share: Decimal,
 }
 
+/// One account's holdings valued in JPY (every account, also one without holdings).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AccountOverview {
+    pub account: AccountId,
+    /// The value of the account's holdings in JPY.
+    pub value: Decimal,
+    /// `value` divided by the portfolio total, as a fraction.
+    pub share: Decimal,
+}
+
 /// The whole portfolio valued in JPY, for the balance charts.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Overview {
     pub total: Decimal,
     pub categories: Vec<CategoryOverview>,
     pub holdings: Vec<HoldingOverview>,
+    pub accounts: Vec<AccountOverview>,
 }
 
 /// Values every category in JPY. Unlike a suggestion this works while the
@@ -96,6 +107,22 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
             }
         })
         .collect();
+    let accounts = portfolio
+        .accounts
+        .iter()
+        .map(|account| {
+            let value: Decimal = rows
+                .iter()
+                .filter(|(id, _, _)| *id == account.id)
+                .map(|(_, _, v)| *v)
+                .sum();
+            AccountOverview {
+                account: account.id,
+                value,
+                share: share_of_total(value),
+            }
+        })
+        .collect();
     let holdings = rows
         .into_iter()
         .map(|(account, product, value)| HoldingOverview {
@@ -109,5 +136,6 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
         total,
         categories,
         holdings,
+        accounts,
     })
 }

@@ -914,6 +914,26 @@ fn overview_reports_value_and_share_per_category() {
 }
 
 #[test]
+fn overview_totals_every_account_and_they_add_up_to_the_whole() {
+    let f = fixture();
+
+    let o = overview(&f.portfolio).unwrap();
+
+    assert_eq!(o.accounts.len(), f.portfolio.accounts.len());
+    let sum: Decimal = o.accounts.iter().map(|a| a.value).sum();
+    assert_eq!(sum, o.total);
+    for account in &o.accounts {
+        let own: Decimal = o
+            .holdings
+            .iter()
+            .filter(|h| h.account == account.account)
+            .map(|h| h.value)
+            .sum();
+        assert_eq!(account.value, own);
+    }
+}
+
+#[test]
 fn overview_of_an_empty_portfolio_has_zero_shares() {
     let mut p = Portfolio::default();
     let c = category(&mut p, "A", dec!(1));

@@ -26,6 +26,7 @@ function differenceClass(difference: string): string {
 export function holdingsTablePanel(ctx: Context): Panel {
   // Cells that show Rust's valuation, found again by key after each refresh.
   let holdingCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
+  let accountCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
   let categoryCells = new Map<
     number,
     { value: HTMLElement; share: HTMLElement; target: HTMLElement; difference: HTMLElement }
@@ -49,6 +50,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
     (view, bind) => {
       holdingCells = new Map();
       categoryCells = new Map();
+      accountCells = new Map();
       const { categories, products, accounts, holdings } = view.portfolio;
       if (holdings.length === 0) {
         return [h("p", { class: "note" }, t("No holdings yet."))];
@@ -168,6 +170,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
           if (records.length === 0) {
             continue;
           }
+          const subtotal = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
+          accountCells.set(account.id, subtotal);
           rows.push(
             h(
               "tr",
@@ -176,8 +180,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
               h("td", {}),
               h("td", {}),
               h("td", {}),
-              h("td", {}),
-              h("td", {}),
+              subtotal.value,
+              subtotal.share,
               h("td", {}),
               h("td", {}),
             ),
@@ -287,6 +291,13 @@ export function holdingsTablePanel(ctx: Context): Panel {
       if (cells) {
         cells.value.textContent = yen(record.value);
         cells.share.textContent = percent(record.share);
+      }
+    }
+    for (const account of overview.accounts) {
+      const cells = accountCells.get(account.account);
+      if (cells) {
+        cells.value.textContent = yen(account.value);
+        cells.share.textContent = percent(account.share);
       }
     }
     for (const category of overview.categories) {

@@ -15,11 +15,23 @@ import { importPlanView } from "./import-plan.ts";
 // after a language change) while a batch is still running; a later run waits for the one before.
 let running: Promise<void> = Promise.resolve();
 
+/** Whether a saved recipe is the one a preset makes (same table, source, and links, as the backend decides). */
+function isPresetRecipe(recipe: Recipe, preset: PresetInfo): boolean {
+  return (
+    recipe.table_starts_with === preset.table_starts_with &&
+    recipe.mapping.source === preset.source &&
+    recipe.links.length === preset.links.length &&
+    recipe.links.every((l, i) => l.text === preset.links[i])
+  );
+}
+
 export function recipesPanel(ctx: Context): Panel {
   const list = h("div", { class: "recipe-list" });
   const pageSelect = h("select", { "aria-label": t("Page") });
   const refreshButton = h("button", { type: "button" }, t("Refresh pages"));
-  const runButton = h("button", { type: "button" }, t("Fetch everything"));
+  const runButton = h("button", { type: "button" }, t("Fetch"));
+  // What one press of the button fetches: everything, the recipes of one account, or of one site.
+  const scopeSelect = h("select", { "aria-label": t("What to fetch") });
   const loginButton = h("button", { type: "button" }, t("Open the login pages"));
   const message = h("p", { class: "note", role: "status" });
   const attention = h("div", { class: "recipe-attention" });
@@ -30,8 +42,32 @@ export function recipesPanel(ctx: Context): Panel {
   const presetAccount = h("select", { "aria-label": t("Account to update") });
   const presetAdd = h("button", { type: "button" }, t("Add the preset"));
   const presetNote = h("p", { class: "note" });
-  const noAccountNote = h("p", { class: "note error" }, t("Add an account first (in the Accounts card), then add the preset."));
+  const noAccountNote = h("p", { class: "note error" }, t("Add an account first (below), then add the preset."));
   noAccountNote.hidden = true;
+  // A new account can be made here, so the preset need not wait for a trip to the Settings tab.
+  const newAccountName = h("input", { type: "text", "aria-label": t("Name of a new account"), placeholder: t("New account name") });
+  const newAccountAdd = h("button", { type: "button" }, t("Add an account"));
+  newAccountAdd.addEventListener("click", () => {
+    const name = newAccountName.value.trim();
+    if (name === "") {
+      fail(t("Enter a name for the new account."));
+      return;
+    }
+    newAccountAdd.disabled = true;
+    void ctx
+      .apply({ type: "add_account", name, kind: "taxable" })
+      .then((ok) => {
+        if (ok && current) {
+          newAccountName.value = "";
+          // The newest account is the one just made: choose it for the preset.
+          const newest = Math.max(...current.portfolio.accounts.map((a) => a.id));
+          presetAccount.value = String(newest);
+        }
+      })
+      .finally(() => {
+        newAccountAdd.disabled = false;
+      });
+  });
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
   let presetRecipesSignature = "";
@@ -39,15 +75,31 @@ export function recipesPanel(ctx: Context): Panel {
   const accountOfPreset = (): string => {
     const preset = presets.find((p) => p.id === presetSelect.value);
     // Found by what the recipe does (table, source, links, as the backend does), not by its name.
-    const existing = current?.portfolio.recipes.find(
-      (r) =>
-        preset !== undefined &&
-        r.table_starts_with === preset.table_starts_with &&
-        r.mapping.source === preset.source &&
-        r.links.length === preset.links.length &&
-        r.links.every((l, i) => l.text === preset.links[i]),
-    );
+    const existing = current?.portfolio.recipes.find((r) => preset !== undefined && isPresetRecipe(r, preset));
     return existing === undefined ? "" : String(existing.account);
+  };
+  /** What to do when a recipe could not read its table: the page to open, as its preset says. */
+  const whatToOpen = (recipe: Recipe): string => {
+    const preset = presets.find((p) => isPresetRecipe(recipe, p));
+    return preset
+      ? t(preset.description as MessageKey)
+      : t("Open the page that shows the table starting with “{title}” in the browser, then fetch this recipe again.", {
+          title: recipe.table_starts_with,
+        });
+  };
+  const accountNameOf = (recipe: Recipe): string =>
+    current?.portfolio.accounts.find((a) => a.id === recipe.account)?.name ?? "?";
+  /** A problem note with the page to open and a button to fetch just this recipe again. */
+  const problem = (recipe: Recipe, text: string): HTMLElement => {
+    const again = h("button", { type: "button" }, t("Fetch this recipe again"));
+    again.addEventListener("click", () => void runAll([recipe.name]));
+    return h(
+      "div",
+      { class: "recipe-problem" },
+      h("p", { class: "note error" }, text),
+      h("p", { class: "note" }, whatToOpen(recipe)),
+      again,
+    );
   };
   const showPresetNote = (): void => {
     presetAccount.value = accountOfPreset();
@@ -187,6 +239,7 @@ export function recipesPanel(ctx: Context): Panel {
     }
     runButton.disabled = true;
     attention.replaceChildren();
+    const outcome = { worked: [] as string[], attention: [] as string[], notTried: [] as string[] };
     try {
       // A full run starts from nothing; only a retry of named recipes keeps the others.
       if (!only) {
@@ -199,8 +252,16 @@ export function recipesPanel(ctx: Context): Panel {
         const pages = pagesFor(recipe);
         if (pages.length === 0) {
           attention.append(
-            h("p", { class: "note error" }, t("“{recipe}” needs an open page of {site}: log in and open it in the browser first.", { recipe: recipe.name, site: recipe.start_site ?? "" })),
+            problem(
+              recipe,
+              t("“{recipe}” ({account}) needs an open page of {site}: log in and open it in the browser first.", {
+                recipe: recipe.name,
+                account: accountNameOf(recipe),
+                site: recipe.start_site ?? "",
+              }),
+            ),
           );
+          outcome.attention.push(recipe.name);
           continue;
         }
         try {
@@ -224,20 +285,46 @@ export function recipesPanel(ctx: Context): Panel {
           }
           if (note) {
             attention.append(note);
+            outcome.attention.push(recipe.name);
+          } else {
+            outcome.worked.push(recipe.name);
           }
         } catch (error) {
           const reason = String(error);
           attention.append(
-            h("p", { class: "note error" }, t("“{recipe}” failed: {reason}", { recipe: recipe.name, reason: reason.replace("[stop] ", "") })),
+            problem(
+              recipe,
+              t("“{recipe}” ({account}) failed: {reason}", {
+                recipe: recipe.name,
+                account: accountNameOf(recipe),
+                reason: reason.replace("[stop] ", ""),
+              }),
+            ),
           );
+          outcome.attention.push(recipe.name);
           if (reason.includes("[stop] ")) {
             // The tab is not where the recipes expect it: the next one would read the wrong page.
+            outcome.notTried = wanted.slice(wanted.indexOf(recipe) + 1).map((r) => r.name);
             break;
           }
         }
       }
       await showResults();
       info("");
+      // Each recipe has its own result; the ones that worked are kept.
+      const lines: string[] = [];
+      if (outcome.worked.length > 0) {
+        lines.push(t("Worked: {names}.", { names: outcome.worked.join(", ") }));
+      }
+      if (outcome.attention.length > 0) {
+        lines.push(t("Needs attention: {names}.", { names: outcome.attention.join(", ") }));
+      }
+      if (outcome.notTried.length > 0) {
+        lines.push(t("Not tried: {names}.", { names: outcome.notTried.join(", ") }));
+      }
+      if (lines.length > 0 && wanted.length > 1) {
+        attention.prepend(h("p", { class: "note" }, lines.join(" ")));
+      }
     } finally {
       runButton.disabled = false;
       pageSelect.disabled = false;
@@ -343,7 +430,26 @@ export function recipesPanel(ctx: Context): Panel {
       });
   });
   refreshButton.addEventListener("click", () => void refreshPages());
-  runButton.addEventListener("click", () => void runAll());
+  /** The names of the recipes the chosen scope covers; `undefined` is everything. */
+  const scopedNames = (): string[] | undefined => {
+    const scope = scopeSelect.value;
+    const recipes = current?.portfolio.recipes ?? [];
+    if (scope.startsWith("account:")) {
+      return recipes.filter((r) => `account:${r.account}` === scope).map((r) => r.name);
+    }
+    if (scope.startsWith("site:")) {
+      return recipes.filter((r) => `site:${r.start_site ?? ""}` === scope).map((r) => r.name);
+    }
+    return undefined;
+  };
+  runButton.addEventListener("click", () => void runAll(scopedNames()));
+
+  /** A button that fetches just this recipe (the others keep what they already read). */
+  function fetchOne(recipe: Recipe): HTMLElement {
+    const button = h("button", { type: "button" }, t("Fetch this recipe"));
+    button.addEventListener("click", () => void runAll([recipe.name]));
+    return button;
+  }
 
   function renderList(view: PortfolioView): void {
     if (view.portfolio.recipes.length === 0) {
@@ -354,6 +460,17 @@ export function recipesPanel(ctx: Context): Panel {
       return;
     }
     runButton.disabled = false;
+    const previousScope = scopeSelect.value;
+    const accountIds = [...new Set(view.portfolio.recipes.map((r) => r.account))];
+    const sites = [...new Set(view.portfolio.recipes.map((r) => r.start_site ?? "").filter((x) => x !== ""))];
+    scopeSelect.replaceChildren(
+      h("option", { value: "" }, t("Everything")),
+      ...accountIds.map((id) =>
+        h("option", { value: `account:${id}` }, t("Account: {name}", { name: view.portfolio.accounts.find((a) => a.id === id)?.name ?? "?" })),
+      ),
+      ...sites.map((site) => h("option", { value: `site:${site}` }, t("Site: {name}", { name: site }))),
+    );
+    scopeSelect.value = [...scopeSelect.options].some((o) => o.value === previousScope) ? previousScope : "";
     const accountName = (id: number): string =>
       view.portfolio.accounts.find((a) => a.id === id)?.name ?? "?";
     list.replaceChildren(
@@ -366,6 +483,7 @@ export function recipesPanel(ctx: Context): Panel {
             {},
             `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`,
           ),
+          fetchOne(recipe),
           deleteButton(() => void ctx.apply({ type: "remove_recipe", name: recipe.name })),
         ),
       ),
@@ -379,13 +497,14 @@ export function recipesPanel(ctx: Context): Panel {
     h(
       "p",
       { class: "note" },
-      t("After you log in to the browser opened by the app, “Fetch everything” follows each recipe’s links (they only show other pages), reads its table, and shows the result of all of them. Nothing changes until you confirm."),
+      t("After you log in to the browser opened by the app, “Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. Choose everything, one account, or one site, or fetch a single recipe. Nothing changes until you confirm."),
     ),
     list,
     h("div", { class: "add-row" }, presetSelect, presetAccount, presetAdd),
     noAccountNote,
+    h("div", { class: "add-row" }, newAccountName, newAccountAdd),
     presetNote,
-    h("div", { class: "add-row" }, loginButton, pageSelect, refreshButton, runButton),
+    h("div", { class: "add-row" }, loginButton, pageSelect, refreshButton, scopeSelect, runButton),
     message,
     attention,
     results,

@@ -32,7 +32,7 @@ export function importStepsPanel(_ctx: Context): Panel {
           step(hasBase, t("Add a category and an account (Settings tab).")),
           step(hasRecipe, t("Choose a preset and an account, and add it (Fetch recipes card).")),
           step(null, t("Open the browser and the login pages, and log in yourself (Fetch recipes card).")),
-          step(null, t("Fetch everything (Fetch recipes card).")),
+          step(null, t("Fetch (Fetch recipes card).")),
           step(null, t("Link the names to products (one click creates a product), then apply.")),
         ),
         h("p", { class: "note" }, t("A table from a file, pasted text, or the browser, with your own columns, is in the Import a table card below.")),
