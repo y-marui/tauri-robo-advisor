@@ -16,8 +16,10 @@ _最終更新: 2026-10-19_
 | `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別の一覧、グループとカテゴリの小計、その場の編集 | `src/panel.ts`, `src/fields.ts`, `src/views/groups.ts` |
 | `src/views/groups.ts` | グループのカード（追加・名前の変更・削除）と、グループの表示の順序・名前の補助 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
-| `src/views/account-tabs.ts` | 右パネル。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
-| `src/views/suggestion.ts` | 提案の入力欄と結果の表示（全体のバランスと口座のタブで共有） | `src/api.ts` |
+| `src/views/suggestions.ts` | 保有タブの副タブ「提案」。対象口座の選択と全体の提案 | `src/views/suggestion.ts` |
+| `src/subtabs.ts` | 保有タブの副タブの名前、保存した選択の検証、矢印キーの移動（テストあり） | — |
+| `src/views/account-tabs.ts` | 保有タブの副タブ「口座ごと」。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
+| `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「提案」の副タブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/browser-fetch.ts` | 「ブラウザで取得」。ブラウザの選択・起動、ページと表の選択、閉じる | `src/api.ts` |
 | `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |

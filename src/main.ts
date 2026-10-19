@@ -13,6 +13,8 @@ import { holdingsPanel } from "./views/holdings.ts";
 import { accountTabsPanel } from "./views/account-tabs.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
+import { suggestionsPanel } from "./views/suggestions.ts";
+import { HOLDINGS_SUBTABS, pickSubTab, stepSubTab, type HoldingsSubTab } from "./subtabs.ts";
 import { dataNotes } from "./views/data-folder.ts";
 import { issuesList } from "./views/issues.ts";
 import { productsPanel } from "./views/products.ts";
@@ -50,6 +52,22 @@ function readTab(): TabName {
 function saveTab(tab: TabName): void {
   try {
     localStorage.setItem("tab", tab);
+  } catch {
+    // Only a convenience.
+  }
+}
+
+function readSubTab(): HoldingsSubTab {
+  try {
+    return pickSubTab(localStorage.getItem("holdings-subtab"));
+  } catch {
+    return pickSubTab(null);
+  }
+}
+
+function saveSubTab(tab: HoldingsSubTab): void {
+  try {
+    localStorage.setItem("holdings-subtab", tab);
   } catch {
     // Only a convenience.
   }
@@ -173,6 +191,7 @@ function build(): void {
   issues = h("div");
   const overview = overviewPanel(context);
   const holdingsTable = holdingsTablePanel(context);
+  const suggestions = suggestionsPanel(context);
   const accountTabs = accountTabsPanel(context);
   const importSteps = importStepsPanel(context);
   const tableImport = tableImportPanel(context);
@@ -188,6 +207,7 @@ function build(): void {
   panels = [
     overview,
     holdingsTable,
+    suggestions,
     accountTabs,
     importSteps,
     tableImport,
@@ -202,13 +222,52 @@ function build(): void {
     dataFolder,
   ];
 
+  // The wide area beside the balance: the holdings table, the overall suggestion, and the
+  // accounts. They only show and hide, like the main tabs; the choice is remembered.
+  const subPanes: Record<HoldingsSubTab, HTMLElement> = {
+    holdings: h("div", { class: "subpane", role: "tabpanel" }, holdingsTable.el),
+    suggestions: h("div", { class: "subpane", role: "tabpanel" }, suggestions.el),
+    accounts: h("div", { class: "subpane", role: "tabpanel" }, accountTabs.el),
+  };
+  const subLabels: Record<HoldingsSubTab, string> = {
+    holdings: t("Holdings"),
+    suggestions: t("Suggestions"),
+    accounts: t("By account"),
+  };
+  const subButtons = new Map<HoldingsSubTab, HTMLButtonElement>();
+  const selectSub = (tab: HoldingsSubTab): void => {
+    for (const name of HOLDINGS_SUBTABS) {
+      const active = name === tab;
+      subPanes[name].hidden = !active;
+      const button = subButtons.get(name);
+      button?.setAttribute("aria-selected", String(active));
+      button?.setAttribute("tabindex", active ? "0" : "-1");
+    }
+    saveSubTab(tab);
+  };
+  for (const name of HOLDINGS_SUBTABS) {
+    const button = h("button", { type: "button", class: "tab", role: "tab" }, subLabels[name]);
+    button.addEventListener("click", () => selectSub(name));
+    button.addEventListener("keydown", (event) => {
+      const next = stepSubTab(name, event.key);
+      if (next !== null) {
+        selectSub(next);
+        subButtons.get(next)?.focus();
+        event.preventDefault();
+      }
+    });
+    subButtons.set(name, button);
+  }
+  const subTabStrip = h("div", { class: "tabs sub-tabs", role: "tablist", "aria-label": t("Holdings sections") }, ...subButtons.values());
+  selectSub(readSubTab());
+
   // The tabs only show and hide: every panel keeps rendering, so switching loses no input.
   const panes: Record<TabName, HTMLElement> = {
     holdings: h(
       "div",
       { class: "pane holdings-layout", role: "tabpanel", id: "pane-holdings" },
-      h("div", { class: "side" }, overview.el, accountTabs.el),
-      holdingsTable.el,
+      h("div", { class: "side" }, overview.el),
+      h("div", { class: "holdings-main" }, subTabStrip, ...HOLDINGS_SUBTABS.map((n) => subPanes[n])),
     ),
     import: h(
       "div",

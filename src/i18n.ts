@@ -155,6 +155,8 @@ export const MESSAGES = {
   "Current": { ja: "現在" },
   "No holdings yet.": { ja: "保有がまだありません。" },
   "Suggestion": { ja: "提案" },
+  "Suggestions": { ja: "提案" },
+  "Holdings sections": { ja: "保有の区分" },
   "Suggestion mode": { ja: "提案の種類" },
   "Add a fixed amount": { ja: "定額追加" },
   "Amount needed to reach the target without selling": { ja: "売らずに達成する追加額" },
