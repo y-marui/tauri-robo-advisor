@@ -468,15 +468,11 @@ textarea {
   align-items: center;
 }
 
-/* The name of a product is edited in its row; a long name is clipped inside the field. */
+/* The name of a product in the holdings table; a long name is clipped with an ellipsis. */
 .product-cell {
   min-width: 9rem;
   max-width: 14rem;
-}
-
-.product-cell input {
-  width: 100%;
-  box-sizing: border-box;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 
@@ -630,6 +626,14 @@ table.records td.clip {
   .holdings-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  color: var(--strong);
+  text-decoration: underline;
 }
 
 .group-by {

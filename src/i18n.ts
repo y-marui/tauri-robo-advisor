@@ -98,8 +98,8 @@ export const MESSAGES = {
   "No records": { ja: "レコードはありません" },
   "Filter products": { ja: "商品を絞り込む" },
   "Delete product": { ja: "商品を削除" },
-  "Every product and every record, as saved. Edit them here.": {
-    ja: "保存されている商品とレコードのすべて。ここで編集します。",
+  "Every product and every record, as saved. Edit here; the Holdings tab only shows them.": {
+    ja: "保存されている商品とレコードのすべて。編集はここで行い、保有タブは表示だけです。",
   },
   "Enter an amount (0 is allowed). To remove a record, use its Delete button.": {
     ja: "金額を入力してください（0 も可）。レコードを消すには、その行の削除ボタンを使います。",
@@ -400,9 +400,8 @@ export const MESSAGES = {
   "To make a product from a name, add a category first (in the Categories card).": {
     ja: "名前から商品を作るには、先に「カテゴリ」のカードでカテゴリを追加してください。",
   },
-  "Category name": { ja: "カテゴリの名前" },
+  "Edit in Records": { ja: "全レコードで編集" },
   "Product name": { ja: "商品の名前" },
-  "Category of the product": { ja: "商品のカテゴリ" },
   "Daiwa Connect Securities: cash (yen)": { ja: "大和コネクト証券: 現金（円）" },
   "Open the page 取引余力・預り資産 of Daiwa Connect Securities after logging in, then fetch: the yen balance (金銭残高) is read.": {
     ja: "ログイン後に、大和コネクト証券の「取引余力・預り資産」のページを開いてから取得します。円の残高（金銭残高）を読みます。",
