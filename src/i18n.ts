@@ -356,6 +356,20 @@ export const MESSAGES = {
   "“{recipe}” needs an open page of {site}: log in and open it in the browser first.": {
     ja: "「{recipe}」には、{site} の開いているページが要ります。ブラウザでログインして、先にそのページを開いてください。",
   },
+  "Monex Securities: investment trusts": { ja: "マネックス証券: 投資信託" },
+  "Starts from the top page of Monex Securities (after logging in): follows \"保有残高\" and reads the investment trust table (evaluation and units held).": {
+    ja: "ログイン後のマネックス証券のトップのページから始め、「保有残高」を辿って、投資信託の表を読みます（評価額と保有数）。",
+  },
+  "Rakuten Securities: investment trusts": { ja: "楽天証券: 投資信託" },
+  "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-投資信託\" and reads the investment trust holdings table (evaluation and units held).": {
+    ja: "ログイン後の楽天証券のホームのページから始め、「保有商品一覧-投資信託」を辿って、投資信託の保有の表を読みます（評価額と保有数）。",
+  },
+  "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (evaluation and quantity).": {
+    ja: "大和コネクト証券にログインしたあと、メニューの「国内株式」の「保有銘柄一覧」（現物取引保有銘柄一覧）をクリックして開き、保有の各行を読みます（評価額と数量）。",
+  },
+  "After logging in to Daiwa Connect Securities, clicks the menu 資産照会 > 取引余力・預り資産 and reads the yen balance (金銭残高).": {
+    ja: "大和コネクト証券にログインしたあと、メニューの「資産照会」の「取引余力・預り資産」をクリックして開き、円の残高（金銭残高）を読みます。",
+  },
   "Daiwa Connect Securities: domestic stocks": { ja: "大和コネクト証券: 国内株式" },
   "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).": {
     ja: "ログイン後に、大和コネクト証券の「現物取引保有銘柄一覧」を開いてから取得します。保有の各行（評価額と数量）を読みます。",
@@ -463,6 +477,7 @@ export function getLanguage(): Lang {
 
 /** Translates a message; `{name}` placeholders are replaced from `params`. */
 export function t(key: MessageKey, params: Record<string, string> = {}): string {
-  const template = current === "ja" ? MESSAGES[key].ja : key;
+  // A key the dictionary lacks shows as it is instead of breaking the whole screen.
+  const template = current === "ja" ? (MESSAGES[key]?.ja ?? key) : key;
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => params[name] ?? whole);
 }

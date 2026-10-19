@@ -2113,3 +2113,16 @@ fn a_file_without_groups_loads_and_groups_round_trip_through_json() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
 }
+
+#[test]
+fn every_preset_text_has_a_japanese_translation() {
+    // The screen shows the label and description of a preset through the dictionary; a text the
+    // dictionary lacks used to leave the preset list empty in Japanese.
+    let dictionary = include_str!("../../../src/i18n.ts");
+    for preset in presets() {
+        for text in [preset.label, preset.description] {
+            let key = format!("\"{}\"", text.replace('"', "\\\""));
+            assert!(dictionary.contains(&key), "no translation for: {text}");
+        }
+    }
+}

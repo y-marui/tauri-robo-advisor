@@ -15,6 +15,10 @@
 - The rounding unit of a new account now defaults to 1 yen (it was 1,000 yen), since many investment trusts can be bought in 1 yen steps. Existing accounts keep the unit they have, and it can still be changed per account.
 - The app identifier is now `y.marui.Robo-Advisor`, in the same form as the Swift apps (`y.marui.<App-Name>`). The data folder (and the default browser profile inside it) moves to `~/Library/Application Support/y.marui.Robo-Advisor` on macOS; a portfolio file or browser profile in the old `dev.marui.robo-advisor` folder is not read any more and has to be moved by hand. The keychain service name for the bitFlyer key is unchanged, so a saved key keeps working.
 
+### Fixed
+
+- The preset list was empty in the Japanese interface: the labels and descriptions of the Monex, Rakuten, and Daiwa Connect presets had no translation, and a missing translation broke the whole list. They are translated, a missing translation now shows the English text, and a test checks every preset text.
+
 ### Added
 
 - Monex Securities investment trusts preset (#60): follows 保有残高 from the top page after logging in and reads the holdings table (evaluation, with the units held recorded next to it). The table title may now run over the following cells of the first row, so tables that all start with the same heading cell can be told apart.
