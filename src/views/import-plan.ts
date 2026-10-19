@@ -90,6 +90,13 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
     // select would move it out of the first.
     const optionsFor = (): HTMLOptionElement[] =>
       candidates.map((p) => h("option", { value: String(p.id) }, currency === "" ? `${p.name} (${p.currency})` : p.name));
+    // A name that has no product yet can become one here: the name, a category, and a currency
+    // (the one the table was imported in, or another), then it is linked in the same step.
+    const categories = view.portfolio.categories;
+    const currencies = new Set<string>(["JPY", "USD"]);
+    view.portfolio.products.forEach((p) => currencies.add(p.currency));
+    const defaultCurrency = currency === "" ? "JPY" : currency;
+    currencies.add(defaultCurrency);
     parts.push(
       h("p", { class: "note" }, t("Link each name to a product. The choice is remembered.")),
       ...plan.unmatched.map((row) => {
@@ -104,16 +111,54 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
             name: row.name,
           });
         });
+        const productName = h("input", { type: "text", autocomplete: "off", value: row.name, "aria-label": t("Name of the new product") });
+        const categorySelect = h(
+          "select",
+          { "aria-label": t("Category of the new product") },
+          ...categories.map((c) => h("option", { value: String(c.id) }, c.name)),
+        );
+        // Any currency code can be typed (the list offers the usual ones); Rust checks the code.
+        const currencyList = h("datalist", {}, ...[...currencies].sort().map((c) => h("option", { value: c })));
+        const listId = `currencies-${Math.random().toString(36).slice(2)}`;
+        currencyList.id = listId;
+        const currencySelect = h("input", {
+          type: "text",
+          autocomplete: "off",
+          class: "currency",
+          list: listId,
+          value: defaultCurrency,
+          "aria-label": t("Currency of the new product"),
+        });
+        const create = h("button", { type: "button" }, t("Create a product and link"));
+        create.disabled = categories.length === 0;
+        create.addEventListener("click", () => {
+          void ctx.apply({
+            type: "add_product_with_alias",
+            name: productName.value.trim(),
+            category: Number(categorySelect.value),
+            currency: currencySelect.value.trim().toUpperCase(),
+            source: source,
+            alias: row.name,
+          });
+        });
         return h(
           "div",
-          { class: "add-row" },
-          h("span", {}, `${row.name} (${yen(row.value)}${currency === "" ? "" : ` ${currency}`})`),
-          select,
-          link,
+          { class: "unmatched" },
+          h(
+            "div",
+            { class: "add-row" },
+            h("span", {}, `${row.name} (${yen(row.value)}${currency === "" ? "" : ` ${currency}`})`),
+            select,
+            link,
+          ),
+          h("div", { class: "add-row" }, productName, categorySelect, currencySelect, currencyList, create),
         );
       }),
       candidates.length === 0
         ? h("p", { class: "note" }, currency === "" ? t("Add a product first.") : t("Add a {currency} product first.", { currency }))
+        : null,
+      categories.length === 0
+        ? h("p", { class: "note" }, t("To make a product from a name, add a category first (in the Categories card)."))
         : null,
     );
   }

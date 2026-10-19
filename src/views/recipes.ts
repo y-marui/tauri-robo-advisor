@@ -30,6 +30,8 @@ export function recipesPanel(ctx: Context): Panel {
   const presetAccount = h("select", { "aria-label": t("Account to update") });
   const presetAdd = h("button", { type: "button" }, t("Add the preset"));
   const presetNote = h("p", { class: "note" });
+  const noAccountNote = h("p", { class: "note error" }, t("Add an account first (in the Accounts card), then add the preset."));
+  noAccountNote.hidden = true;
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
   const showPresetNote = (): void => {
@@ -347,6 +349,7 @@ export function recipesPanel(ctx: Context): Panel {
     ),
     list,
     h("div", { class: "add-row" }, presetSelect, presetAccount, presetAdd),
+    noAccountNote,
     presetNote,
     h("div", { class: "add-row" }, loginButton, pageSelect, refreshButton, runButton),
     message,
@@ -362,6 +365,10 @@ export function recipesPanel(ctx: Context): Panel {
     render(view) {
       current = view;
       renderList(view);
+      // Without an account there is nothing to add a preset for: say so instead of leaving the
+      // account choice empty.
+      noAccountNote.hidden = view.portfolio.accounts.length > 0;
+      presetAdd.disabled = view.portfolio.accounts.length === 0;
       const accountsSignature = view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join("|");
       if (accountsSignature !== presetAccountsSignature) {
         presetAccountsSignature = accountsSignature;

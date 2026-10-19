@@ -1395,3 +1395,51 @@ fn every_login_page_is_a_plain_https_address_of_its_own_site() {
     }
     assert_eq!(login_url_for("unknown.example"), None);
 }
+
+#[test]
+fn a_name_becomes_a_product_with_its_alias_in_one_step_or_not_at_all() {
+    let (mut p, cat, _, _) = sample();
+    let revision = p.revision;
+
+    apply(
+        &mut p,
+        Edit::AddProductWithAlias {
+            name: " New Fund ".to_owned(),
+            category: cat,
+            currency: "USD".to_owned(),
+            source: "SBI".to_owned(),
+            alias: "7777 New Fund Co".to_owned(),
+        },
+    );
+
+    let product = p.products.last().unwrap();
+    assert_eq!(
+        (product.name.as_str(), product.currency.as_str()),
+        ("New Fund", "USD")
+    );
+    assert_eq!(product.aliases.len(), 1);
+    assert_eq!(p.revision, revision + 1, "one accepted edit");
+    p.validate_integrity().unwrap();
+
+    // A product name that is taken, an unknown category, or an alias that another product has:
+    // refused, and nothing is left behind (no half-made product).
+    let before = p.clone();
+    for (name, category, alias) in [
+        ("New Fund", cat, "other name"),
+        ("Another", CategoryId(9999), "another name"),
+        ("Third", cat, "7777 New Fund Co"),
+    ] {
+        assert!(
+            p.apply(Edit::AddProductWithAlias {
+                name: name.to_owned(),
+                category,
+                currency: "JPY".to_owned(),
+                source: "SBI".to_owned(),
+                alias: alias.to_owned(),
+            })
+            .is_err(),
+            "{name}"
+        );
+    }
+    assert_eq!(p, before);
+}

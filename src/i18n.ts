@@ -311,6 +311,16 @@ export const MESSAGES = {
   "No recipe says which site it reads, so there is no login page to open.": {
     ja: "どのサイトを読むかが決まったレシピがないので、開くログインのページがありません。",
   },
+  "Name of the new product": { ja: "新しい商品の名前" },
+  "Category of the new product": { ja: "新しい商品のカテゴリ" },
+  "Currency of the new product": { ja: "新しい商品の通貨" },
+  "Create a product and link": { ja: "商品を作って結びつける" },
+  "To make a product from a name, add a category first (in the Categories card).": {
+    ja: "名前から商品を作るには、先に「カテゴリ」のカードでカテゴリを追加してください。",
+  },
+  "Add an account first (in the Accounts card), then add the preset.": {
+    ja: "先に「口座」のカードで口座を追加してから、組み込みのレシピを追加してください。",
+  },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },
