@@ -26,7 +26,8 @@ const MAX_CELL_CHARS: usize = 1_000;
 /// tables in its cells, none of which holds a table of its own (a layout that puts a small table
 /// in a cell for an amount). A table that holds deeper nesting is page layout and is left out.
 /// The tables inside an outer table are still in the first group; which group is used is decided
-/// by the table title (see the caller). Both groups together are cut at `MAX_TABLES`.
+/// by the table title (see the caller). Both groups together are cut at `MAX_TABLES`; up to 20 of
+/// those are kept for the outer tables, so many leaf tables cannot crowd them out.
 pub(crate) const READ_TABLES: &str = r#"(() => {
   // Line breaks and no-break spaces inside a cell are kept: they separate its values.
   const clean = (t) => String(t ?? '').split('\n').map((l) => l.replace(/[ \t\r\f\v\u2000-\u200a\u3000]+/g, ' ').trim()).filter((l) => l !== '').join('\n').slice(0, 1000);
@@ -53,8 +54,12 @@ pub(crate) const READ_TABLES: &str = r#"(() => {
     const inner = [...table.querySelectorAll('table')];
     return inner.length > 0 && inner.every((t) => !t.querySelector('table'));
   });
-  const first = leaf.slice(0, 200);
-  return { leaf: first.map(read), outer: outer.slice(0, 200 - first.length).map(read) };
+  // The outer tables are few, so they are taken first and the leaf tables get what is left of the
+  // limit: a page with very many leaf tables (one small table per amount) must not leave no room
+  // for the outer table that holds them.
+  const outerRead = outer.slice(0, 20);
+  const first = leaf.slice(0, 200 - outerRead.length);
+  return { leaf: first.map(read), outer: outerRead.map(read) };
 })()"#;
 
 /// The tables of a page, in two groups (see `READ_TABLES`). Together they hold at most
