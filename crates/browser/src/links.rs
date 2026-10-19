@@ -564,9 +564,9 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
         const url = new URL(raw, location.href);
         const web = url.protocol === 'https:' || url.protocol === 'http:';
         const auth = authority(raw);
-        // A back slash can stand for a slash in an address (the URL API reads it so), which hides
-        // the authority from the pattern: such an address is never trusted.
-        const userInfo = raw.includes('\\') || url.username !== '' || url.password !== '' || (auth !== null && auth.includes('@'));
+        // A back slash can stand for a slash in an address, and tabs and line breaks are dropped by
+        // the URL API; both hide the authority from the pattern: such an address is never trusted.
+        const userInfo = raw.includes('\\') || /[\u0000-\u001f]/.test(raw.trim()) || url.username !== '' || url.password !== '' || (auth !== null && auth.includes('@'));
         const explicitPort = url.port !== '' || (auth !== null && /:\d*$/.test(auth));
         sameSite = web && !userInfo && url.origin === location.origin;
         target = web && !userInfo && (url.origin === location.origin || !explicitPort) ? url.origin : '';
@@ -600,7 +600,7 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin, target) 
   const raw = a.getAttribute('href') ?? '';
   try { url = new URL(raw, location.href); } catch (e) { return 'gone'; }
   const auth = authority(raw);
-  if (raw.includes('\\') || url.username !== '' || url.password !== '') return 'gone';
+  if (raw.includes('\\') || /[\u0000-\u001f]/.test(raw.trim()) || url.username !== '' || url.password !== '') return 'gone';
   if (auth !== null && (auth.includes('@') || (url.origin !== location.origin && (url.port !== '' || /:\d*$/.test(auth))))) return 'gone';
   // The site the link goes to must be exactly the one the Rust side accepted.
   if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !target || url.origin !== target) return 'gone';
