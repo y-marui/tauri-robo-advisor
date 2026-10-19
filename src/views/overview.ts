@@ -4,9 +4,9 @@ import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import type { Overview, PortfolioView } from "../types.ts";
 import { groupEntries, groupName } from "./groups.ts";
-import { categoryName, suggestionBox, yen } from "./suggestion.ts";
+import { categoryName, yen } from "./suggestion.ts";
 
-// The balance charts and the overall suggestion. Every figure comes from Rust.
+// The balance charts. Every figure comes from Rust.
 // Numbers are converted with `Number` only to place shapes on the screen; the
 // text shown to the user is always the exact decimal string from Rust.
 
@@ -182,58 +182,15 @@ function legend(view: PortfolioView, overview: Overview): HTMLElement {
   );
 }
 
-export function overviewPanel(ctx: Context): Panel {
+export function overviewPanel(_ctx: Context): Panel {
   const charts = h("div", { class: "charts" });
 
-  let current: PortfolioView | null = null;
-  const box = suggestionBox({
-    modes: ["fixed_add", "buy_only_to_target", "full_rebalance", "fixed_sell"],
-    account: () => current?.portfolio.settings.target_account ?? null,
-    noAccountMessage: () => t("Choose the rebalancing account first."),
-  });
+  const el = h("section", { class: "card overview" }, h("h2", {}, t("Overall balance")), charts);
 
-  const targetSelect = h("select", { "aria-label": t("Rebalancing account") });
-  // The suggestion must use the saved account, so it waits while the choice is
-  // being saved.
-  targetSelect.addEventListener("change", () => {
-    box.setBusy(true);
-    void ctx
-      .apply({
-        type: "set_target_account",
-        account: targetSelect.value === "" ? null : Number(targetSelect.value),
-      })
-      .finally(() => box.setBusy(false));
-  });
-
-  const el = h(
-    "section",
-    { class: "card overview" },
-    h("h2", {}, t("Overall balance")),
-    charts,
-    h("h2", {}, t("Suggestion")),
-    h("label", { class: "field" }, h("span", {}, t("Rebalancing account")), targetSelect),
-    box.el,
-  );
-
-  let accountSignature: string | null = null;
   return {
     el,
-    render(view) {
-      current = view;
-      box.update(view);
-
-      const signature = view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(",");
-      if (signature !== accountSignature) {
-        accountSignature = signature;
-        targetSelect.replaceChildren(
-          h("option", { value: "" }, t("None")),
-          ...view.portfolio.accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
-        );
-      }
-      const target = String(view.portfolio.settings.target_account ?? "");
-      if (document.activeElement !== targetSelect) {
-        targetSelect.value = target;
-      }
+    render() {
+      // Nothing to show until the valuation arrives.
     },
     showOverview(view, overview) {
       if (overview.categories.length === 0 || Number(overview.total) === 0) {

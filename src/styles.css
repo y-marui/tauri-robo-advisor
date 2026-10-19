@@ -534,6 +534,27 @@ td.clip {
   min-width: 0;
 }
 
+/* The wide area: the holdings table, the suggestions and the accounts, one at a time. */
+.holdings-main {
+  min-width: 0;
+}
+
+.subpane[hidden] {
+  display: none;
+}
+
+/* The suggestion tables have the whole wide area; a long product name wraps in its cell
+   instead of pushing the amount columns out. */
+.suggestions .suggestion,
+.account-tabs .suggestion {
+  max-width: 60rem;
+}
+
+.suggestion th[scope="row"] {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 /* Stacked panels are wide; the charts keep a readable size instead of scaling with them. */
 .overview .chart:not(.pie) {
   max-width: 26rem;
@@ -544,6 +565,7 @@ td.clip {
 }
 
 .overview select,
+.suggestions select,
 .account-tabs select {
   max-width: 100%;
   box-sizing: border-box;
