@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 /// than guessed at, so an older app never rewrites data it does not understand.
 /// Version 2 added the saved import mappings, the revision, and the fetch recipes.
 /// Version 3 added the price (and its unit) of a holding and the recorded quantity column
-/// of a mapping. Everything new has a default, so an older file loads and is saved as the
-/// current version, and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 3;
+/// of a mapping. Version 4 added the table-merging flag and the allowed sites of a recipe.
+/// Everything new has a default, so an older file loads and is saved as the current version,
+/// and an older app refuses a newer file instead of dropping its fields.
+pub const SCHEMA_VERSION: u32 = 4;
 
 macro_rules! id_type {
     ($name:ident) => {
