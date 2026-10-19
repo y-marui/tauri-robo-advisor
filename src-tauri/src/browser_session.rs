@@ -176,6 +176,7 @@ impl BrowserSession {
         links: &[FetchLink],
         title: &str,
         merge: Option<usize>,
+        allowed_sites: &[String],
     ) -> Result<RecipeRead, String> {
         let mut cdp = self.connect()?;
         let page = cdp
@@ -200,9 +201,12 @@ impl BrowserSession {
                 _ => *pinned = Some((page_id.to_owned(), start.clone())),
             }
         }
+        // Only the allowed sites that contain the host this recipe starts on count; a recipe can
+        // reach the other hosts of its own site, never another company's.
+        let sites = browser::sites_covering(&browser::origin_of(&start), allowed_sites);
         let mut references = Vec::with_capacity(links.len());
         for (index, link) in links.iter().enumerate() {
-            match cdp.follow_link(&session, &link.text, link.reference.as_deref()) {
+            match cdp.follow_link(&session, &link.text, link.reference.as_deref(), &sites) {
                 Ok(followed) => references.push(followed.reference),
                 Err(browser::Error::LinkAmbiguous(choices)) => {
                     // Back to the page the recipe started from, so it can be run again.

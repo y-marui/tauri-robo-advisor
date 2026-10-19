@@ -132,6 +132,12 @@ export function tableImportPanel(ctx: Context): Panel {
     "aria-label": t("Text the table’s first cell starts with"),
     placeholder: t("Text the table’s first cell starts with"),
   });
+  const allowedSitesInput = h("input", {
+    type: "text",
+    autocomplete: "off",
+    "aria-label": t("Sites the recipe may follow links to (optional)"),
+    placeholder: t("Sites the recipe may follow links to (optional)"),
+  });
   const saveRecipe = h("button", { type: "button" }, t("Save recipe"));
   const recipeBox = h(
     "details",
@@ -140,6 +146,7 @@ export function tableImportPanel(ctx: Context): Panel {
     h("div", { class: "fields" },
       h("label", { class: "field" }, h("span", {}, t("Recipe name")), recipeName),
       h("label", { class: "field" }, h("span", {}, t("Text the table’s first cell starts with")), tableTitleInput),
+      h("label", { class: "field" }, h("span", {}, t("Sites the recipe may follow links to (optional)")), allowedSitesInput),
     ),
     recipeLinks,
     h("div", { class: "add-row" }, saveRecipe),
@@ -457,6 +464,8 @@ export function tableImportPanel(ctx: Context): Panel {
         recipe: {
           name: recipeName.value.trim(),
           links,
+          // Only the sites the app knows (for example sbisec.co.jp); Rust refuses any other.
+          allowed_sites: allowedSitesInput.value.split(/[\s,]+/).filter((site) => site !== ""),
           table_starts_with: title,
           currency: currencySelect.value,
           account,

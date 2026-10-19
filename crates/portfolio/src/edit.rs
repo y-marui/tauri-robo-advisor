@@ -226,6 +226,36 @@ impl ImportMapping {
     }
 }
 
+/// The sites a recipe may be allowed to cross to. Each is a registered domain of one company
+/// (never a domain that many unrelated owners share, such as a blog or hosting service), added
+/// here after the company and its pages were checked. A list of what to refuse could never be
+/// complete, so only these are accepted; adding a site is a change to this list and its review.
+pub const VETTED_SITES: &[&str] = &["sbisec.co.jp", "monex.co.jp"];
+const MAX_ALLOWED_SITES: usize = 3;
+
+/// Checks the allowed sites of a recipe: each must be one of the vetted sites (trimmed and
+/// lower-cased); duplicates go.
+fn allowed_sites(sites: &[String]) -> Result<Vec<String>, Error> {
+    if sites.len() > MAX_ALLOWED_SITES {
+        return Err(Error::Invalid(
+            "a recipe has too many allowed sites".to_owned(),
+        ));
+    }
+    let mut out: Vec<String> = Vec::new();
+    for site in sites {
+        let site = site.trim().to_lowercase();
+        if !VETTED_SITES.contains(&site.as_str()) {
+            return Err(Error::Invalid(
+                "that site is not one the app may follow links to".to_owned(),
+            ));
+        }
+        if !out.contains(&site) {
+            out.push(site);
+        }
+    }
+    Ok(out)
+}
+
 impl Recipe {
     /// Checks a recipe and trims its names.
     pub(crate) fn validated(self, portfolio: &Portfolio) -> Result<Self, Error> {
@@ -265,10 +295,12 @@ impl Recipe {
             ));
         }
         portfolio.account(self.account)?;
+        let allowed_sites = allowed_sites(&self.allowed_sites)?;
         Ok(Self {
             name: recipe_name,
             links,
             table_starts_with,
+            allowed_sites,
             // Empty: the currency of each product the rows are linked to.
             currency: if self.currency.trim().is_empty() {
                 String::new()

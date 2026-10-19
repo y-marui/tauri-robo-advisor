@@ -228,6 +228,7 @@ impl Cdp {
         session: &str,
         text: &str,
         reference: Option<&str>,
+        sites: &[String],
     ) -> Result<Followed, Error> {
         links::link_text_allowed(text)?;
         let wanted = serde_json::to_string(text.trim()).map_err(|_| Error::Script)?;
@@ -236,7 +237,7 @@ impl Cdp {
         if candidates.is_empty() {
             return Err(Error::LinkNotFound);
         }
-        let allowed: Vec<_> = candidates.iter().filter(|c| c.allowed()).collect();
+        let allowed: Vec<_> = candidates.iter().filter(|c| c.allowed(sites)).collect();
         if allowed.is_empty() {
             return Err(Error::LinkRefused);
         }
@@ -276,10 +277,11 @@ impl Cdp {
             .to_owned();
         let expected = serde_json::to_string(&chosen.href).map_err(|_| Error::Script)?;
         let origin = serde_json::to_string(&chosen.origin).map_err(|_| Error::Script)?;
+        let target = serde_json::to_string(&chosen.target_origin).map_err(|_| Error::Script)?;
         let navigated = self.evaluate(
             session,
             &format!(
-                "({NAVIGATE})({wanted}, {}, {expected}, {origin})",
+                "({NAVIGATE})({wanted}, {}, {expected}, {origin}, {target})",
                 chosen.index
             ),
         )?;
@@ -290,10 +292,10 @@ impl Cdp {
             reference: chosen.reference(),
         };
         self.wait_navigated(session, mark, &before)?;
-        // The page that was reached must be on the site the link was found on: a redirect
-        // (or a script) may have taken the tab elsewhere.
+        // The page that was reached must be on the site the link went to: a redirect (or a
+        // script) may have taken the tab elsewhere.
         let site = self.evaluate(session, "location.origin")?;
-        if site.as_str() != Some(chosen.origin.as_str()) {
+        if site.as_str() != Some(chosen.target_origin.as_str()) {
             return Err(Error::WrongPage);
         }
         // The address that was really reached (a redirect may have changed it) is judged by

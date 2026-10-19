@@ -856,6 +856,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         account,
         mapping: mapping_for(" SBI "),
         all_tables: false,
+        allowed_sites: Vec::new(),
     }
 }
 
@@ -1313,4 +1314,58 @@ fn a_preset_is_never_added_twice_for_one_account() {
     add(&mut p, b);
     assert_eq!(p.recipes.len(), 1);
     assert_eq!(p.recipes[0].account, b);
+}
+
+#[test]
+fn allowed_sites_of_a_recipe_must_be_vetted_sites() {
+    let (mut p, _, _, acc) = sample();
+    let with = |sites: &[&str]| {
+        let mut recipe = recipe_for(acc);
+        recipe.allowed_sites = sites.iter().map(|s| (*s).to_owned()).collect();
+        recipe
+    };
+
+    // A vetted site is kept (trimmed, lower-cased, no duplicates).
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: with(&[" SBISEC.co.jp ", "sbisec.co.jp", "monex.co.jp"]),
+        },
+    );
+    assert_eq!(
+        p.recipes[0].allowed_sites,
+        vec!["sbisec.co.jp", "monex.co.jp"]
+    );
+
+    // Anything else is refused, whatever it looks like: another company, a shared domain, a
+    // look-alike, a parent, or a value with a scheme or a path. Nothing changes.
+    let before = p.clone();
+    for bad in [
+        "example.com",
+        "blogspot.com",
+        "github.io",
+        "co.jp",
+        "evil-sbisec.co.jp",
+        "sbisec.co.jp.evil.test",
+        "www.sbisec.co.jp",
+        "https://sbisec.co.jp",
+        "sbisec.co.jp/path",
+        "",
+    ] {
+        assert!(
+            p.apply(Edit::SetRecipe {
+                recipe: with(&[bad])
+            })
+            .is_err(),
+            "{bad}"
+        );
+    }
+    assert!(
+        p.apply(Edit::SetRecipe {
+            recipe: with(&["sbisec.co.jp", "monex.co.jp", "sbisec.co.jp", "monex.co.jp"]),
+        })
+        .is_err(),
+        "too many entries"
+    );
+    assert_eq!(p, before);
 }

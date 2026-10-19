@@ -87,6 +87,8 @@ export interface Recipe {
   table_starts_with: string;
   /** Read every table that starts with the title and put their rows together. */
   all_tables?: boolean;
+  /** Sites whose other hosts the recipe may follow links to (only those containing the host it starts on count). */
+  allowed_sites?: string[];
   currency: string;
   account: number;
   mapping: ImportMapping;

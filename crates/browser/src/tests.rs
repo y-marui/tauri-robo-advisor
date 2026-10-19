@@ -292,7 +292,7 @@ fn probe(marker: bool, ready: &str) -> Value {
 }
 
 fn found(href: &str, same_site: bool, scripted: bool) -> Value {
-    json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted, "origin": "https://h.example"}])
+    json!([{"index": 4, "href": href, "same_site": same_site, "scripted": scripted, "origin": "https://h.example", "target_origin": "https://h.example"}])
 }
 
 #[test]
@@ -313,7 +313,7 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
     );
     let (mut cdp, session) = attached(&endpoint);
 
-    let followed = cdp.follow_link(&session, "口座(円建)", None).unwrap();
+    let followed = cdp.follow_link(&session, "口座(円建)", None, &[]).unwrap();
     assert_eq!(followed.reference, crate::fingerprint("/account/list"));
 
     let scripts = log.lock().unwrap().clone();
@@ -332,7 +332,8 @@ fn a_plain_link_is_found_clicked_and_waited_for() {
         "the old document is marked first"
     );
     assert!(
-        scripts[2].contains(", 4, \"/account/list\", \"https://h.example\")"),
+        scripts[2]
+            .contains(", 4, \"/account/list\", \"https://h.example\", \"https://h.example\")"),
         "the position, the accepted address and the site come from the search"
     );
 }
@@ -343,7 +344,7 @@ fn a_link_text_is_passed_as_data_not_as_code() {
     let endpoint = fake_browser_logged(vec![json!([])], false, Some(log.clone()));
     let (mut cdp, session) = attached(&endpoint);
 
-    let result = cdp.follow_link(&session, "x\"); alert(1); (\"", None);
+    let result = cdp.follow_link(&session, "x\"); alert(1); (\"", None, &[]);
 
     assert_eq!(result, Err(Error::LinkNotFound));
     let scripts = log.lock().unwrap().clone();
@@ -361,11 +362,11 @@ fn risky_links_are_refused_before_the_page_is_asked() {
     let (mut cdp, session) = attached(&endpoint);
 
     assert_eq!(
-        cdp.follow_link(&session, "買い注文", None),
+        cdp.follow_link(&session, "買い注文", None, &[]),
         Err(Error::LinkRefused)
     );
     assert_eq!(
-        cdp.follow_link(&session, "ログアウト", None),
+        cdp.follow_link(&session, "ログアウト", None, &[]),
         Err(Error::LinkRefused)
     );
     assert!(log.lock().unwrap().is_empty());
@@ -382,7 +383,7 @@ fn a_link_to_another_site_or_to_an_action_is_refused_and_nothing_is_clicked() {
         let (mut cdp, session) = attached(&endpoint);
 
         assert_eq!(
-            cdp.follow_link(&session, "保有銘柄", None),
+            cdp.follow_link(&session, "保有銘柄", None, &[]),
             Err(Error::LinkRefused)
         );
         assert_eq!(log.lock().unwrap().len(), 1, "only the search ran");
@@ -394,7 +395,7 @@ fn a_missing_link_and_a_link_that_is_gone_are_reported() {
     let endpoint = fake_browser(json!([]));
     let (mut cdp, session) = attached(&endpoint);
     assert_eq!(
-        cdp.follow_link(&session, "保有銘柄", None),
+        cdp.follow_link(&session, "保有銘柄", None, &[]),
         Err(Error::LinkNotFound)
     );
 
@@ -408,15 +409,15 @@ fn a_missing_link_and_a_link_that_is_gone_are_reported() {
     );
     let (mut cdp, session) = attached(&endpoint);
     assert_eq!(
-        cdp.follow_link(&session, "保有銘柄", None),
+        cdp.follow_link(&session, "保有銘柄", None, &[]),
         Err(Error::LinkNotFound)
     );
 }
 
 fn two_links(a: &str, b: &str) -> Value {
     json!([
-        {"index": 1, "href": a, "same_site": true, "scripted": false, "origin": "https://h.example"},
-        {"index": 7, "href": b, "same_site": true, "scripted": false, "origin": "https://h.example"},
+        {"index": 1, "href": a, "same_site": true, "scripted": false, "origin": "https://h.example", "target_origin": "https://h.example"},
+        {"index": 7, "href": b, "same_site": true, "scripted": false, "origin": "https://h.example", "target_origin": "https://h.example"},
     ])
 }
 
@@ -440,7 +441,9 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
     );
     let (mut cdp, session) = attached(&endpoint);
 
-    let followed = cdp.follow_link(&session, "ポートフォリオ", None).unwrap();
+    let followed = cdp
+        .follow_link(&session, "ポートフォリオ", None, &[])
+        .unwrap();
 
     assert_eq!(
         followed.reference,
@@ -448,7 +451,7 @@ fn links_with_the_same_text_and_the_same_destination_count_as_one() {
     );
     assert!(
         log.lock().unwrap()[2]
-            .contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\", \"https://h.example\")"),
+            .contains(", 1, \"/ETGate/?_ControlID=A&_SeqNo=1111111111\", \"https://h.example\", \"https://h.example\")"),
         "the first one is followed"
     );
 }
@@ -463,7 +466,7 @@ fn links_with_the_same_text_and_different_destinations_are_not_guessed() {
     );
     let (mut cdp, session) = attached(&endpoint);
 
-    let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
+    let error = cdp.follow_link(&session, "一覧", None, &[]).unwrap_err();
 
     assert_eq!(
         error,
@@ -497,10 +500,11 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
         Some(log.clone()),
     );
     let (mut cdp, session) = attached(&endpoint);
-    cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/b/list")))
+    cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/b/list")), &[])
         .unwrap();
     assert!(
-        log.lock().unwrap()[2].contains(", 7, \"/b/list\", \"https://h.example\")"),
+        log.lock().unwrap()[2]
+            .contains(", 7, \"/b/list\", \"https://h.example\", \"https://h.example\")"),
         "the second link was followed"
     );
 
@@ -512,7 +516,7 @@ fn a_saved_reference_picks_the_right_link_and_a_changed_page_stops() {
     );
     let (mut cdp, session) = attached(&endpoint);
     assert_eq!(
-        cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/c/list"))),
+        cdp.follow_link(&session, "一覧", Some(&crate::fingerprint("/c/list")), &[]),
         Err(Error::LinkChanged)
     );
     assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
@@ -525,7 +529,7 @@ fn a_link_the_page_handles_itself_is_never_followed() {
     let (mut cdp, session) = attached(&endpoint);
 
     assert_eq!(
-        cdp.follow_link(&session, "保有銘柄", None),
+        cdp.follow_link(&session, "保有銘柄", None, &[]),
         Err(Error::LinkRefused)
     );
     assert_eq!(log.lock().unwrap().len(), 1, "nothing was clicked");
@@ -539,7 +543,7 @@ fn an_address_that_was_too_long_to_check_is_refused() {
     let (mut cdp, session) = attached(&endpoint);
 
     assert_eq!(
-        cdp.follow_link(&session, "保有銘柄", None),
+        cdp.follow_link(&session, "保有銘柄", None, &[]),
         Err(Error::LinkRefused)
     );
 }
@@ -552,7 +556,7 @@ fn links_that_differ_only_in_an_account_number_are_different_destinations() {
     ));
     let (mut cdp, session) = attached(&endpoint);
 
-    let error = cdp.follow_link(&session, "一覧", None).unwrap_err();
+    let error = cdp.follow_link(&session, "一覧", None, &[]).unwrap_err();
 
     assert!(matches!(error, Error::LinkAmbiguous(choices) if choices.len() == 2));
 }
@@ -577,7 +581,7 @@ fn the_old_document_saying_complete_is_not_taken_for_the_new_page() {
     let (mut cdp, session) = attached(&endpoint);
     let started = std::time::Instant::now();
 
-    cdp.follow_link(&session, "保有銘柄", None).unwrap();
+    cdp.follow_link(&session, "保有銘柄", None, &[]).unwrap();
 
     assert!(
         started.elapsed() >= std::time::Duration::from_millis(900),
@@ -600,7 +604,7 @@ fn a_page_that_only_changes_its_address_is_also_recognized() {
     );
     let (mut cdp, session) = attached(&endpoint);
 
-    assert!(cdp.follow_link(&session, "保有銘柄", None).is_ok());
+    assert!(cdp.follow_link(&session, "保有銘柄", None, &[]).is_ok());
 }
 
 #[test]
@@ -620,7 +624,7 @@ fn a_page_on_another_site_after_the_move_is_not_accepted() {
     let (mut cdp, session) = attached(&endpoint);
 
     assert_eq!(
-        cdp.follow_link(&session, "保有銘柄", None),
+        cdp.follow_link(&session, "保有銘柄", None, &[]),
         Err(Error::WrongPage)
     );
 }
@@ -662,7 +666,54 @@ fn a_redirect_to_a_refused_address_on_the_same_site_is_not_accepted() {
     let (mut cdp, session) = attached(&endpoint);
 
     assert_eq!(
-        cdp.follow_link(&session, "保有銘柄", None),
+        cdp.follow_link(&session, "保有銘柄", None, &[]),
+        Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn a_link_to_another_host_of_an_allowed_site_is_followed_and_checked_on_arrival() {
+    let to_www = |site: &str| {
+        let mut page = found("/ETGate/", true, false);
+        page[0]["same_site"] = json!(false);
+        page[0]["target_origin"] = json!("https://www.example.co.jp");
+        fake_browser_logged(
+            vec![
+                page,
+                json!("https://site3.example.co.jp/start"),
+                json!("navigated"),
+                probe(false, "complete"),
+                json!(true),
+                json!(site),
+                json!("/ETGate/"),
+            ],
+            false,
+            None,
+        )
+    };
+    let sites = vec!["example.co.jp".to_owned()];
+
+    // Arrived where the link went: accepted.
+    let endpoint = to_www("https://www.example.co.jp");
+    let (mut cdp, session) = attached(&endpoint);
+    assert!(
+        cdp.follow_link(&session, "口座(外貨建)", None, &sites)
+            .is_ok()
+    );
+
+    // Not allowed without the site: refused before anything is done.
+    let endpoint = to_www("https://www.example.co.jp");
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "口座(外貨建)", None, &[]),
+        Err(Error::LinkRefused)
+    );
+
+    // A redirect took the tab to another company: not accepted.
+    let endpoint = to_www("https://other.test");
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.follow_link(&session, "口座(外貨建)", None, &sites),
         Err(Error::WrongPage)
     );
 }

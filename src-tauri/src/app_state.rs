@@ -566,6 +566,7 @@ impl AppState {
             &recipe.links,
             &recipe.table_starts_with,
             recipe.all_tables.then_some(recipe.mapping.header_rows),
+            &recipe.allowed_sites,
         )?;
         let (table, references) = match read {
             RecipeRead::NeedsChoice { link, choices } => {
@@ -1288,6 +1289,7 @@ mod tests {
                     links: Vec::new(),
                     table_starts_with: "Stocks".to_owned(),
                     all_tables: false,
+                    allowed_sites: Vec::new(),
                     currency: "JPY".to_owned(),
                     account: main,
                     mapping: ImportMapping {
@@ -1353,6 +1355,7 @@ mod tests {
             links: Vec::new(),
             table_starts_with: "Stocks".to_owned(),
             all_tables: false,
+            allowed_sites: Vec::new(),
             currency: "JPY".to_owned(),
             account,
             mapping: ImportMapping {

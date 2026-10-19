@@ -18,6 +18,9 @@ pub struct Preset {
     pub description: &'static str,
     links: &'static [&'static str],
     table_starts_with: &'static str,
+    /// Sites whose other hosts the recipe may follow links to (the pages of one company are often
+    /// spread over several hosts).
+    allowed_sites: &'static [&'static str],
     price_unit: u64,
 }
 
@@ -36,6 +39,7 @@ const PRESETS: &[Preset] = &[
         description: "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the domestic stock tables of every account type (quantity x current price).",
         links: &["保有資産評価"],
         table_starts_with: "株式（現物/",
+        allowed_sites: &[],
         price_unit: 1,
     },
     Preset {
@@ -44,6 +48,7 @@ const PRESETS: &[Preset] = &[
         description: "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the investment trust tables of every account type (units x price per 10,000 units).",
         links: &["保有資産評価"],
         table_starts_with: "投資信託（金額/",
+        allowed_sites: &[],
         price_unit: 10_000,
     },
 ];
@@ -81,6 +86,7 @@ impl Preset {
                 .collect(),
             table_starts_with: self.table_starts_with.to_owned(),
             all_tables: true,
+            allowed_sites: self.allowed_sites.iter().map(|s| (*s).to_owned()).collect(),
             // The values are in the currency of the product they are linked to.
             currency: String::new(),
             account,

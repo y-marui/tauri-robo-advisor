@@ -243,7 +243,7 @@ fn aliases_and_settings_are_exported() {
         lines(&f["settings.csv"]),
         [
             "setting,value",
-            "schema_version,3",
+            "schema_version,4",
             "usd_jpy,150",
             "category_tolerance,0.01",
             "product_tolerance,0",
