@@ -167,6 +167,11 @@ export function applyFetchAll(): Promise<PortfolioView> {
   return invoke<PortfolioView>("apply_fetch_all");
 }
 
+/** Forgets the earlier result of one recipe (a retry that could not even start). */
+export function discardFetchRun(name: string): Promise<void> {
+  return invoke<void>("discard_fetch_run", { name });
+}
+
 export function clearFetchRuns(): Promise<void> {
   return invoke<void>("clear_fetch_runs");
 }

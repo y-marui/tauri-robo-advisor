@@ -698,6 +698,18 @@ impl AppState {
         Ok((views, self.runs_generation.load(Ordering::SeqCst)))
     }
 
+    /// Forgets the earlier result of one recipe (a retry that could not start must not leave it
+    /// to be applied together with the fresh ones).
+    pub fn discard_run(&self, name: &str) -> Result<(), String> {
+        let mut runs = self.lock_runs()?;
+        let before = runs.len();
+        runs.retain(|r| r.name != name);
+        if runs.len() != before {
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
+        }
+        Ok(())
+    }
+
     pub fn clear_runs(&self) -> Result<(), String> {
         {
             let mut runs = self.lock_runs()?;
@@ -1539,6 +1551,26 @@ mod tests {
             .unwrap();
         assert!(state.set_link_reference(&current, 0, None).is_err());
         assert!(state.view().unwrap().portfolio.recipes.is_empty());
+    }
+
+    #[test]
+    fn discarding_one_recipe_keeps_the_runs_of_the_others() {
+        let (state, main, _, _, _) = recipe_state("discard");
+        save_recipe(&state, "Domestic", main);
+        save_recipe(&state, "Funds", main);
+        *state.runs.lock().unwrap() = vec![
+            stored("Domestic", main, &[("Stock A", 100)]),
+            stored("Funds", main, &[("Fund B", 50)]),
+        ];
+
+        state.discard_run("Domestic").unwrap();
+
+        let runs = state.runs.lock().unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].name, "Funds");
+        drop(runs);
+        // Discarding a recipe that has no run is not an error.
+        state.discard_run("Domestic").unwrap();
     }
 
     #[test]

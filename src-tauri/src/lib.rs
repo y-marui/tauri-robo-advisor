@@ -273,6 +273,14 @@ async fn apply_fetch_all(state: State<'_, Arc<AppState>>) -> Result<PortfolioVie
 }
 
 #[tauri::command]
+async fn discard_fetch_run(state: State<'_, Arc<AppState>>, name: String) -> Result<(), String> {
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.discard_run(&name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn clear_fetch_runs(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let state = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || state.clear_runs())
@@ -416,6 +424,7 @@ pub fn run() {
             set_link_reference,
             apply_fetch_all,
             clear_fetch_runs,
+            discard_fetch_run,
             list_browsers,
             open_browser,
             browser_pages,

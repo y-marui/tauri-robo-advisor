@@ -1,4 +1,4 @@
-import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
+import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -251,6 +251,8 @@ export function recipesPanel(ctx: Context): Panel {
         info(t("Fetching “{recipe}”…", { recipe: recipe.name }));
         const pages = pagesFor(recipe);
         if (pages.length === 0) {
+          // Its earlier result must not survive a retry that could not start.
+          await discardFetchRun(recipe.name).catch(() => undefined);
           attention.append(
             problem(
               recipe,
