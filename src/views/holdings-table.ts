@@ -38,7 +38,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
       [
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
         view.portfolio.categories.map((c) => `${c.id}:${c.name}`).join(","),
-        view.portfolio.products.map((p) => `${p.id}:${p.name}:${p.category}:${p.currency}`).join(","),
+        // A product's name is followed by its field (no rebuild); its category and currency move or relabel the row.
+        view.portfolio.products.map((p) => `${p.id}:${p.category}:${p.currency}`).join(","),
         view.portfolio.holdings.map((x) => `${x.account}:${x.product}`).join(","),
       ].join("|"),
     (view, bind) => {
