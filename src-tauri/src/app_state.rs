@@ -188,6 +188,7 @@ fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
         loose_numbers: mapping.loose_numbers,
         quantity: mapping.quantity_column,
         quantity_part: mapping.quantity_part,
+        max_records: mapping.max_records,
     }
 }
 
@@ -1014,6 +1015,7 @@ mod tests {
             loose_numbers: false,
             quantity: None,
             quantity_part: None,
+            max_records: None,
         };
         let result = state.plan_table_import("Test", "JPY", &mapping).unwrap();
 
@@ -1343,6 +1345,7 @@ mod tests {
                         loose_numbers: false,
                         quantity_column: None,
                         quantity_part: None,
+                        max_records: None,
                     },
                 },
             })
@@ -1411,6 +1414,7 @@ mod tests {
                 loose_numbers: false,
                 quantity_column: None,
                 quantity_part: None,
+                max_records: None,
             },
         }
     }
@@ -1856,5 +1860,48 @@ mod tests {
         }
         let error = state.open_login_pages().unwrap_err();
         assert!(error.contains("Open the browser first"), "{error}");
+    }
+
+    #[test]
+    fn the_daiwa_cash_preset_reads_only_the_yen_balance_of_a_page_like_the_real_one() {
+        // A made-up page with the layout of the real one: a table of label and amount pairs
+        // (the yen balance first, then valuations and the total) and a second table.
+        let pairs = |rows: &[(&str, &str)]| {
+            rows.iter()
+                .map(|(a, b)| vec![(*a).to_owned(), (*b).to_owned()])
+                .collect::<Vec<_>>()
+        };
+        let raw = vec![
+            pairs(&[
+                ("金銭残高", "123,456円"),
+                ("株式評価額", "9,999円"),
+                ("投資信託評価額", "0円"),
+                ("外国株式評価額", "0円"),
+                ("合計評価額", "133,455円"),
+            ]),
+            pairs(&[("買付可能額", "123,456円"), ("出金可能額", "100,000円")]),
+        ];
+        let (state, main, _, _, _) = recipe_state("daiwa-cash");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "daiwa-connect-cash".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        let recipe = state.view().unwrap().portfolio.recipes[0].clone();
+        assert!(recipe.links.is_empty() && !recipe.following_tables);
+
+        let table =
+            crate::browser_session::pick_table_for_test(raw, &recipe.table_starts_with, false);
+        let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
+
+        assert_eq!(result.skipped, vec![]);
+        assert_eq!(
+            result.rows.len(),
+            1,
+            "only the yen balance, not the valuations or the total"
+        );
+        assert_eq!(result.rows[0].name, "金銭残高");
+        assert_eq!(result.rows[0].value, rust_decimal::Decimal::from(123_456));
     }
 }

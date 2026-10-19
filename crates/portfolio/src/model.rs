@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 /// Version 2 added the saved import mappings, the revision, and the fetch recipes.
 /// Version 3 added the price (and its unit) of a holding and the recorded quantity column
 /// of a mapping. Version 4 added the table-merging flag and the allowed sites of a recipe. Version 5 added the
-/// following-tables flag and the start site of a recipe.
+/// following-tables flag and the start site of a recipe. Version 6 added the record limit of a
+/// mapping.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -186,6 +187,10 @@ pub struct ImportMapping {
     pub quantity_column: Option<usize>,
     #[serde(default)]
     pub quantity_part: Option<usize>,
+    /// Read at most this many records from the top (after the heading rows): for a table that
+    /// lists several figures of which only the first is wanted (a cash balance above the totals).
+    #[serde(default)]
+    pub max_records: Option<usize>,
 }
 
 /// One link to follow, by its visible text. `reference` says which of several

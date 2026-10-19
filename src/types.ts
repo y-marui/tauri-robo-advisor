@@ -71,6 +71,8 @@ export interface ImportMapping {
   /** A quantity column to record next to an evaluation column. */
   quantity_column?: number | null;
   quantity_part?: number | null;
+  /** Read at most this many records from the top. */
+  max_records?: number | null;
 }
 
 /** One link of a recipe, by its visible text. */

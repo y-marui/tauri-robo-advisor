@@ -24,6 +24,7 @@ struct Layout {
     value_row: usize,
     loose_numbers: bool,
     quantity_column: Option<usize>,
+    max_records: Option<usize>,
 }
 
 /// A recipe for a known page, waiting for an account.
@@ -71,6 +72,7 @@ const fn sbi_layout(price_unit: u64) -> Layout {
         value_row: 1,
         loose_numbers: false,
         quantity_column: None,
+        max_records: None,
     }
 }
 
@@ -126,6 +128,36 @@ const PRESETS: &[Preset] = &[
             value_row: 0,
             loose_numbers: true,
             quantity_column: Some(2),
+            max_records: None,
+        },
+    },
+    // Daiwa Connect Securities, the page 取引余力・預り資産 (opened by hand): a table of label and
+    // amount pairs, 金銭残高 (the yen balance) first and then the valuations of stocks, funds, and
+    // foreign stocks and the total, and a second table (buyable and withdrawable amounts). Only
+    // the first pair is read; its label is the name to link to a product (a yen product).
+    Preset {
+        id: "daiwa-connect-cash",
+        label: "Daiwa Connect Securities: cash (yen)",
+        description: "Open the page 取引余力・預り資産 of Daiwa Connect Securities after logging in, then fetch: the yen balance (金銭残高) is read.",
+        links: &[],
+        table_starts_with: "金銭残高",
+        allowed_sites: &[],
+        start_site: "connect-sec.co.jp",
+        following_tables: false,
+        login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
+        layout: Layout {
+            source: "Daiwa Connect",
+            name_column: 0,
+            value_column: 1,
+            price_column: None,
+            price_unit: 1,
+            header_rows: 0,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            loose_numbers: false,
+            quantity_column: None,
+            max_records: Some(1),
         },
     },
 ];
@@ -203,6 +235,7 @@ impl Preset {
                 loose_numbers: layout.loose_numbers,
                 quantity_column: layout.quantity_column,
                 quantity_part: None,
+                max_records: layout.max_records,
             },
         }
     }

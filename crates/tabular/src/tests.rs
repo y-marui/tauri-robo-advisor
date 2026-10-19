@@ -20,6 +20,7 @@ fn mapping(name: usize, value: usize, header_rows: usize) -> ColumnMapping {
         loose_numbers: false,
         quantity: None,
         quantity_part: None,
+        max_records: None,
     }
 }
 
@@ -567,4 +568,24 @@ fn quantity_and_price_are_kept_next_to_the_value() {
     // An unreadable quantity is left out, the row stays.
     assert_eq!(result.rows[1].value, dec!(5000));
     assert_eq!(result.rows[1].quantity, None);
+}
+
+#[test]
+fn only_the_first_records_are_read_when_a_limit_is_set() {
+    let table = cells(&[
+        &["Cash", "1,000円"],
+        &["Stocks", "2,000円"],
+        &["Total", "3,000円"],
+    ]);
+    let limited = ColumnMapping {
+        max_records: Some(1),
+        ..mapping(0, 1, 0)
+    };
+
+    let result = extract(&table, &limited);
+
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(result.rows[0].name, "Cash");
+    assert_eq!(result.rows[0].value, dec!(1000));
+    assert_eq!(extract(&table, &mapping(0, 1, 0)).rows.len(), 3);
 }
