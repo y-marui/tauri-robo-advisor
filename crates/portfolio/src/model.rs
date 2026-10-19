@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 /// Version 2 added the saved import mappings, the revision, and the fetch recipes.
 /// Version 3 added the price (and its unit) of a holding and the recorded quantity column
 /// of a mapping. Version 4 added the table-merging flag and the allowed sites of a recipe. Version 5 added the
-/// following-tables flag and the start site of a recipe.
+/// following-tables flag and the start site of a recipe. Version 7 dropped the funding of an
+/// account (cash or points), which nothing used (an older app needs the field, so it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 7;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -83,13 +84,6 @@ pub enum AccountKind {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Funding {
-    Cash,
-    Points,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Account {
     pub id: AccountId,
@@ -100,7 +94,6 @@ pub struct Account {
     /// Products that can be bought here; `None` means any product.
     #[serde(default)]
     pub tradable: Option<Vec<ProductId>>,
-    pub funding: Funding,
     /// Suggested amounts are rounded to a multiple of this value.
     pub rounding_unit: Decimal,
 }

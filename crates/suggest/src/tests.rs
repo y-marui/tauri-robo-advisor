@@ -61,7 +61,6 @@ fn account(p: &mut Portfolio, name: &str, kind: AccountKind) -> AccountId {
             name: None,
             kind: None,
             sellable: None,
-            funding: None,
             rounding_unit: Some(dec!(1000)),
         },
     );
@@ -98,7 +97,6 @@ fn fixture() -> Fixture {
             name: None,
             kind: None,
             sellable: Some(false),
-            funding: None,
             rounding_unit: None,
         },
     );
@@ -280,7 +278,6 @@ fn a_rounding_unit_of_one_hundred_gives_finer_lines() {
             name: None,
             kind: None,
             sellable: None,
-            funding: None,
             rounding_unit: Some(dec!(100)),
         },
     );
@@ -656,7 +653,6 @@ fn a_full_rebalance_reports_what_the_account_cannot_do() {
             name: None,
             kind: None,
             sellable: Some(false),
-            funding: None,
             rounding_unit: None,
         },
     );

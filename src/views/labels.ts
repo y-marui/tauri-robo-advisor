@@ -1,5 +1,5 @@
 import { t } from "../i18n.ts";
-import type { AccountKind, Funding, ProductTargeting } from "../types.ts";
+import type { AccountKind, ProductTargeting } from "../types.ts";
 
 export const TARGETINGS: ProductTargeting[] = ["free", "equal", "keep_current", "weighted"];
 export const KINDS: AccountKind[] = [
@@ -11,7 +11,6 @@ export const KINDS: AccountKind[] = [
   "deposit",
   "other",
 ];
-export const FUNDINGS: Funding[] = ["cash", "points"];
 
 export function targetingLabel(value: ProductTargeting): string {
   switch (value) {
@@ -43,8 +42,4 @@ export function kindLabel(value: AccountKind): string {
     case "other":
       return t("Other");
   }
-}
-
-export function fundingLabel(value: Funding): string {
-  return value === "cash" ? t("Cash") : t("Points");
 }

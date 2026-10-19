@@ -2,8 +2,8 @@ import { h } from "../dom.ts";
 import { amountField, checkboxField, deleteButton, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
-import type { AccountKind, Funding } from "../types.ts";
-import { FUNDINGS, fundingLabel, KINDS, kindLabel } from "./labels.ts";
+import type { AccountKind } from "../types.ts";
+import { KINDS, kindLabel } from "./labels.ts";
 
 export function accountsPanel(ctx: Context): Panel {
   return panel(
@@ -110,18 +110,6 @@ export function accountsPanel(ctx: Context): Panel {
           h(
             "td",
             {},
-            selectField({
-              ctx,
-              bind,
-              label: t("Funding"),
-              options: FUNDINGS.map((value) => ({ value, label: fundingLabel(value) })),
-              get: (v) => find(v)?.funding ?? "cash",
-              edit: (value) => ({ type: "update_account", id, funding: value as Funding }),
-            }),
-          ),
-          h(
-            "td",
-            {},
             amountField({
               ctx,
               bind,
@@ -176,7 +164,6 @@ export function accountsPanel(ctx: Context): Panel {
                 h("th", {}, t("Name")),
                 h("th", {}, t("Type")),
                 h("th", {}, t("Sellable")),
-                h("th", {}, t("Funding")),
                 h("th", {}, t("Rounding unit")),
                 h("th", {}, t("Can buy")),
                 h("th", {}),
