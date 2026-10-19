@@ -550,8 +550,9 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
   // `https://host/...`: the URL API quietly drops a user name, a default port, extra slashes,
   // back slashes, tabs and line breaks, so what is checked is the text as written.
   const plainHttps = (raw, url) => {
-    const text = String(raw).trim();
-    if (/[\u0000-\u001f\\]/.test(text) || url.username !== '' || url.password !== '' || url.port !== '') return false;
+    // As written: no white space or control character anywhere, not even around it.
+    const text = String(raw);
+    if (text !== text.trim() || /[\u0000-\u001f\\]/.test(text) || url.username !== '' || url.password !== '' || url.port !== '') return false;
     const start = 'https://' + url.hostname;
     if (text.slice(0, start.length).toLowerCase() !== start) return false;
     const next = text.charAt(start.length);
@@ -597,8 +598,9 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin, target) 
   // `https://host/...`: the URL API quietly drops a user name, a default port, extra slashes,
   // back slashes, tabs and line breaks, so what is checked is the text as written.
   const plainHttps = (raw, url) => {
-    const text = String(raw).trim();
-    if (/[\u0000-\u001f\\]/.test(text) || url.username !== '' || url.password !== '' || url.port !== '') return false;
+    // As written: no white space or control character anywhere, not even around it.
+    const text = String(raw);
+    if (text !== text.trim() || /[\u0000-\u001f\\]/.test(text) || url.username !== '' || url.password !== '' || url.port !== '') return false;
     const start = 'https://' + url.hostname;
     if (text.slice(0, start.length).toLowerCase() !== start) return false;
     const next = text.charAt(start.length);
