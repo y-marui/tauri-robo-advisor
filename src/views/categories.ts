@@ -9,7 +9,10 @@ import { TARGETINGS, targetingLabel } from "./labels.ts";
 export function categoriesPanel(ctx: Context): Panel {
   return panel(
     "Categories",
-    (view) => view.portfolio.categories.map((c) => c.id).join(","),
+    (view) =>
+      view.portfolio.categories.map((c) => c.id).join(",") +
+      "|" +
+      view.portfolio.groups.map((g) => `${g.id}:${g.name}`).join(","),
     (view, bind) => {
       const rows = view.portfolio.categories.map((category) => {
         const id = category.id;
@@ -28,6 +31,29 @@ export function categoriesPanel(ctx: Context): Panel {
               edit: (text) => ({ type: "update_category", id, name: text }),
             }),
           ),
+          ...(view.portfolio.groups.length === 0
+            ? []
+            : [
+                h(
+                  "td",
+                  {},
+                  selectField({
+                    ctx,
+                    bind,
+                    label: t("Group of the category"),
+                    options: [
+                      { value: "", label: t("Ungrouped") },
+                      ...view.portfolio.groups.map((g) => ({ value: String(g.id), label: g.name })),
+                    ],
+                    get: (v) => String(find(v)?.group ?? ""),
+                    edit: (value) => ({
+                      type: "set_category_group",
+                      category: id,
+                      group: value === "" ? null : Number(value),
+                    }),
+                  }),
+                ),
+              ]),
           h(
             "td",
             {},
@@ -106,6 +132,7 @@ export function categoriesPanel(ctx: Context): Panel {
                 "tr",
                 {},
                 h("th", {}, t("Name")),
+                ...(view.portfolio.groups.length === 0 ? [] : [h("th", {}, t("Group"))]),
                 h("th", {}, t("Target (%)")),
                 h("th", {}, t("Product targeting")),
                 h("th", {}),

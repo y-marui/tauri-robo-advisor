@@ -6,6 +6,7 @@ import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
 import { bitflyerPanel } from "./views/bitflyer.ts";
 import { categoriesPanel } from "./views/categories.ts";
+import { groupsPanel } from "./views/groups.ts";
 import { dataFolderPanel } from "./views/data-folder.ts";
 import { importStepsPanel } from "./views/import-steps.ts";
 import { holdingsPanel } from "./views/holdings.ts";
@@ -177,6 +178,7 @@ function build(): void {
   const tableImport = tableImportPanel(context);
   const recipes = recipesPanel(context);
   const bitflyer = bitflyerPanel(context);
+  const groups = groupsPanel(context);
   const categories = categoriesPanel(context);
   const products = productsPanel(context);
   const accounts = accountsPanel(context);
@@ -191,6 +193,7 @@ function build(): void {
     tableImport,
     recipes,
     bitflyer,
+    groups,
     categories,
     products,
     accounts,
@@ -218,6 +221,7 @@ function build(): void {
     settings: h(
       "div",
       { class: "pane grid", role: "tabpanel", id: "pane-settings" },
+      groups.el,
       categories.el,
       products.el,
       accounts.el,

@@ -13,7 +13,8 @@ _最終更新: 2026-10-19_
 | `src/decimal.ts` | 十進数の文字列の変換（％ ↔ 小数、桁区切り表示）。浮動小数点を使わない | — |
 | `src/i18n.ts` | 画面の文言（英語がキー、日本語は翻訳） | — |
 | `src/panel.ts`, `src/fields.ts`, `src/dom.ts` | パネルの描画、入力部品、DOM の補助 | `src/i18n.ts` |
-| `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別の一覧、小計、その場の編集 | `src/panel.ts`, `src/fields.ts` |
+| `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別の一覧、グループとカテゴリの小計、その場の編集 | `src/panel.ts`, `src/fields.ts`, `src/views/groups.ts` |
+| `src/views/groups.ts` | グループのカード（追加・名前の変更・削除）と、グループの表示の順序・名前の補助 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
 | `src/views/account-tabs.ts` | 右パネル。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（全体のバランスと口座のタブで共有） | `src/api.ts` |
@@ -54,12 +55,12 @@ _最終更新: 2026-10-19_
 | `crates/bitflyer/src/sign.rs` | HMAC-SHA256 署名 | `hmac`, `sha2` |
 | `crates/bitflyer/src/credentials.rs` | 値を表示しない認証情報の型 | — |
 | `crates/bitflyer/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
-| `crates/portfolio/src/model.rs` | データ型（`Portfolio`、`Category`、`Product`、`Account`、`Holding`、`Settings`）とスキーマのバージョン | `rust_decimal`, `serde` |
+| `crates/portfolio/src/model.rs` | データ型（`Portfolio`、`Group`、`Category`、`Product`、`Account`、`Holding`、`Settings`）とスキーマのバージョン | `rust_decimal`, `serde` |
 | `crates/portfolio/src/edit.rs` | `Edit` と `Portfolio::apply`（検証してから変更し、ID を採番する） | `validate.rs` |
 | `crates/portfolio/src/validate.rs` | 入力の検査、`validate_integrity`（読み込み時の整合性）、`issues`（提案をブロックする不備） | `error.rs` |
 | `crates/portfolio/src/error.rs` | `Error` と `Issue` | `thiserror` |
 | `crates/suggest/src/engine.rs` | 評価額の換算、4 つのモード、結果の組み立て | `fill.rs`, `round.rs`, `portfolio` |
-| `crates/suggest/src/overview.rs` | カテゴリごとと保有ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
+| `crates/suggest/src/overview.rs` | グループごと（目標はカテゴリの合計）、カテゴリごと、保有ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/account_balance.rs` | 口座内の商品バランス（商品比率に対する現在額と不足・超過） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/fill.rs` | 水位配分（目標を最も下回るものから足す。売りは符号を反転して同じ関数を使う） | `rust_decimal` |
 | `crates/suggest/src/round.rs` | 丸め単位への丸め（合計を保つ最大剰余法。上限つき） | `rust_decimal` |

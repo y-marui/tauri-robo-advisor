@@ -11,9 +11,17 @@ export type AccountKind =
   | "deposit"
   | "other";
 
+/** A main category above the categories. It has no target of its own. */
+export interface Group {
+  id: number;
+  name: string;
+}
+
 export interface Category {
   id: number;
   name: string;
+  /** The group the category belongs to; absent when it is ungrouped. */
+  group?: number | null;
   target_weight: string;
   targeting: ProductTargeting;
 }
@@ -139,6 +147,7 @@ export interface Settings {
 export interface Portfolio {
   schema_version: number;
   next_id: number;
+  groups: Group[];
   categories: Category[];
   products: Product[];
   accounts: Account[];
@@ -178,6 +187,10 @@ export interface PortfolioView {
 }
 
 export type Edit =
+  | { type: "add_group"; name: string }
+  | { type: "rename_group"; id: number; name: string }
+  | { type: "remove_group"; id: number }
+  | { type: "set_category_group"; category: number; group: number | null }
   | { type: "add_category"; name: string; target_weight: string }
   | {
       type: "update_category";
@@ -261,6 +274,18 @@ export interface CategoryOverview {
   difference: string;
 }
 
+/**
+ * One group's value and share, next to its target (the sum of its categories' targets).
+ * `group` is `null` for the categories that belong to no group.
+ */
+export interface GroupOverview {
+  group: number | null;
+  current: string;
+  current_share: string;
+  target_share: string;
+  difference: string;
+}
+
 /** One holding record valued in JPY. */
 export interface HoldingOverview {
   account: number;
@@ -278,6 +303,8 @@ export interface AccountOverview {
 
 export interface Overview {
   total: string;
+  /** Empty when no group exists. */
+  groups: GroupOverview[];
   categories: CategoryOverview[];
   holdings: HoldingOverview[];
   accounts: AccountOverview[];

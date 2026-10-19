@@ -13,10 +13,12 @@ use serde::{Deserialize, Serialize};
 /// every weight as missing, so it refuses). Version 9 added the menu click of a link (`menu` and
 /// `heading`: an older app would try to follow it as a plain link, so it refuses). Version 10 added
 /// the preset id of a recipe (`preset`: a recipe made from a preset carries only its account, and an
-/// older app would read it as an empty custom recipe, so it refuses).
+/// older app would read it as an empty custom recipe, so it refuses). Version 11 added the groups
+/// of categories (`groups`, and the `group` of a category: an older app would drop the grouping on
+/// its next save, so it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -32,6 +34,7 @@ macro_rules! id_type {
     };
 }
 
+id_type!(GroupId);
 id_type!(CategoryId);
 id_type!(ProductId);
 id_type!(AccountId);
@@ -51,10 +54,21 @@ pub enum ProductTargeting {
     Weighted,
 }
 
+/// A main category above the categories. It has no target of its own: its target and its current
+/// share are the sums of its categories'.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    pub id: GroupId,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Category {
     pub id: CategoryId,
     pub name: String,
+    /// The group the category belongs to; `None`: ungrouped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<GroupId>,
     /// Share of the whole portfolio as a fraction of 1.
     pub target_weight: Decimal,
     #[serde(default)]
@@ -296,6 +310,8 @@ pub struct Portfolio {
     /// never silently point at a different item.
     pub next_id: u64,
     #[serde(default)]
+    pub groups: Vec<Group>,
+    #[serde(default)]
     pub categories: Vec<Category>,
     #[serde(default)]
     pub products: Vec<Product>,
@@ -321,6 +337,7 @@ impl Default for Portfolio {
         Self {
             schema_version: SCHEMA_VERSION,
             next_id: 1,
+            groups: Vec::new(),
             categories: Vec::new(),
             products: Vec::new(),
             accounts: Vec::new(),
