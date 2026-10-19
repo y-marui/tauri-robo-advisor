@@ -393,10 +393,19 @@ fn pick_table(
     // Cells keep their line breaks and no-break spaces; the title is compared as plain words.
     let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let title = words(title);
+    // The title is compared with the start of the first row read as one line (its non-empty cells
+    // joined by a space), so a page whose tables all begin with the same cell can be told apart by
+    // the cells that follow. A title that fits in the first cell matches as it always did.
     let matches_title = |rows: &Vec<Vec<String>>| {
-        rows.first()
-            .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
-            .is_some_and(|cell| words(cell).starts_with(&title))
+        rows.first().is_some_and(|row| {
+            let line = row
+                .iter()
+                .filter(|c| !c.trim().is_empty())
+                .map(|c| words(c))
+                .collect::<Vec<_>>()
+                .join(" ");
+            line.starts_with(&title)
+        })
     };
     if follow {
         // The rows come from the tables after the heading: if the page was cut off at the limit,
@@ -515,6 +524,24 @@ mod tests {
         let table = pick_table(raw, " Stocks (", None, false).unwrap();
 
         assert_eq!(table.rows[0][0], "Stocks (cash/taxable)");
+    }
+
+    #[test]
+    fn a_title_can_run_over_the_next_cells_to_tell_tables_with_the_same_first_cell_apart() {
+        let head = |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>()];
+        let raw = vec![
+            head(&["Name", "Account", "Total"]),
+            head(&["Name", "Account", "Units", "Price"]),
+            head(&["Name", "", "Units"]),
+        ];
+
+        // The first cell alone matches all three; the cells after it pick one.
+        assert!(pick_table(raw.clone(), "Name", None, false).is_err());
+        let table = pick_table(raw.clone(), "Name Account Units", None, false).unwrap();
+        assert_eq!(table.rows[0].len(), 4);
+        // Empty cells are left out when the row is read as one line.
+        let table = pick_table(raw, "Name Units", None, false).unwrap();
+        assert_eq!(table.rows[0].len(), 3);
     }
 
     #[test]

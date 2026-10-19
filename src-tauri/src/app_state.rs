@@ -1995,6 +1995,112 @@ mod tests {
     }
 
     #[test]
+    fn the_monex_funds_preset_reads_one_table_among_several_that_start_with_the_same_cell() {
+        // A made-up page with the layout of the real one: every table of the page starts with the
+        // same heading cell, the other kinds of holdings have no rows (one cell saying so), and
+        // the investment trust table has a heading row and one row per holding.
+        let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
+        let empty_table = |heading: &[&str]| vec![row(heading), row(&["No holdings"])];
+        let raw = vec![
+            vec![row(&["Total", "1"])],
+            empty_table(&["銘柄", "Other heading", "", "", "", "", "", "", ""]),
+            vec![
+                row(&[
+                    "銘柄",
+                    "口座区分預り区分",
+                    "基準価額（円）前日比",
+                    "分配金の取扱い",
+                    "保有数（口）",
+                    "平均取得単価（円）",
+                    "概算評価額（円）",
+                    "評価損益（円）評価損益率",
+                    "取引",
+                ]),
+                row(&[
+                    "Alpha Fund",
+                    "Taxable",
+                    "10,000\n+10",
+                    "x",
+                    "5,000",
+                    "9,000",
+                    "6,000",
+                    "+1,000\n+10%",
+                    "",
+                ]),
+                row(&[
+                    "Beta Fund",
+                    "NISA",
+                    "20,000\n-20",
+                    "x",
+                    "1,500",
+                    "9,000",
+                    "3,000",
+                    "-500\n-5%",
+                    "",
+                ]),
+            ],
+            empty_table(&[
+                "銘柄",
+                "口座区分預り区分",
+                "基準価額（円）前日比",
+                "分配金の取扱い",
+                "保有数（口）",
+                "平均取得単価（円）",
+                "概算評価額（円）",
+                "評価損益（円）評価損益率",
+                "取引",
+            ])
+            .into_iter()
+            .skip(1)
+            .collect(),
+        ];
+        let (state, main, _, _, _) = recipe_state("monex");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "monex-funds".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        let recipe = state.view().unwrap().recipes[0].recipe.clone();
+        assert_eq!(recipe.start_site, "monex.co.jp");
+        assert_eq!(recipe.allowed_sites, vec!["monex.co.jp".to_owned()]);
+        assert_eq!(recipe.links.len(), 1);
+        assert!(recipe.links[0].menu.is_none());
+        assert_eq!(browser::link_text_allowed(&recipe.links[0].text), Ok(()));
+
+        let table = crate::browser_session::pick_table_for_test(
+            raw,
+            &recipe.table_starts_with,
+            recipe.following_tables,
+        );
+        let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
+
+        assert_eq!(result.skipped, vec![]);
+        let got: Vec<(String, String, String)> = result
+            .rows
+            .iter()
+            .map(|r| {
+                (
+                    r.name.clone(),
+                    r.value.to_string(),
+                    r.quantity.map_or(String::new(), |q| q.to_string()),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "Alpha Fund".to_owned(),
+                    "6000".to_owned(),
+                    "5000".to_owned()
+                ),
+                ("Beta Fund".to_owned(), "3000".to_owned(), "1500".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
     fn a_preset_recipe_is_run_from_the_current_preset_and_an_unknown_one_fails_alone() {
         let (state, main, other, _, _) = recipe_state("preset-ref");
         state
