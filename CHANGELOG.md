@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- The Rakuten all-holdings preset reads values as yen: a name linked to a product in another currency is reported instead of imported (a preset can now state the currency of its page).
 - Rakuten Securities preset (#60): the first version read only every other holding, because it treated each holding as two rows while the page shows one visible row per holding (the detail rows are hidden). The preset now reads one row per holding of the page of all holdings.
 - Fetching several times in a row failed at random with "The page changed while the recipes were running" on sites that put a session identifier or a changing query in the address (Rakuten Securities). The page a batch started from is now recognised by its scheme, host, port, and path only (the `;` parameters of path segments, the query, and the fragment are not compared); another path, host, or port still stops the batch. Returning to the starting page after a link still checks the whole address.
 - The preset list was empty in the Japanese interface: the labels and descriptions of the Monex, Rakuten, and Daiwa Connect presets had no translation, and a missing translation broke the whole list. They are translated, a missing translation now shows the English text, and a test checks every preset text.

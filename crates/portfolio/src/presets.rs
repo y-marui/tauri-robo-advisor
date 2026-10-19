@@ -54,6 +54,10 @@ pub struct Preset {
     /// The page where the person logs in (the app only opens it; nothing is typed). One per
     /// company: it belongs to the preset of the company's first entry.
     login_url: &'static str,
+    /// The currency of the values the page shows, when it is known (a page that shows every
+    /// valuation in yen); empty means the currency of the product a name is linked to. A name
+    /// linked to a product in another currency is then reported, not imported.
+    currency: &'static str,
     layout: Layout,
 }
 
@@ -102,6 +106,7 @@ const PRESETS: &[Preset] = &[
         start_site: "sbisec.co.jp",
         following_tables: false,
         login_url: "https://www.sbisec.co.jp/ETGate",
+        currency: "",
         layout: sbi_layout(1),
     },
     Preset {
@@ -115,6 +120,7 @@ const PRESETS: &[Preset] = &[
         start_site: "sbisec.co.jp",
         following_tables: false,
         login_url: "https://www.sbisec.co.jp/ETGate",
+        currency: "",
         layout: sbi_layout(10_000),
     },
     // Monex Securities, the page 保有残高・口座管理. The page the person lands on after logging in
@@ -136,6 +142,7 @@ const PRESETS: &[Preset] = &[
         start_site: "monex.co.jp",
         following_tables: false,
         login_url: "https://www.monex.co.jp/",
+        currency: "",
         layout: Layout {
             source: "Monex",
             name_column: 0,
@@ -174,6 +181,7 @@ const PRESETS: &[Preset] = &[
         start_site: "rakuten-sec.co.jp",
         following_tables: false,
         login_url: "https://www.rakuten-sec.co.jp/",
+        currency: "JPY",
         layout: Layout {
             source: "Rakuten",
             name_column: 1,
@@ -209,6 +217,7 @@ const PRESETS: &[Preset] = &[
         start_site: "connect-sec.co.jp",
         following_tables: true,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
+        currency: "",
         layout: Layout {
             source: "Daiwa Connect",
             name_column: 0,
@@ -243,6 +252,7 @@ const PRESETS: &[Preset] = &[
         start_site: "connect-sec.co.jp",
         following_tables: false,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
+        currency: "",
         layout: Layout {
             source: "Daiwa Connect",
             name_column: 0,
@@ -320,8 +330,9 @@ impl Preset {
             following_tables: self.following_tables,
             start_site: self.start_site.to_owned(),
             allowed_sites: self.allowed_sites.iter().map(|s| (*s).to_owned()).collect(),
-            // The values are in the currency of the product they are linked to.
-            currency: String::new(),
+            // The values are in the page's currency when the preset knows it, else in the currency
+            // of the product they are linked to.
+            currency: self.currency.to_owned(),
             account,
             mapping: ImportMapping {
                 source: layout.source.to_owned(),

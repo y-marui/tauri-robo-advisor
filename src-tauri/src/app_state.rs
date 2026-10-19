@@ -2120,6 +2120,9 @@ mod tests {
         assert_eq!(recipe.links.len(), 1);
         assert!(recipe.links[0].menu.is_none());
         assert_eq!(browser::link_text_allowed(&recipe.links[0].text), Ok(()));
+        // The page shows yen, so a name linked to a product in another currency is reported
+        // instead of being valued as if its yen amount were in that currency.
+        assert_eq!(recipe.currency, "JPY");
 
         let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
         let heading = {
