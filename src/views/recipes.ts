@@ -139,17 +139,21 @@ export function recipesPanel(ctx: Context): Panel {
       return;
     }
     const open: BrowserPage[] = await browserPages().catch(() => []);
-    /** The tab a recipe reads: the open page of its own site, or the one chosen on the screen. */
-    const pageFor = (recipe: Recipe): string | null => {
+    /**
+     * The tabs a recipe may read, in the order to try: the open pages of its own site (the one
+     * chosen on the screen first), or the one chosen on the screen when it has no site. A site
+     * whose pages cannot be reached by a link can have several pages open at once (a list of
+     * holdings and a page of cash balances): the recipe reads the tab that has its table.
+     */
+    const pagesFor = (recipe: Recipe): string[] => {
       if (recipe.start_site) {
         const site = recipe.start_site;
         const within = (p: BrowserPage): boolean => p.host === site || p.host.endsWith(`.${site}`);
-        // With several tabs of the same site, the one chosen on the screen wins (the list of
-        // holdings of a site that cannot be navigated is the page the user opened).
         const chosen = open.find((p) => p.id === pageSelect.value && within(p));
-        return (chosen ?? open.find(within))?.id ?? null;
+        const rest = open.filter((p) => within(p) && p !== chosen);
+        return [...(chosen ? [chosen] : []), ...rest].map((p) => p.id);
       }
-      return pageSelect.value === "" ? null : pageSelect.value;
+      return pageSelect.value === "" ? [] : [pageSelect.value];
     };
     const wanted = view.portfolio.recipes.filter((r) => !only || only.includes(r.name));
     if (wanted.every((r) => !r.start_site) && pageSelect.value === "") {
@@ -176,15 +180,29 @@ export function recipesPanel(ctx: Context): Panel {
       }
       for (const recipe of wanted) {
         info(t("Fetching “{recipe}”…", { recipe: recipe.name }));
-        const page = pageFor(recipe);
-        if (page === null) {
+        const pages = pagesFor(recipe);
+        if (pages.length === 0) {
           attention.append(
             h("p", { class: "note error" }, t("“{recipe}” needs an open page of {site}: log in and open it in the browser first.", { recipe: recipe.name, site: recipe.start_site ?? "" })),
           );
           continue;
         }
         try {
-          const note = await runOne(recipe, page);
+          let note: HTMLElement | null = null;
+          let tried = 0;
+          for (const page of pages) {
+            tried += 1;
+            try {
+              note = await runOne(recipe, page);
+              break;
+            } catch (error) {
+              // This tab has no table for the recipe: another tab of the site may have it.
+              if (String(error).includes("No table on the page starts with") && tried < pages.length) {
+                continue;
+              }
+              throw error;
+            }
+          }
           if (mine !== sequence) {
             return;
           }
