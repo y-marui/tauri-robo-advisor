@@ -1153,3 +1153,82 @@ fn the_same_product_has_its_own_weight_in_each_account() {
     assert_eq!(target(other, a), Some(dec!(50000)));
     assert_eq!(target(other, b), Some(dec!(150000)));
 }
+
+#[test]
+fn overview_has_no_groups_while_no_group_exists() {
+    let f = fixture();
+
+    assert!(overview(&f.portfolio).unwrap().groups.is_empty());
+}
+
+#[test]
+fn overview_sums_the_categories_of_a_group_and_shows_the_rest_as_ungrouped() {
+    let mut f = fixture();
+    let extra = category(&mut f.portfolio, "Gold", dec!(0));
+    let g = product(&mut f.portfolio, "Gold Fund", extra, "JPY");
+    hold(&mut f.portfolio, f.main, g, dec!(100000));
+    apply(
+        &mut f.portfolio,
+        Edit::AddGroup {
+            name: "Safe".to_owned(),
+        },
+    );
+    let safe = f.portfolio.groups[0].id;
+    for category in [f.bonds, extra] {
+        apply(
+            &mut f.portfolio,
+            Edit::SetCategoryGroup {
+                category,
+                group: Some(safe),
+            },
+        );
+    }
+
+    let o = overview(&f.portfolio).unwrap();
+
+    assert_eq!(o.total, dec!(1000000));
+    assert_eq!(o.groups.len(), 2);
+    assert_eq!(o.groups[0].group, Some(safe));
+    assert_eq!(o.groups[0].current, dec!(300000));
+    assert_eq!(o.groups[0].current_share, dec!(0.3));
+    assert_eq!(o.groups[0].target_share, dec!(0.4));
+    assert_eq!(o.groups[0].difference, dec!(-0.1));
+    // Stocks belong to no group.
+    assert_eq!(o.groups[1].group, None);
+    assert_eq!(o.groups[1].current, dec!(700000));
+    assert_eq!(o.groups[1].target_share, dec!(0.6));
+}
+
+#[test]
+fn overview_leaves_out_ungrouped_when_every_category_has_a_group_but_keeps_an_empty_group() {
+    let mut f = fixture();
+    apply(
+        &mut f.portfolio,
+        Edit::AddGroup {
+            name: "All".to_owned(),
+        },
+    );
+    apply(
+        &mut f.portfolio,
+        Edit::AddGroup {
+            name: "Empty".to_owned(),
+        },
+    );
+    let all = f.portfolio.groups[0].id;
+    for category in [f.stocks, f.bonds] {
+        apply(
+            &mut f.portfolio,
+            Edit::SetCategoryGroup {
+                category,
+                group: Some(all),
+            },
+        );
+    }
+
+    let o = overview(&f.portfolio).unwrap();
+
+    let ids: Vec<_> = o.groups.iter().map(|g| g.group).collect();
+    assert_eq!(ids, [Some(all), Some(f.portfolio.groups[1].id)]);
+    assert_eq!(o.groups[0].current_share, dec!(1));
+    assert_eq!(o.groups[1].current, dec!(0));
+}

@@ -1370,7 +1370,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 10);
+    assert_eq!(SCHEMA_VERSION, 11);
 }
 
 #[test]
@@ -1961,4 +1961,155 @@ fn the_daiwa_presets_click_their_menu_entries_on_the_vetted_site() {
     {
         assert!(r.links.iter().all(|l| l.menu.is_none()));
     }
+}
+
+// ---- groups ---------------------------------------------------------------
+
+fn add_group(p: &mut Portfolio, name: &str) -> GroupId {
+    apply(
+        p,
+        Edit::AddGroup {
+            name: name.to_owned(),
+        },
+    );
+    p.groups.last().unwrap().id
+}
+
+#[test]
+fn a_group_is_added_renamed_and_removed_and_its_categories_become_ungrouped() {
+    let (mut p, cat, ..) = sample();
+    let g = add_group(&mut p, "  Risk  ");
+    assert_eq!(p.groups[0].name, "Risk");
+    apply(
+        &mut p,
+        Edit::SetCategoryGroup {
+            category: cat,
+            group: Some(g),
+        },
+    );
+    assert_eq!(p.categories[0].group, Some(g));
+
+    apply(
+        &mut p,
+        Edit::RenameGroup {
+            id: g,
+            name: "Growth".to_owned(),
+        },
+    );
+    assert_eq!(p.groups[0].name, "Growth");
+
+    apply(&mut p, Edit::RemoveGroup { id: g });
+    assert!(p.groups.is_empty());
+    assert_eq!(p.categories[0].group, None);
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn group_edits_are_validated_and_a_rejected_one_changes_nothing() {
+    let (mut p, cat, ..) = sample();
+    let g = add_group(&mut p, "Risk");
+    let before = p.clone();
+
+    let bad = [
+        Edit::AddGroup {
+            name: "Risk".to_owned(),
+        },
+        Edit::AddGroup {
+            name: " ".to_owned(),
+        },
+        Edit::RenameGroup {
+            id: GroupId(999),
+            name: "X".to_owned(),
+        },
+        Edit::RemoveGroup { id: GroupId(999) },
+        Edit::SetCategoryGroup {
+            category: cat,
+            group: Some(GroupId(999)),
+        },
+        Edit::SetCategoryGroup {
+            category: CategoryId(999),
+            group: Some(g),
+        },
+    ];
+    for edit in bad {
+        assert!(p.clone().apply(edit.clone()).is_err(), "{edit:?}");
+        let mut copy = p.clone();
+        let _ = copy.apply(edit);
+        assert_eq!(copy, before);
+    }
+    // Renaming a group to its own name is fine.
+    apply(
+        &mut p,
+        Edit::RenameGroup {
+            id: g,
+            name: "Risk".to_owned(),
+        },
+    );
+}
+
+#[test]
+fn group_ids_come_from_the_shared_counter_and_are_never_reused() {
+    let (mut p, ..) = sample();
+    let a = add_group(&mut p, "A");
+    apply(&mut p, Edit::RemoveGroup { id: a });
+    let b = add_group(&mut p, "B");
+
+    assert_ne!(a, b);
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn integrity_check_rejects_bad_groups() {
+    let (mut good, cat, ..) = sample();
+    let g = add_group(&mut good, "Risk");
+    apply(
+        &mut good,
+        Edit::SetCategoryGroup {
+            category: cat,
+            group: Some(g),
+        },
+    );
+    good.validate_integrity().unwrap();
+
+    let mut p = good.clone();
+    p.categories[0].group = Some(GroupId(999));
+    assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+
+    let mut p = good.clone();
+    p.groups.push(Group {
+        id: GroupId(p.next_id),
+        name: "Other".to_owned(),
+    });
+    p.next_id += 1;
+    p.validate_integrity().unwrap();
+    p.groups[1].name = "Risk".to_owned();
+    assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+
+    let mut p = good.clone();
+    p.groups[0].id = GroupId(cat.0);
+    assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+
+    let mut p = good;
+    p.groups[0].name = "\u{7}".to_owned();
+    assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+}
+
+#[test]
+fn a_file_without_groups_loads_and_groups_round_trip_through_json() {
+    let (mut p, cat, ..) = sample();
+    let json = serde_json::to_string(&p).unwrap();
+    assert!(!json.contains("\"group\""));
+    let loaded: Portfolio = serde_json::from_str(&json).unwrap();
+    assert!(loaded.groups.is_empty());
+
+    let g = add_group(&mut p, "Risk");
+    apply(
+        &mut p,
+        Edit::SetCategoryGroup {
+            category: cat,
+            group: Some(g),
+        },
+    );
+    let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+    assert_eq!(back, p);
 }

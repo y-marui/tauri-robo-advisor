@@ -4,8 +4,8 @@ use serde::Deserialize;
 use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
-    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Holding,
-    ImportMapping, Portfolio, Product, ProductId, ProductTargeting, Recipe,
+    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Group, GroupId,
+    Holding, ImportMapping, Portfolio, Product, ProductId, ProductTargeting, Recipe,
 };
 
 /// One user action. The frontend sends the intent and Rust validates it, assigns
@@ -21,6 +21,23 @@ pub enum Edit {
         currency: String,
         source: String,
         alias: String,
+    },
+    /// Adds a group (a main category above the categories). It has no target of its own.
+    AddGroup {
+        name: String,
+    },
+    RenameGroup {
+        id: GroupId,
+        name: String,
+    },
+    /// Removes a group; its categories stay and become ungrouped.
+    RemoveGroup {
+        id: GroupId,
+    },
+    /// Puts a category into a group, or (`None`) takes it out of its group.
+    SetCategoryGroup {
+        category: CategoryId,
+        group: Option<GroupId>,
     },
     AddCategory {
         name: String,
@@ -517,6 +534,34 @@ impl Portfolio {
     /// so a rejected edit leaves the portfolio untouched.
     pub fn apply(&mut self, edit: Edit) -> Result<(), Error> {
         match edit {
+            Edit::AddGroup { name: new_name } => {
+                self.check_capacity(self.groups.len())?;
+                let new_name = name(&new_name, "group")?;
+                self.ensure_group_name_free(&new_name, None)?;
+                let id = GroupId(self.take_id());
+                self.groups.push(Group { id, name: new_name });
+            }
+            Edit::RenameGroup { id, name: new_name } => {
+                let new_name = name(&new_name, "group")?;
+                self.group(id)?;
+                self.ensure_group_name_free(&new_name, Some(id))?;
+                if let Some(group) = self.groups.iter_mut().find(|g| g.id == id) {
+                    group.name = new_name;
+                }
+            }
+            Edit::RemoveGroup { id } => {
+                self.group(id)?;
+                self.groups.retain(|g| g.id != id);
+                for category in self.categories.iter_mut().filter(|c| c.group == Some(id)) {
+                    category.group = None;
+                }
+            }
+            Edit::SetCategoryGroup { category, group } => {
+                if let Some(group) = group {
+                    self.group(group)?;
+                }
+                self.category_mut(category)?.group = group;
+            }
             Edit::AddCategory {
                 name: new_name,
                 target_weight,
@@ -529,6 +574,7 @@ impl Portfolio {
                 self.categories.push(Category {
                     id,
                     name: new_name,
+                    group: None,
                     target_weight,
                     targeting: ProductTargeting::default(),
                 });
@@ -1016,6 +1062,24 @@ impl Portfolio {
         } else {
             Ok(())
         }
+    }
+
+    fn group(&self, id: GroupId) -> Result<&Group, Error> {
+        self.groups
+            .iter()
+            .find(|g| g.id == id)
+            .ok_or(Error::NotFound("group"))
+    }
+
+    fn ensure_group_name_free(&self, name: &str, except: Option<GroupId>) -> Result<(), Error> {
+        if self
+            .groups
+            .iter()
+            .any(|g| g.name == name && Some(g.id) != except)
+        {
+            return Err(Error::Conflict("a group with this name exists".to_owned()));
+        }
+        Ok(())
     }
 
     fn category(&self, id: CategoryId) -> Result<&Category, Error> {

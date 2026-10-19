@@ -388,29 +388,25 @@ fn pick_table_in_page(
     if follow && page.len() >= browser::MAX_TABLES {
         return Err("The page has too many tables to be sure the whole list was read.".to_owned());
     }
-    let title_words = words(title);
+    let title_words = squash(title);
     let in_leaf = page.leaf.iter().any(|t| title_matches(t, &title_words));
     let raw = if in_leaf { page.leaf } else { page.outer };
     pick_table(raw, title, merge, follow)
 }
 
-/// Cells keep their line breaks and no-break spaces; text is compared as plain words.
-fn words(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+/// Cells keep their line breaks and no-break spaces, and a heading may be broken into lines where
+/// the page was written with a line break (or not, depending on how the text is read), so text is
+/// compared without any whitespace at all.
+fn squash(text: &str) -> String {
+    text.split_whitespace().collect::<String>()
 }
 
-/// Whether the start of the first row, read as one line (its non-empty cells joined by a
-/// space), is `title` (already in words). So a page whose tables all begin with the same cell
-/// can be told apart by the cells that follow. A title that fits in the first cell matches as it
-/// always did.
+/// Whether the start of the first row, read as one line (its cells one after the other), is
+/// `title` (already squashed). So a page whose tables all begin with the same cell can be told
+/// apart by the cells that follow. A title that fits in the first cell matches as it always did.
 fn title_matches(rows: &[Vec<String>], title: &str) -> bool {
     rows.first().is_some_and(|row| {
-        let line = row
-            .iter()
-            .filter(|c| !c.trim().is_empty())
-            .map(|c| words(c))
-            .collect::<Vec<_>>()
-            .join(" ");
+        let line: String = row.iter().map(|c| squash(c)).collect();
         line.starts_with(title)
     })
 }
@@ -431,7 +427,7 @@ fn pick_table(
     merge: Option<usize>,
     follow: bool,
 ) -> Result<Table, String> {
-    let title = words(title);
+    let title = squash(title);
     let matches_title = |rows: &Vec<Vec<String>>| title_matches(rows, &title);
     if follow {
         // The rows come from the tables after the heading: if the page was cut off at the limit,
@@ -624,6 +620,25 @@ mod tests {
 
         assert!(pick_table_in_page(page(vec![]), "Code", None, true).is_ok());
         assert!(pick_table_in_page(page(vec![one_row(&["X"])]), "Code", None, true).is_err());
+    }
+
+    #[test]
+    fn whitespace_inside_a_heading_does_not_matter_to_the_title() {
+        let raw = vec![vec![vec![
+            "Name".to_owned(),
+            "Account\nType".to_owned(),
+            "Price (yen)\u{a0}Change".to_owned(),
+        ]]];
+
+        for title in [
+            "Name Account Type Price (yen) Change",
+            "NameAccountTypePrice(yen)Change",
+        ] {
+            assert!(
+                pick_table(raw.clone(), title, None, false).is_ok(),
+                "{title}"
+            );
+        }
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use portfolio::{AccountId, CategoryId, Portfolio, ProductId};
+use portfolio::{AccountId, CategoryId, GroupId, Portfolio, ProductId};
 use rust_decimal::Decimal;
 use serde::Serialize;
 
@@ -18,6 +18,22 @@ pub struct CategoryOverview {
     pub current: Decimal,
     /// `current` divided by the total, as a fraction.
     pub current_share: Decimal,
+    pub target_share: Decimal,
+    /// `current_share` minus `target_share`: positive when over target.
+    pub difference: Decimal,
+}
+
+/// One group's value and share of the whole, next to its target. A group has no target of its
+/// own: its target and its current value are the sums of its categories'.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct GroupOverview {
+    /// `None`: the categories that belong to no group, shown together as "Ungrouped".
+    pub group: Option<GroupId>,
+    /// The value of the group's categories in JPY.
+    pub current: Decimal,
+    /// `current` divided by the total, as a fraction.
+    pub current_share: Decimal,
+    /// The sum of the targets of the group's categories.
     pub target_share: Decimal,
     /// `current_share` minus `target_share`: positive when over target.
     pub difference: Decimal,
@@ -48,6 +64,9 @@ pub struct AccountOverview {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Overview {
     pub total: Decimal,
+    /// Empty when no group exists. Otherwise one entry per group in order, then the ungrouped
+    /// categories (only if there are any).
+    pub groups: Vec<GroupOverview>,
     pub categories: Vec<CategoryOverview>,
     pub holdings: Vec<HoldingOverview>,
     pub accounts: Vec<AccountOverview>,
@@ -107,6 +126,7 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
             }
         })
         .collect();
+    let groups = group_overviews(portfolio, &values, &share_of_total);
     let accounts = portfolio
         .accounts
         .iter()
@@ -134,8 +154,53 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
         .collect();
     Ok(Overview {
         total,
+        groups,
         categories,
         holdings,
         accounts,
     })
+}
+
+/// Adds up the categories of each group. The sums are exact; only the share is rounded, from the
+/// summed value, so the groups' shares do not drift from the categories'.
+fn group_overviews(
+    portfolio: &Portfolio,
+    values: &BTreeMap<CategoryId, Decimal>,
+    share_of_total: &impl Fn(Decimal) -> Decimal,
+) -> Vec<GroupOverview> {
+    if portfolio.groups.is_empty() {
+        return Vec::new();
+    }
+    let entry = |group: Option<GroupId>| {
+        let mut current = Decimal::ZERO;
+        let mut target_share = Decimal::ZERO;
+        let mut any = false;
+        for category in portfolio.categories.iter().filter(|c| c.group == group) {
+            any = true;
+            current += values.get(&category.id).copied().unwrap_or_default();
+            target_share += category.target_weight;
+        }
+        let current_share = share_of_total(current);
+        (
+            any,
+            GroupOverview {
+                group,
+                current,
+                current_share,
+                target_share,
+                difference: current_share - target_share,
+            },
+        )
+    };
+    portfolio
+        .groups
+        .iter()
+        .map(|g| Some(g.id))
+        .chain(std::iter::once(None))
+        .map(entry)
+        // A group without categories is still listed (it is the user's); only an empty
+        // "Ungrouped" entry is left out.
+        .filter(|(any, overview)| *any || overview.group.is_some())
+        .map(|(_, overview)| overview)
+        .collect()
 }

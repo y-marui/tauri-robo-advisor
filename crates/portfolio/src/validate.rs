@@ -81,9 +81,10 @@ impl Portfolio {
 
         let mut ids = HashSet::new();
         let all_ids = self
-            .categories
+            .groups
             .iter()
-            .map(|c| c.id.0)
+            .map(|g| g.id.0)
+            .chain(self.categories.iter().map(|c| c.id.0))
             .chain(self.products.iter().map(|p| p.id.0))
             .chain(self.accounts.iter().map(|a| a.id.0));
         for id in all_ids {
@@ -92,8 +93,21 @@ impl Portfolio {
             }
         }
 
+        let mut group_names = HashSet::new();
+        for group in &self.groups {
+            name(&group.name, "group").map_err(into_corrupt)?;
+            if !group_names.insert(group.name.as_str()) {
+                return corrupt("a group name is duplicated");
+            }
+        }
         for category in &self.categories {
             name(&category.name, "category").map_err(into_corrupt)?;
+            if category
+                .group
+                .is_some_and(|g| !self.groups.iter().any(|x| x.id == g))
+            {
+                return corrupt("a category refers to a missing group");
+            }
             fraction(category.target_weight, "category target").map_err(into_corrupt)?;
         }
         for product in &self.products {
