@@ -9,6 +9,7 @@
 
 ### Added
 
+- Reorder accounts: up and down buttons in the Accounts card move an account in the list (`MoveAccount`); the order is used by the tabs, the tables, and the choices. At an end nothing changes.
 - Edit names and categories in the holdings table: the name of a category (in its heading row), and the name and the category of a product (in its row) can be changed in place; changing the category moves the product to its new group. The same edits existed in the Categories and Products cards further down, which were hard to find.
 - Make a product from an unmatched name (#37): in the result of an import, each name that has no product yet has a name field (the imported name), a category, a currency (the one the table was imported in, or another), and one button that creates the product and links the name to it in a single step (`AddProductWithAlias`; both or neither). The recipes card says to add an account first when there is none, and the import says to add a category first when there is none.
 - Open the login pages (#37): a button in the recipes card opens the login page of each site that a recipe reads (SBI Securities, Daiwa Connect Securities so far; the addresses are data of the presets) in a new tab of the browser the app opened, unless a tab of that site is already open. The browser only goes to the address: nothing is typed, clicked, or submitted, and the person logs in by hand. Only plain `https://host/...` addresses are opened.

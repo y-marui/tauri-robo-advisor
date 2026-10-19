@@ -324,6 +324,8 @@ export const MESSAGES = {
   "Category name": { ja: "カテゴリの名前" },
   "Product name": { ja: "商品の名前" },
   "Category of the product": { ja: "商品のカテゴリ" },
+  "Move up": { ja: "上へ" },
+  "Move down": { ja: "下へ" },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },

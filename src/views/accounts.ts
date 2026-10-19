@@ -15,7 +15,7 @@ export function accountsPanel(ctx: Context): Panel {
       ].join("|"),
     (view, bind) => {
       const products = view.portfolio.products;
-      const rows = view.portfolio.accounts.map((account) => {
+      const rows = view.portfolio.accounts.map((account, position) => {
         const id = account.id;
         const find = (v: typeof view) => v.portfolio.accounts.find((a) => a.id === id);
 
@@ -59,6 +59,16 @@ export function accountsPanel(ctx: Context): Panel {
             h("label", { class: "check" }, p.box, products[index]?.name ?? ""),
           ),
         );
+
+        // The order of the accounts is the order everywhere (the tabs, the tables, the choices).
+        const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
+        const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
+        up.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: true }));
+        down.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: false }));
+        // At an end there is nothing to move: the button is off (a move there would only save for nothing).
+        up.disabled = position === 0;
+        down.disabled = position === view.portfolio.accounts.length - 1;
+        const order = h("span", { class: "order" }, up, down);
 
         return h(
           "tr",
@@ -121,7 +131,7 @@ export function accountsPanel(ctx: Context): Panel {
             }),
           ),
           h("td", {}, canBuy),
-          h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_account", id }))),
+          h("td", {}, order, deleteButton(() => void ctx.apply({ type: "remove_account", id }))),
         );
       });
 
