@@ -856,6 +856,8 @@ fn recipe_for(account: AccountId) -> Recipe {
         account,
         mapping: mapping_for(" SBI "),
         all_tables: false,
+        following_tables: false,
+        start_site: String::new(),
         allowed_sites: Vec::new(),
     }
 }

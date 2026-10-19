@@ -295,6 +295,13 @@ export const MESSAGES = {
   "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the investment trust tables of every account type (units x price per 10,000 units).": {
     ja: "ログイン後のSBI証券のトップのページから始め、「保有資産評価」を辿って、口座の種類ごとの投資信託の表をすべて読みます（口数 × 1万口あたりの基準価額）。",
   },
+  "“{recipe}” needs an open page of {site}: log in and open it in the browser first.": {
+    ja: "「{recipe}」には、{site} の開いているページが要ります。ブラウザでログインして、先にそのページを開いてください。",
+  },
+  "Daiwa Connect Securities: domestic stocks": { ja: "大和コネクト証券: 国内株式" },
+  "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).": {
+    ja: "ログイン後に、大和コネクト証券の「現物取引保有銘柄一覧」を開いてから取得します。保有の各行（評価額と数量）を読みます。",
+  },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },

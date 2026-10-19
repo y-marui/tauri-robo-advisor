@@ -135,13 +135,22 @@ export function recipesPanel(ctx: Context): Panel {
     if (!view) {
       return;
     }
-    if (pageSelect.value === "") {
+    const open: BrowserPage[] = await browserPages().catch(() => []);
+    /** The tab a recipe reads: the open page of its own site, or the one chosen on the screen. */
+    const pageFor = (recipe: Recipe): string | null => {
+      if (recipe.start_site) {
+        const site = recipe.start_site;
+        return open.find((p) => p.host === site || p.host.endsWith(`.${site}`))?.id ?? null;
+      }
+      return pageSelect.value === "" ? null : pageSelect.value;
+    };
+    const wanted = view.portfolio.recipes.filter((r) => !only || only.includes(r.name));
+    if (wanted.every((r) => !r.start_site) && pageSelect.value === "") {
       fail(t("Open the browser, log in, and open a page of the site first."));
       return;
     }
     const mine = ++sequence;
-    // One tab for the whole batch: the selection cannot change under it.
-    const page = pageSelect.value;
+    // The tabs are fixed for the whole batch: the selection cannot change under it.
     pageSelect.disabled = true;
     refreshButton.disabled = true;
     // Whatever is on screen is out of date from now on, and must not be applied or redrawn.
@@ -158,8 +167,15 @@ export function recipesPanel(ctx: Context): Panel {
         hasRuns = false;
         results.replaceChildren();
       }
-      for (const recipe of view.portfolio.recipes.filter((r) => !only || only.includes(r.name))) {
+      for (const recipe of wanted) {
         info(t("Fetching “{recipe}”…", { recipe: recipe.name }));
+        const page = pageFor(recipe);
+        if (page === null) {
+          attention.append(
+            h("p", { class: "note error" }, t("“{recipe}” needs an open page of {site}: log in and open it in the browser first.", { recipe: recipe.name, site: recipe.start_site ?? "" })),
+          );
+          continue;
+        }
         try {
           const note = await runOne(recipe, page);
           if (mine !== sequence) {

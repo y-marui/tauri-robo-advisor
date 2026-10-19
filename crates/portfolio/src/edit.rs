@@ -256,6 +256,33 @@ fn allowed_sites(sites: &[String]) -> Result<Vec<String>, Error> {
     Ok(out)
 }
 
+/// The site of the page a recipe reads: empty, or a plain lower-case host name with at least two
+/// labels. It only chooses which open tab a recipe reads, so it needs no vetting.
+fn start_site(site: &str) -> Result<String, Error> {
+    let site = site.trim().to_lowercase();
+    if site.is_empty() {
+        return Ok(site);
+    }
+    let labels: Vec<&str> = site.split('.').collect();
+    let plain = site.len() <= 100
+        && labels.len() >= 2
+        && labels.iter().all(|l| {
+            !l.is_empty()
+                && l.len() <= 63
+                && !l.starts_with('-')
+                && !l.ends_with('-')
+                && l.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        });
+    if plain {
+        Ok(site)
+    } else {
+        Err(Error::Invalid(
+            "the start site is not acceptable".to_owned(),
+        ))
+    }
+}
+
 impl Recipe {
     /// Checks a recipe and trims its names.
     pub(crate) fn validated(self, portfolio: &Portfolio) -> Result<Self, Error> {
@@ -296,11 +323,13 @@ impl Recipe {
         }
         portfolio.account(self.account)?;
         let allowed_sites = allowed_sites(&self.allowed_sites)?;
+        let start_site = start_site(&self.start_site)?;
         Ok(Self {
             name: recipe_name,
             links,
             table_starts_with,
             allowed_sites,
+            start_site,
             // Empty: the currency of each product the rows are linked to.
             currency: if self.currency.trim().is_empty() {
                 String::new()

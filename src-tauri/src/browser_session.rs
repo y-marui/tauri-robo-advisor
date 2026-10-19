@@ -74,9 +74,10 @@ pub const STOP_BATCH: &str = "[stop] ";
 pub struct BrowserSession {
     endpoint: Mutex<Option<Endpoint>>,
     fetched: Mutex<Vec<Table>>,
-    /// The tab and the address a batch of recipes started from. Every recipe of the batch
-    /// must start on exactly this page; a tab that was navigated meanwhile stops the batch.
-    pinned: Mutex<Option<(String, String)>>,
+    /// The address each tab had when a batch of recipes first read it. Every later recipe of the
+    /// batch that reads the same tab must start on exactly this address; a tab that was navigated
+    /// meanwhile stops the batch.
+    pinned: Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl BrowserSession {
@@ -176,6 +177,7 @@ impl BrowserSession {
         links: &[FetchLink],
         title: &str,
         merge: Option<usize>,
+        follow: bool,
         allowed_sites: &[String],
     ) -> Result<RecipeRead, String> {
         let mut cdp = self.connect()?;
@@ -190,15 +192,16 @@ impl BrowserSession {
         let start = cdp.current_href(&session).map_err(|e| e.to_string())?;
         {
             let mut pinned = lock(&self.pinned)?;
-            match pinned.as_ref() {
-                Some((id, href)) if id == page_id => {
-                    if *href != start {
-                        return Err(format!(
-                            "{STOP_BATCH}The page changed while the recipes were running. Fetch again."
-                        ));
-                    }
+            match pinned.get(page_id) {
+                Some(href) if *href != start => {
+                    return Err(format!(
+                        "{STOP_BATCH}The page changed while the recipes were running. Fetch again."
+                    ));
                 }
-                _ => *pinned = Some((page_id.to_owned(), start.clone())),
+                Some(_) => {}
+                None => {
+                    pinned.insert(page_id.to_owned(), start.clone());
+                }
             }
         }
         // Only the allowed sites that contain the host this recipe starts on count; a recipe can
@@ -255,7 +258,7 @@ impl BrowserSession {
         let read = cdp
             .read_tables(&session)
             .map_err(|e| e.to_string())
-            .and_then(|raw| pick_table(raw, title, merge));
+            .and_then(|raw| pick_table(raw, title, merge, follow));
         // Every run ends on the page it started from, so the next recipe starts there too.
         let restored = cdp.go_back(&session, links.len(), &start);
         // A failed restoration takes precedence: the batch must stop before the next recipe
@@ -268,7 +271,7 @@ impl BrowserSession {
     /// Forgets the page a batch started from; the next run pins its own.
     pub fn unpin(&self) {
         if let Ok(mut pinned) = self.pinned.lock() {
-            *pinned = None;
+            pinned.clear();
         }
     }
 
@@ -306,22 +309,50 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
 /// a page often has one table per kind of account, all laid out the same way. The first table
 /// is taken whole; of the others the first `header_rows` rows (the title and the headings) are
 /// left out, so they do not show up as rows that were skipped.
+///
+/// With `follow`, exactly one table must match (the heading), and the rows of every table after
+/// it that has the same number of columns are added: a page laid out as a heading table and then
+/// one small table per holding.
 fn pick_table(
     raw: Vec<Vec<Vec<String>>>,
     title: &str,
     merge: Option<usize>,
+    follow: bool,
 ) -> Result<Table, String> {
     // Cells keep their line breaks and no-break spaces; the title is compared as plain words.
     let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let title = words(title);
-    let mut matching: Vec<Vec<Vec<String>>> = raw
-        .into_iter()
-        .filter(|rows| {
-            rows.first()
-                .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
-                .is_some_and(|cell| words(cell).starts_with(&title))
-        })
-        .collect();
+    let matches_title = |rows: &Vec<Vec<String>>| {
+        rows.first()
+            .and_then(|row| row.iter().find(|c| !c.trim().is_empty()))
+            .is_some_and(|cell| words(cell).starts_with(&title))
+    };
+    if follow {
+        let heads: Vec<usize> = (0..raw.len()).filter(|&i| matches_title(&raw[i])).collect();
+        let head = match heads.as_slice() {
+            [] => {
+                return Err("No table on the page starts with the recipe's table title.".to_owned());
+            }
+            [one] => *one,
+            many => {
+                return Err(format!(
+                    "{} tables on the page start with the recipe's table title; make the title more specific.",
+                    many.len()
+                ));
+            }
+        };
+        let columns = |rows: &Vec<Vec<String>>| rows.iter().map(Vec::len).max().unwrap_or(0);
+        let width = columns(&raw[head]);
+        let mut rows = raw[head].clone();
+        for table in &raw[head + 1..] {
+            if columns(table) == width {
+                rows.extend(table.iter().cloned());
+            }
+        }
+        return tabular::from_rows(rows).map_err(|e| e.to_string());
+    }
+    let mut matching: Vec<Vec<Vec<String>>> =
+        raw.into_iter().filter(|rows| matches_title(rows)).collect();
     let rows = match (matching.len(), merge) {
         (0, _) => {
             return Err("No table on the page starts with the recipe's table title.".to_owned());
@@ -341,6 +372,12 @@ fn pick_table(
         }
     };
     tabular::from_rows(rows).map_err(|e| e.to_string())
+}
+
+/// For the tests of the presets: the table a recipe would read from these tables.
+#[cfg(test)]
+pub fn pick_table_for_test(raw: Vec<Vec<Vec<String>>>, title: &str, follow: bool) -> Table {
+    pick_table(raw, title, None, follow).unwrap()
 }
 
 /// The profile folder is chosen by the user on their own computer, but it must
@@ -397,7 +434,7 @@ mod tests {
     fn the_table_is_picked_by_the_start_of_its_first_cell() {
         let raw = vec![rows("Menu"), rows("Stocks (cash/taxable)"), rows("Funds")];
 
-        let table = pick_table(raw, " Stocks (", None).unwrap();
+        let table = pick_table(raw, " Stocks (", None, false).unwrap();
 
         assert_eq!(table.rows[0][0], "Stocks (cash/taxable)");
     }
@@ -406,16 +443,21 @@ mod tests {
     fn line_breaks_and_no_break_spaces_in_the_first_cell_do_not_hide_the_title() {
         let raw = vec![rows("Menu"), rows("Stocks\n(cash/\u{a0}taxable)")];
 
-        let table = pick_table(raw, "Stocks (cash/ taxable)", None).unwrap();
+        let table = pick_table(raw, "Stocks (cash/ taxable)", None, false).unwrap();
 
         assert_eq!(table.rows[0][0], "Stocks\n(cash/\u{a0}taxable)");
     }
 
     #[test]
     fn no_match_and_several_matches_are_errors() {
-        assert!(pick_table(vec![rows("Menu")], "Stocks", None).is_err());
-        let error =
-            pick_table(vec![rows("Stocks A"), rows("Stocks B")], "Stocks", None).unwrap_err();
+        assert!(pick_table(vec![rows("Menu")], "Stocks", None, false).is_err());
+        let error = pick_table(
+            vec![rows("Stocks A"), rows("Stocks B")],
+            "Stocks",
+            None,
+            false,
+        )
+        .unwrap_err();
         assert!(error.starts_with("2 tables"));
     }
 
@@ -455,8 +497,8 @@ mod tests {
         ];
 
         // Several match: an error unless the recipe asks for all of them.
-        assert!(pick_table(raw.clone(), "Stocks (", None).is_err());
-        let merged = pick_table(raw, "Stocks (", Some(2)).unwrap();
+        assert!(pick_table(raw.clone(), "Stocks (", None, false).is_err());
+        let merged = pick_table(raw, "Stocks (", Some(2), false).unwrap();
 
         // The first table whole, the second without its title and heading rows.
         let first_cells: Vec<&str> = merged.rows.iter().map(|r| r[0].as_str()).collect();
@@ -464,5 +506,31 @@ mod tests {
             first_cells,
             vec!["Stocks (taxable)", "Quantity", "A", "1", "B", "1"]
         );
+    }
+
+    #[test]
+    fn the_tables_after_a_heading_table_are_its_rows() {
+        let one_row =
+            |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>()];
+        let raw = vec![
+            one_row(&["Total", "1"]),
+            one_row(&["Code / Name", "Account", "Quantity"]),
+            one_row(&["Search"]),
+            one_row(&["A", "Taxable", "10"]),
+            one_row(&["B", "Taxable", "20"]),
+            one_row(&["Footer", "x"]),
+        ];
+
+        let table = pick_table(raw.clone(), "Code", None, true).unwrap();
+
+        // The heading, then every later table with three columns (the one-column and
+        // two-column tables between and after are not rows).
+        let first: Vec<&str> = table.rows.iter().map(|r| r[0].as_str()).collect();
+        assert_eq!(first, vec!["Code / Name", "A", "B"]);
+        // Without the title, or with two heading tables, it is an error as before.
+        assert!(pick_table(raw.clone(), "Nope", None, true).is_err());
+        let mut twice = raw;
+        twice.push(one_row(&["Code / Name 2", "Account", "Quantity"]));
+        assert!(pick_table(twice, "Code", None, true).is_err());
     }
 }
