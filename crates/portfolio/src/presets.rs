@@ -171,16 +171,16 @@ const PRESETS: &[Preset] = &[
     // heading row, a holding is one visible row: the kind, name, account type, units, cost, price,
     // and a cell with the evaluation (first line) and the profit. The page also has a summary
     // table by kind with hidden detail rows, which does not start with the same cells. Only the
-    // units and the price are read, and the value is the units times the price per 10,000 units
-    // (investment trusts; a stock row would be valued wrongly, so only trusts are covered);
-    // "9,999円" and "9,999口" are numbers with a unit. The page shows amounts in yen; a holding in a
+    // evaluation (first number of its cell) and the units are read, not the price: the price is
+    // per 10,000 units for a trust but per share for a stock, and the table holds both kinds, so
+    // the value is taken from the evaluation column; "9,999円" and "9,999口" are numbers with a unit. The page shows amounts in yen; a holding in a
     // foreign currency is not covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
     // button), and the page shows no count to check them against (its total is in a hidden row,
     // which is not read), so the person checks the rows shown before applying them.
     Preset {
         id: "rakuten-all",
         label: "Rakuten Securities: all holdings",
-        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (units x price per 10,000 units). Only investment trusts in yen are covered, not stocks or holdings in a foreign currency.",
+        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (evaluation and units held). Only holdings in yen are covered, not holdings in a foreign currency such as foreign stocks.",
         links: &["保有商品一覧-すべて"],
         menu: None,
         table_starts_with: "種別 銘柄 口座",
@@ -192,16 +192,16 @@ const PRESETS: &[Preset] = &[
         layout: Layout {
             source: "Rakuten",
             name_column: 1,
-            value_column: 3,
-            price_column: Some(5),
-            price_unit: 10_000,
+            value_column: 6,
+            price_column: None,
+            price_unit: 1,
             price_part: None,
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
             value_row: 0,
             loose_numbers: true,
-            quantity_column: None,
+            quantity_column: Some(3),
             max_records: None,
         },
     },
