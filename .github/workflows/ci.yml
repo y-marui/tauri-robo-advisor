@@ -84,6 +84,9 @@ jobs:
           node-version: "24"
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: "false"
       - run: npm ci
       - run: npx tsc --noEmit
       - run: cargo fmt --all --check
@@ -103,6 +106,9 @@ jobs:
           node-version: "24"
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: "false"
       - run: npm ci
       - run: npm test
       - run: mkdir -p dist
@@ -121,6 +127,9 @@ jobs:
           node-version: "24"
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y $TAURI_LINUX_DEPS
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: "false"
       - run: npm ci
       - run: npm run tauri build -- --no-bundle
 
