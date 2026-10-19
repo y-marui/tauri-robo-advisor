@@ -59,7 +59,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
               {},
               h("th", {}, t("Name")),
               h("th", {}, t("Product")),
-              h("th", {}, t("Value ({currency})", { currency })),
+              h("th", {}, currency === "" ? t("Value") : t("Value ({currency})", { currency })),
               h("th", {}, ""),
             ),
           ),
@@ -83,11 +83,13 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
   }
 
   if (plan.unmatched.length > 0) {
-    const candidates = view.portfolio.products.filter((p) => p.currency === currency);
+    // An empty currency means "the product's own": any product can be linked, and its own
+    // currency is shown next to its name.
+    const candidates = view.portfolio.products.filter((p) => currency === "" || p.currency === currency);
     // Every row needs its own option elements: appending one element to a second
     // select would move it out of the first.
     const optionsFor = (): HTMLOptionElement[] =>
-      candidates.map((p) => h("option", { value: String(p.id) }, p.name));
+      candidates.map((p) => h("option", { value: String(p.id) }, currency === "" ? `${p.name} (${p.currency})` : p.name));
     parts.push(
       h("p", { class: "note" }, t("Link each name to a product. The choice is remembered.")),
       ...plan.unmatched.map((row) => {
@@ -105,12 +107,14 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
         return h(
           "div",
           { class: "add-row" },
-          h("span", {}, `${row.name} (${yen(row.value)} ${currency})`),
+          h("span", {}, `${row.name} (${yen(row.value)}${currency === "" ? "" : ` ${currency}`})`),
           select,
           link,
         );
       }),
-      candidates.length === 0 ? h("p", { class: "note" }, t("Add a {currency} product first.", { currency })) : null,
+      candidates.length === 0
+        ? h("p", { class: "note" }, currency === "" ? t("Add a product first.") : t("Add a {currency} product first.", { currency }))
+        : null,
     );
   }
 

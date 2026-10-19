@@ -171,6 +171,7 @@ export const MESSAGES = {
   "Linked to a product that is not in {currency}, so they are left out: {names}": {
     ja: "{currency} 建てでない商品に対応づけられているため、除外します: {names}",
   },
+  "Add a product first.": { ja: "先に商品を追加してください。" },
   "Value ({currency})": { ja: "評価額 ({currency})" },
   "No JPY market, so these could not be valued and are left out: {names}": {
     ja: "円の市場がなく評価できないため、除外します: {names}",
