@@ -390,20 +390,17 @@ fn pick_table(
     merge: Option<usize>,
     follow: bool,
 ) -> Result<Table, String> {
-    // Cells keep their line breaks and no-break spaces; the title is compared as plain words.
-    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let title = words(title);
-    // The title is compared with the start of the first row read as one line (its non-empty cells
-    // joined by a space), so a page whose tables all begin with the same cell can be told apart by
-    // the cells that follow. A title that fits in the first cell matches as it always did.
+    // Cells keep their line breaks and no-break spaces, and a heading may be broken into lines
+    // where the page was written with a line break (or not, depending on how the text is read), so
+    // the title is compared without any whitespace at all.
+    let squash = |text: &str| text.split_whitespace().collect::<String>();
+    let title = squash(title);
+    // The title is compared with the start of the first row read as one line (its cells one after
+    // the other), so a page whose tables all begin with the same cell can be told apart by the
+    // cells that follow. A title that fits in the first cell matches as it always did.
     let matches_title = |rows: &Vec<Vec<String>>| {
         rows.first().is_some_and(|row| {
-            let line = row
-                .iter()
-                .filter(|c| !c.trim().is_empty())
-                .map(|c| words(c))
-                .collect::<Vec<_>>()
-                .join(" ");
+            let line: String = row.iter().map(|c| squash(c)).collect();
             line.starts_with(&title)
         })
     };
@@ -542,6 +539,25 @@ mod tests {
         // Empty cells are left out when the row is read as one line.
         let table = pick_table(raw, "Name Units", None, false).unwrap();
         assert_eq!(table.rows[0].len(), 3);
+    }
+
+    #[test]
+    fn whitespace_inside_a_heading_does_not_matter_to_the_title() {
+        let raw = vec![vec![vec![
+            "Name".to_owned(),
+            "Account\nType".to_owned(),
+            "Price (yen)\u{a0}Change".to_owned(),
+        ]]];
+
+        for title in [
+            "Name Account Type Price (yen) Change",
+            "NameAccountTypePrice(yen)Change",
+        ] {
+            assert!(
+                pick_table(raw.clone(), title, None, false).is_ok(),
+                "{title}"
+            );
+        }
     }
 
     #[test]
