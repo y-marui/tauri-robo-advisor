@@ -571,7 +571,12 @@ impl AppState {
                 None => unknown.push(site),
             }
         }
-        let mut result = self.browser.open_login_pages(&known)?;
+        // Nothing to open: the browser is not needed, and the unknown sites are still reported.
+        let mut result = if known.is_empty() {
+            crate::browser_session::LoginPages::default()
+        } else {
+            self.browser.open_login_pages(&known)?
+        };
         result.unknown = unknown;
         Ok(result)
     }
@@ -1825,12 +1830,22 @@ mod tests {
     }
 
     #[test]
-    fn opening_the_login_pages_needs_the_browser_and_reports_unknown_sites() {
+    fn opening_the_login_pages_needs_the_browser_only_when_there_is_one_to_open() {
         let (state, main, _, _, _) = recipe_state("login");
-        // No recipe names a site: there is nothing to open, but the browser is still needed.
-        let error = state.open_login_pages().unwrap_err();
-        assert!(error.contains("Open the browser first"), "{error}");
+        // No recipe names a site: nothing to open, and no browser is needed.
+        let result = state.open_login_pages().unwrap();
+        assert!(
+            result.opened.is_empty() && result.already_open.is_empty() && result.unknown.is_empty()
+        );
 
+        // A site without a known login page is reported, again without the browser.
+        let mut recipe = domestic_recipe(main);
+        recipe.start_site = "unknown.example".to_owned();
+        state.apply(Edit::SetRecipe { recipe }).unwrap();
+        let result = state.open_login_pages().unwrap();
+        assert_eq!(result.unknown, vec!["unknown.example".to_owned()]);
+
+        // A site with a login page needs the browser.
         for preset in portfolio::presets() {
             state
                 .apply(Edit::AddPresetRecipe {
