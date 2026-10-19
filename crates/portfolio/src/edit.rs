@@ -4,8 +4,8 @@ use serde::Deserialize;
 use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
-    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Funding,
-    Holding, ImportMapping, Portfolio, Product, ProductId, ProductTargeting, Recipe,
+    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Holding,
+    ImportMapping, Portfolio, Product, ProductId, ProductTargeting, Recipe,
 };
 
 /// One user action. The frontend sends the intent and Rust validates it, assigns
@@ -72,7 +72,6 @@ pub enum Edit {
         name: Option<String>,
         kind: Option<AccountKind>,
         sellable: Option<bool>,
-        funding: Option<Funding>,
         rounding_unit: Option<Decimal>,
     },
     SetTradable {
@@ -576,11 +575,6 @@ impl Portfolio {
                     // forfeit tax-free room.
                     sellable: kind != AccountKind::Nisa,
                     tradable: None,
-                    funding: if kind == AccountKind::Points {
-                        Funding::Points
-                    } else {
-                        Funding::Cash
-                    },
                     rounding_unit: Decimal::ONE,
                 });
             }
@@ -589,7 +583,6 @@ impl Portfolio {
                 name: new_name,
                 kind,
                 sellable,
-                funding,
                 rounding_unit,
             } => {
                 let new_name = new_name.map(|n| name(&n, "account")).transpose()?;
@@ -609,9 +602,6 @@ impl Portfolio {
                 }
                 if let Some(s) = sellable {
                     account.sellable = s;
-                }
-                if let Some(f) = funding {
-                    account.funding = f;
                 }
                 if let Some(u) = rounding_unit {
                     account.rounding_unit = u;

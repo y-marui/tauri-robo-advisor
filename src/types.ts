@@ -10,7 +10,6 @@ export type AccountKind =
   | "crypto"
   | "deposit"
   | "other";
-export type Funding = "cash" | "points";
 
 export interface Category {
   id: number;
@@ -35,7 +34,6 @@ export interface Account {
   sellable: boolean;
   /** `null` means the account can buy any product. */
   tradable: number[] | null;
-  funding: Funding;
   rounding_unit: string;
 }
 
@@ -185,7 +183,6 @@ export type Edit =
       name?: string;
       kind?: AccountKind;
       sellable?: boolean;
-      funding?: Funding;
       rounding_unit?: string;
     }
   | { type: "set_tradable"; id: number; products: number[] | null }

@@ -34,7 +34,16 @@ export function recipesPanel(ctx: Context): Panel {
   noAccountNote.hidden = true;
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
+  /** The account to start from for a preset: the one its recipe already has, else none ("---"). */
+  const accountOfPreset = (): string => {
+    const preset = presets.find((p) => p.id === presetSelect.value);
+    const existing = current?.portfolio.recipes.find(
+      (r) => preset !== undefined && (r.name === preset.label || r.name.startsWith(`${preset.label} (`)),
+    );
+    return existing === undefined ? "" : String(existing.account);
+  };
   const showPresetNote = (): void => {
+    presetAccount.value = accountOfPreset();
     const description = presets.find((p) => p.id === presetSelect.value)?.description;
     presetNote.textContent = description === undefined ? "" : t(description as MessageKey);
   };
@@ -373,10 +382,13 @@ export function recipesPanel(ctx: Context): Panel {
       if (accountsSignature !== presetAccountsSignature) {
         presetAccountsSignature = accountsSignature;
         const previous = presetAccount.value;
-        presetAccount.replaceChildren(...view.portfolio.accounts.map((a) => h("option", { value: String(a.id) }, a.name)));
+        presetAccount.replaceChildren(
+          h("option", { value: "" }, "---"),
+          ...view.portfolio.accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
+        );
         presetAccount.value = view.portfolio.accounts.some((a) => String(a.id) === previous)
           ? previous
-          : String(view.portfolio.accounts[0]?.id ?? "");
+          : accountOfPreset();
       }
       // An alias was linked or removed, or a recipe changed: show the plans again.
       if (hasRuns) {

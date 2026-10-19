@@ -205,12 +205,11 @@ fn aliases_are_idempotent_per_product_and_exclusive_across_products() {
 fn nisa_accounts_default_to_no_selling_and_points_accounts_to_points() {
     let mut p = Portfolio::default();
     let nisa = account(&mut p, "Tax-free", AccountKind::Nisa);
-    let points = account(&mut p, "Points", AccountKind::Points);
+    account(&mut p, "Points", AccountKind::Points);
     let taxable = account(&mut p, "Taxable", AccountKind::Taxable);
 
     let find = |id| p.accounts.iter().find(|a| a.id == id).unwrap();
     assert!(!find(nisa).sellable);
-    assert_eq!(find(points).funding, Funding::Points);
     assert!(find(taxable).sellable);
     assert_eq!(find(taxable).rounding_unit, dec!(1));
 }

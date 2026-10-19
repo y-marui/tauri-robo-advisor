@@ -26,7 +26,6 @@ export const MESSAGES = {
   "Weight": { ja: "比率" },
   "Type": { ja: "種別" },
   "Sellable": { ja: "売却可" },
-  "Funding": { ja: "原資" },
   "Rounding unit": { ja: "丸め単位" },
   "Can buy": { ja: "買える商品" },
   "Any product": { ja: "すべての商品" },
