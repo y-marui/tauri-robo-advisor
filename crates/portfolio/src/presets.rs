@@ -117,17 +117,19 @@ const PRESETS: &[Preset] = &[
         login_url: "https://www.sbisec.co.jp/ETGate",
         layout: sbi_layout(10_000),
     },
-    // Monex Securities, the page 保有残高: the top page after logging in links to it with a plain
-    // link on the same host. Every table of the page begins with the same heading cell (name), so
-    // the title runs over the first cells of the heading row to pick the investment trust table.
-    // It is a heading row and then one row per holding: name, account type, price, a cell for the
-    // one more column, units, cost, evaluation, profit, and a last column. Only the evaluation
-    // and the units are read: the evaluation from its column, the units recorded next to it.
+    // Monex Securities, the page 保有残高・口座管理. The page the person lands on after logging in
+    // links to it with a plain same-host link, 残高照会 (the other links to the page there are
+    // hidden menu entries or have the same text more than once). Every table of the page begins
+    // with the same heading cell (name), so the title runs over the first cells of the heading row
+    // to pick the investment trust table. It is a heading row and then one row per holding: name,
+    // account type, price, one more column, units, cost, evaluation, profit, and a last column.
+    // Only the evaluation and the units are read: the evaluation from its column, the units
+    // recorded next to it.
     Preset {
         id: "monex-funds",
         label: "Monex Securities: investment trusts",
-        description: "Starts from the top page of Monex Securities (after logging in): follows \"保有残高\" and reads the investment trust table (evaluation and units held).",
-        links: &["保有残高"],
+        description: "Starts from the top page of Monex Securities (after logging in): follows \"残高照会\" and reads the investment trust table (evaluation and units held).",
+        links: &["残高照会"],
         menu: None,
         table_starts_with: "銘柄 口座区分預り区分 基準価額（円）前日比 分配金の取扱い 保有数（口）",
         allowed_sites: &["monex.co.jp"],
