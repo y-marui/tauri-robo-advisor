@@ -1442,3 +1442,30 @@ fn a_name_becomes_a_product_with_its_alias_in_one_step_or_not_at_all() {
     }
     assert_eq!(p, before);
 }
+
+#[test]
+fn the_presets_say_what_identifies_their_recipe() {
+    let (mut p, _, _, acc) = sample();
+    for info in presets() {
+        apply(
+            &mut p,
+            Edit::AddPresetRecipe {
+                preset: info.id.to_owned(),
+                account: acc,
+            },
+        );
+        let recipe = p
+            .recipes
+            .iter()
+            .find(|r| {
+                r.table_starts_with == info.table_starts_with
+                    && r.mapping.source == info.source
+                    && r.links
+                        .iter()
+                        .map(|l| l.text.as_str())
+                        .eq(info.links.iter().copied())
+            })
+            .unwrap_or_else(|| panic!("{}", info.id));
+        assert_eq!(recipe.account, acc);
+    }
+}

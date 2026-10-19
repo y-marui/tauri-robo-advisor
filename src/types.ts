@@ -108,6 +108,10 @@ export interface PresetInfo {
   id: string;
   label: string;
   description: string;
+  /** What identifies the recipe of the preset (the same fields the backend matches on). */
+  table_starts_with: string;
+  source: string;
+  links: string[];
 }
 
 export interface Settings {
