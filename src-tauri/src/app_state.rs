@@ -2101,6 +2101,92 @@ mod tests {
     }
 
     #[test]
+    fn the_rakuten_funds_preset_reads_the_outer_table_whose_cells_hold_small_tables() {
+        // A made-up page with the layout of the real one: the holdings are one table whose
+        // amount cells hold small tables, so it is an outer table; the small tables are leaf
+        // tables of their own (an amount alone, no name). After the heading row a holding is a
+        // data row and a note row.
+        let (state, main, _, _, _) = recipe_state("rakuten");
+        state
+            .apply(Edit::AddPresetRecipe {
+                preset: "rakuten-funds".to_owned(),
+                account: main,
+            })
+            .unwrap();
+        let recipe = state.view().unwrap().recipes[0].recipe.clone();
+        assert_eq!(recipe.start_site, "rakuten-sec.co.jp");
+        assert_eq!(recipe.allowed_sites, vec!["rakuten-sec.co.jp".to_owned()]);
+        assert_eq!(recipe.links.len(), 1);
+        assert!(recipe.links[0].menu.is_none());
+        assert_eq!(browser::link_text_allowed(&recipe.links[0].text), Ok(()));
+
+        let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
+        let heading = {
+            let mut cells = vec![recipe.table_starts_with.as_str()];
+            cells.resize(9, "");
+            row(&cells)
+        };
+        let holding = |name: &str, units: &str, value: &str| {
+            vec![
+                row(&[
+                    "",
+                    name,
+                    "Taxable",
+                    units,
+                    "5,000.00 円\n6,000 円",
+                    "10,000 円\n+5 円",
+                    value,
+                    "+1,000 円",
+                    "x",
+                ]),
+                row(&["", "Note", "", "", "", "", "", "", ""]),
+            ]
+        };
+        let mut holdings = vec![heading];
+        holdings.extend(holding("Alpha Fund", "5,000 口", "6,000 円\n+100 円"));
+        holdings.extend(holding("Beta Fund", "1,500 口", "3,000 円\n-50 円"));
+        let page = browser::PageTables {
+            leaf: vec![
+                vec![row(&["6,000 円"])],
+                vec![row(&["+1,000 円"])],
+                vec![row(&["Total", "9,000 円"])],
+            ],
+            outer: vec![vec![row(&["Menu", "Other"])], holdings],
+        };
+
+        let table = crate::browser_session::pick_page_table_for_test(
+            page,
+            &recipe.table_starts_with,
+            recipe.following_tables,
+        );
+        let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
+
+        assert_eq!(result.skipped, vec![]);
+        let got: Vec<(String, String, String)> = result
+            .rows
+            .iter()
+            .map(|r| {
+                (
+                    r.name.clone(),
+                    r.value.to_string(),
+                    r.quantity.map_or(String::new(), |q| q.to_string()),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "Alpha Fund".to_owned(),
+                    "6000".to_owned(),
+                    "5000".to_owned()
+                ),
+                ("Beta Fund".to_owned(), "3000".to_owned(), "1500".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
     fn a_preset_recipe_is_run_from_the_current_preset_and_an_unknown_one_fails_alone() {
         let (state, main, other, _, _) = recipe_state("preset-ref");
         state

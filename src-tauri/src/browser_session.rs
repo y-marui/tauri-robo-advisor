@@ -148,6 +148,7 @@ impl BrowserSession {
         let raw = cdp.read_tables(&session).map_err(|e| e.to_string())?;
 
         let tables: Vec<Table> = raw
+            .into_all()
             .into_iter()
             .filter_map(|rows| tabular::from_rows(rows).ok())
             .collect();
@@ -300,7 +301,7 @@ impl BrowserSession {
         let read = cdp
             .read_tables(&session)
             .map_err(|e| e.to_string())
-            .and_then(|raw| pick_table(raw, title, merge, follow));
+            .and_then(|page| pick_table_in_page(page, title, merge, follow));
         // Every run ends on the page it started from, so the next recipe starts there too. After a
         // click there is no way back, and the next recipe starts from the page that was reached.
         let restored = if clicked {
@@ -374,6 +375,42 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
         .map_err(|_| "The data is temporarily unavailable.".to_owned())
 }
 
+/// Picks the table from the tables of a page. The tables that hold no other table are asked
+/// first; only when none of them starts with the title, the outer tables (those that hold small
+/// tables in their cells) are. So a page that was readable before is read exactly as before. The
+/// two groups together are cut at the limit, and a page that reaches it may be missing tables.
+fn pick_table_in_page(
+    page: browser::PageTables,
+    title: &str,
+    merge: Option<usize>,
+    follow: bool,
+) -> Result<Table, String> {
+    if follow && page.len() >= browser::MAX_TABLES {
+        return Err("The page has too many tables to be sure the whole list was read.".to_owned());
+    }
+    let title_words = squash(title);
+    let in_leaf = page.leaf.iter().any(|t| title_matches(t, &title_words));
+    let raw = if in_leaf { page.leaf } else { page.outer };
+    pick_table(raw, title, merge, follow)
+}
+
+/// Cells keep their line breaks and no-break spaces, and a heading may be broken into lines where
+/// the page was written with a line break (or not, depending on how the text is read), so text is
+/// compared without any whitespace at all.
+fn squash(text: &str) -> String {
+    text.split_whitespace().collect::<String>()
+}
+
+/// Whether the start of the first row, read as one line (its cells one after the other), is
+/// `title` (already squashed). So a page whose tables all begin with the same cell can be told
+/// apart by the cells that follow. A title that fits in the first cell matches as it always did.
+fn title_matches(rows: &[Vec<String>], title: &str) -> bool {
+    rows.first().is_some_and(|row| {
+        let line: String = row.iter().map(|c| squash(c)).collect();
+        line.starts_with(title)
+    })
+}
+
 /// The table whose first cell starts with `title`. By default exactly one must match (more
 /// than one, or none, is an error: the recipe should name the table clearly). With
 /// `merge: Some(header_rows)` every matching table is read and their rows are put together:
@@ -390,20 +427,8 @@ fn pick_table(
     merge: Option<usize>,
     follow: bool,
 ) -> Result<Table, String> {
-    // Cells keep their line breaks and no-break spaces, and a heading may be broken into lines
-    // where the page was written with a line break (or not, depending on how the text is read), so
-    // the title is compared without any whitespace at all.
-    let squash = |text: &str| text.split_whitespace().collect::<String>();
     let title = squash(title);
-    // The title is compared with the start of the first row read as one line (its cells one after
-    // the other), so a page whose tables all begin with the same cell can be told apart by the
-    // cells that follow. A title that fits in the first cell matches as it always did.
-    let matches_title = |rows: &Vec<Vec<String>>| {
-        rows.first().is_some_and(|row| {
-            let line: String = row.iter().map(|c| squash(c)).collect();
-            line.starts_with(&title)
-        })
-    };
+    let matches_title = |rows: &Vec<Vec<String>>| title_matches(rows, &title);
     if follow {
         // The rows come from the tables after the heading: if the page was cut off at the limit,
         // holdings may be missing, and a result that is applied would delete them.
@@ -462,6 +487,13 @@ fn pick_table(
 #[cfg(test)]
 pub fn pick_table_for_test(raw: Vec<Vec<Vec<String>>>, title: &str, follow: bool) -> Table {
     pick_table(raw, title, None, follow).unwrap()
+}
+
+/// For the tests of the presets: the table a recipe would read from the two groups of tables of a
+/// page.
+#[cfg(test)]
+pub fn pick_page_table_for_test(page: browser::PageTables, title: &str, follow: bool) -> Table {
+    pick_table_in_page(page, title, None, follow).unwrap()
 }
 
 /// The profile folder is chosen by the user on their own computer, but it must
@@ -539,6 +571,55 @@ mod tests {
         // Empty cells are left out when the row is read as one line.
         let table = pick_table(raw, "Name Units", None, false).unwrap();
         assert_eq!(table.rows[0].len(), 3);
+    }
+
+    #[test]
+    fn an_outer_table_is_read_only_when_no_table_without_tables_in_it_matches() {
+        let page = |leaf: Vec<Vec<Vec<String>>>, outer: Vec<Vec<Vec<String>>>| {
+            browser::PageTables { leaf, outer }
+        };
+        let leaf = vec![rows("Name"), rows("Amount")];
+        // The small table inside the outer table's cell is a leaf table of its own and is
+        // not read as the holdings.
+        let outer = vec![vec![
+            vec!["Name".to_owned(), "Units".to_owned()],
+            vec!["A".to_owned(), "1".to_owned()],
+        ]];
+
+        // A table that holds no table and matches wins, as it always did.
+        let table =
+            pick_table_in_page(page(leaf.clone(), outer.clone()), "Name", None, false).unwrap();
+        assert_eq!(table.rows.last().unwrap()[0], "a");
+        // Only when none matches is an outer table asked.
+        let table = pick_table_in_page(
+            page(vec![rows("Amount")], outer.clone()),
+            "Name Units",
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(table.rows.last().unwrap()[0], "A");
+        // No match in either group is the same error as before.
+        assert!(
+            pick_table_in_page(page(vec![rows("Amount")], outer), "Nope", None, false).is_err()
+        );
+    }
+
+    #[test]
+    fn the_two_groups_together_are_held_to_the_table_limit_for_following_tables() {
+        let one_row =
+            |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>()];
+        let mut leaf = vec![one_row(&["Code", "Account"])];
+        while leaf.len() < browser::MAX_TABLES - 1 {
+            leaf.push(one_row(&["A", "Taxable"]));
+        }
+        let page = |outer: Vec<Vec<Vec<String>>>| browser::PageTables {
+            leaf: leaf.clone(),
+            outer,
+        };
+
+        assert!(pick_table_in_page(page(vec![]), "Code", None, true).is_ok());
+        assert!(pick_table_in_page(page(vec![one_row(&["X"])]), "Code", None, true).is_err());
     }
 
     #[test]

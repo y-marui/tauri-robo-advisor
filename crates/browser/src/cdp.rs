@@ -21,8 +21,13 @@ const MAX_ROWS: usize = 5_000;
 const MAX_COLUMNS: usize = 200;
 const MAX_CELL_CHARS: usize = 1_000;
 
-/// The one script that is ever run in a page. Tables that contain other tables
-/// are layout, not data, and are left out.
+/// The one script that is ever run in a page. It returns two groups of tables. The first are
+/// the tables that contain no other table. The second are the outer tables: a table that holds
+/// tables in its cells, none of which holds a table of its own (a layout that puts a small table
+/// in a cell for an amount). A table that holds deeper nesting is page layout and is left out.
+/// The tables inside an outer table are still in the first group; which group is used is decided
+/// by the table title (see the caller). Both groups together are cut at `MAX_TABLES`; up to 20 of
+/// those are kept for the outer tables, so many leaf tables cannot crowd them out.
 pub(crate) const READ_TABLES: &str = r#"(() => {
   // Line breaks and no-break spaces inside a cell are kept: they separate its values.
   const clean = (t) => String(t ?? '').split('\n').map((l) => l.replace(/[ \t\r\f\v\u2000-\u200a\u3000]+/g, ' ').trim()).filter((l) => l !== '').join('\n').slice(0, 1000);
@@ -34,26 +39,71 @@ pub(crate) const READ_TABLES: &str = r#"(() => {
     }
     return true;
   };
-  return [...document.querySelectorAll('table')]
-    .filter((table) => !table.querySelector('table') && shown(table))
-    .slice(0, 200)
-    .map((table) =>
-      [...table.rows].filter(shown).slice(0, 5000).map((row) => {
-        const cells = [];
-        for (const cell of [...row.cells].filter(shown).slice(0, 200)) {
-          cells.push(clean(cell.innerText ?? cell.textContent));
-          for (let i = 1; i < Math.min(cell.colSpan || 1, 200); i++) cells.push('');
-        }
-        return cells.slice(0, 200);
-      }));
+  const read = (table) =>
+    [...table.rows].filter(shown).slice(0, 5000).map((row) => {
+      const cells = [];
+      for (const cell of [...row.cells].filter(shown).slice(0, 200)) {
+        cells.push(clean(cell.innerText ?? cell.textContent));
+        for (let i = 1; i < Math.min(cell.colSpan || 1, 200); i++) cells.push('');
+      }
+      return cells.slice(0, 200);
+    });
+  const all = [...document.querySelectorAll('table')].filter(shown);
+  const leaf = all.filter((table) => !table.querySelector('table'));
+  const outer = all.filter((table) => {
+    const inner = [...table.querySelectorAll('table')];
+    return inner.length > 0 && inner.every((t) => !t.querySelector('table'));
+  });
+  // The outer tables are few, so they are taken first and the leaf tables get what is left of the
+  // limit: a page with very many leaf tables (one small table per amount) must not leave no room
+  // for the outer table that holds them.
+  const outerRead = outer.slice(0, 20);
+  const first = leaf.slice(0, 200 - outerRead.length);
+  return { leaf: first.map(read), outer: outerRead.map(read) };
 })()"#;
 
+/// The tables of a page, in two groups (see `READ_TABLES`). Together they hold at most
+/// `MAX_TABLES`; a page that reaches the limit may have more, which were left out.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PageTables {
+    /// Tables that contain no table.
+    pub leaf: Vec<Vec<Vec<String>>>,
+    /// Tables that contain tables (one level deep) in their cells.
+    pub outer: Vec<Vec<Vec<String>>>,
+}
+
+impl PageTables {
+    pub fn len(&self) -> usize {
+        self.leaf.len() + self.outer.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Every table, the leaf ones first.
+    pub fn into_all(self) -> Vec<Vec<Vec<String>>> {
+        let mut all = self.leaf;
+        all.extend(self.outer);
+        all
+    }
+}
+
 /// Checks the shape of what the page returned instead of trusting it.
-fn parse_tables(value: &Value) -> Result<Vec<Vec<Vec<String>>>, Error> {
-    let tables = value.as_array().ok_or(Error::Script)?;
-    if tables.len() > MAX_TABLES {
+fn parse_tables(value: &Value) -> Result<PageTables, Error> {
+    let group = |name: &str| parse_group(value.get(name).ok_or(Error::Script)?);
+    let page = PageTables {
+        leaf: group("leaf")?,
+        outer: group("outer")?,
+    };
+    if page.len() > MAX_TABLES {
         return Err(Error::Script);
     }
+    Ok(page)
+}
+
+fn parse_group(value: &Value) -> Result<Vec<Vec<Vec<String>>>, Error> {
+    let tables = value.as_array().ok_or(Error::Script)?;
     tables
         .iter()
         .map(|table| {
@@ -213,10 +263,10 @@ impl Cdp {
             .ok_or(Error::NoPage)
     }
 
-    /// Reads every table of the page as rows of text (with spans filled in so
+    /// Reads the tables of the page (both groups, see `PageTables`) as rows of text (with spans filled in so
     /// that columns line up). The script is fixed and only reads the page; no
     /// caller-provided code is ever run in it, and nothing is clicked or typed.
-    pub fn read_tables(&mut self, session: &str) -> Result<Vec<Vec<Vec<String>>>, Error> {
+    pub fn read_tables(&mut self, session: &str) -> Result<PageTables, Error> {
         let value = self.evaluate(session, READ_TABLES)?;
         parse_tables(&value)
     }

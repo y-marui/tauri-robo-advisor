@@ -277,7 +277,12 @@ impl ImportMapping {
 /// (never a domain that many unrelated owners share, such as a blog or hosting service), added
 /// here after the company and its pages were checked. A list of what to refuse could never be
 /// complete, so only these are accepted; adding a site is a change to this list and its review.
-pub const VETTED_SITES: &[&str] = &["sbisec.co.jp", "monex.co.jp", "connect-sec.co.jp"];
+pub const VETTED_SITES: &[&str] = &[
+    "sbisec.co.jp",
+    "monex.co.jp",
+    "connect-sec.co.jp",
+    "rakuten-sec.co.jp",
+];
 const MAX_ALLOWED_SITES: usize = 3;
 
 /// Checks the allowed sites of a recipe: each must be one of the vetted sites (trimmed and

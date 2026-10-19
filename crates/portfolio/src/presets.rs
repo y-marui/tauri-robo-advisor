@@ -149,6 +149,41 @@ const PRESETS: &[Preset] = &[
             max_records: None,
         },
     },
+    // Rakuten Securities, the investment trust holdings list: the page of the member site that
+    // the top page links to with a plain link on the same host (the pages of the company are
+    // spread over several hosts). The holdings are one table whose cells hold small tables (the
+    // amounts), so it is an outer table (see `browser::PageTables`) and is found by its heading
+    // cells. After a heading row, a holding is two rows: the data row (a cell for a mark, name,
+    // account type, units, cost, price, evaluation, profit, and a last cell; the cost, the price,
+    // and the evaluation cells hold two lines, and the first line is the amount) and a row with a
+    // note. Only the evaluation (first line of its cell) and the units are read: "9,999円",
+    // "9,999口" are numbers with a unit.
+    Preset {
+        id: "rakuten-funds",
+        label: "Rakuten Securities: investment trusts",
+        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-投資信託\" and reads the investment trust holdings table (evaluation and units held).",
+        links: &["保有商品一覧-投資信託"],
+        menu: None,
+        table_starts_with: "注文 ファンド 分配金 コース (変更)",
+        allowed_sites: &["rakuten-sec.co.jp"],
+        start_site: "rakuten-sec.co.jp",
+        following_tables: false,
+        login_url: "https://www.rakuten-sec.co.jp/",
+        layout: Layout {
+            source: "Rakuten",
+            name_column: 1,
+            value_column: 6,
+            price_column: None,
+            price_unit: 1,
+            header_rows: 1,
+            rows_per_record: 2,
+            name_row: 0,
+            value_row: 0,
+            loose_numbers: true,
+            quantity_column: Some(3),
+            max_records: None,
+        },
+    },
     // Daiwa Connect Securities: its pages work by form posts and script links, so the menu entry
     // 国内株式 > 保有銘柄一覧 is clicked (the site is vetted) and the page must then show the heading
     // 現物取引保有銘柄一覧. The page is a heading
