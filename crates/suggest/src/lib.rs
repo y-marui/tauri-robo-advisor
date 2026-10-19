@@ -24,7 +24,9 @@ mod types;
 pub use account_balance::{AccountBalance, CategoryBalance, ProductBalance, account_balance};
 pub use engine::suggest;
 pub use error::Error;
-pub use overview::{AccountOverview, CategoryOverview, HoldingOverview, Overview, overview};
+pub use overview::{
+    AccountOverview, CategoryOverview, GroupOverview, HoldingOverview, Overview, overview,
+};
 pub use types::{CategoryLine, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 
 #[cfg(test)]

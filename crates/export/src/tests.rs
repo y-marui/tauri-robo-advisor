@@ -138,6 +138,7 @@ fn every_expected_file_is_produced() {
         names,
         [
             "holdings.csv",
+            "groups.csv",
             "categories.csv",
             "products.csv",
             "aliases.csv",
@@ -171,21 +172,21 @@ fn holdings_have_one_row_per_holding_with_jpy_values_and_shares() {
 
     assert_eq!(
         rows[0],
-        "account_id,account,account_kind,product_id,product,category_id,category,currency,value,quantity,price,price_unit,relative_weight,value_jpy,share_of_total"
+        "account_id,account,account_kind,product_id,product,category_id,category,group_id,group,currency,value,quantity,price,price_unit,relative_weight,value_jpy,share_of_total"
     );
     assert_eq!(rows.len(), 4);
     // Total = 500,000 + 150,000 (1,000 USD at 150) + 100,000 = 750,000.
     assert_eq!(
         rows[1],
-        "6,Main,taxable,3,Stock Fund,1,Stocks,JPY,500000,,,1,,500000,0.666667"
+        "6,Main,taxable,3,Stock Fund,1,Stocks,,,JPY,500000,,,1,,500000,0.666667"
     );
     assert_eq!(
         rows[2],
-        "6,Main,taxable,4,US Fund,1,Stocks,USD,1000,,,1,,150000,0.2"
+        "6,Main,taxable,4,US Fund,1,Stocks,,,USD,1000,,,1,,150000,0.2"
     );
     assert_eq!(
         rows[3],
-        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,JPY,100000,,,1,,100000,0.133333"
+        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,,,JPY,100000,,,1,,100000,0.133333"
     );
 }
 
@@ -196,9 +197,9 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["categories.csv"]),
         [
-            "category_id,category,target_weight,product_targeting,value_jpy,current_share",
-            "1,Stocks,0.75,free,650000,0.866667",
-            "2,Bonds,0.25,free,100000,0.133333",
+            "category_id,category,group_id,group,target_weight,product_targeting,value_jpy,current_share",
+            "1,Stocks,,,0.75,free,650000,0.866667",
+            "2,Bonds,,,0.25,free,100000,0.133333",
         ]
     );
     assert_eq!(
@@ -365,7 +366,7 @@ fn a_name_with_a_comma_or_quote_stays_in_one_cell() {
 
     assert_eq!(
         lines(&f["categories.csv"])[1],
-        "1,\"Stocks, \"\"core\"\"\",1,free,0,"
+        "1,\"Stocks, \"\"core\"\"\",,,1,free,0,"
     );
 }
 
@@ -403,7 +404,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
             .iter()
             .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,,"))
     );
-    assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,0.75,free,,");
+    assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,free,,");
     assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,taxable,true,1,all,");
     // Shares need the total, which is also unknown.
     assert!(holdings[1].ends_with(",500000,"));
@@ -506,4 +507,43 @@ fn astronomical_values_do_not_panic() {
 
     // The total overflows, so shares are empty instead of wrong.
     assert!(lines(&f["holdings.csv"])[1].ends_with(","));
+}
+
+#[test]
+fn groups_are_exported_with_the_sum_of_their_targets_and_ungrouped_categories_stay_empty() {
+    let mut p = sample();
+    apply(
+        &mut p,
+        Edit::AddGroup {
+            name: "Risk, assets".to_owned(),
+        },
+    );
+    let group = p.groups[0].id;
+    let stocks = p.categories[0].id;
+    apply(
+        &mut p,
+        Edit::SetCategoryGroup {
+            category: stocks,
+            group: Some(group),
+        },
+    );
+
+    let f = files(&p);
+
+    assert_eq!(
+        lines(&f["groups.csv"]),
+        [
+            "group_id,group,target_weight,value_jpy,current_share",
+            "8,\"Risk, assets\",0.75,650000,0.866667"
+        ]
+    );
+    assert_eq!(
+        lines(&f["categories.csv"])[1],
+        "1,Stocks,8,\"Risk, assets\",0.75,free,650000,0.866667"
+    );
+    assert_eq!(
+        lines(&f["categories.csv"])[2],
+        "2,Bonds,,,0.25,free,100000,0.133333"
+    );
+    assert!(lines(&f["holdings.csv"])[1].contains(",1,Stocks,8,\"Risk, assets\",JPY,"));
 }

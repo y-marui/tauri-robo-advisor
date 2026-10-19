@@ -294,6 +294,15 @@ button.danger.armed {
 .swatch-3 { fill: var(--c3); background: var(--c3); }
 .swatch-4 { fill: var(--c4); background: var(--c4); }
 .swatch-5 { fill: var(--c5); background: var(--c5); }
+.swatch-none { fill: var(--c5); background: var(--c5); }
+
+.dot.shade-1 { opacity: 0.8; }
+.dot.shade-2 { opacity: 0.6; }
+.dot.shade-3 { opacity: 0.45; }
+
+.legend-group > .legend {
+  margin-left: 1.4rem;
+}
 
 .pie-row {
   display: flex;
@@ -371,6 +380,13 @@ tr.group td {
   color: var(--strong);
   background: var(--field);
   border-top: 1px solid var(--line);
+}
+
+/* A group's subtotal row sits above the rows of its categories. */
+tr.group-main th,
+tr.group-main td {
+  background: var(--line);
+  border-top: 2px solid var(--text);
 }
 
 /* The account tabs of the right panel. */

@@ -3,6 +3,7 @@ import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import type { Overview, PortfolioView } from "../types.ts";
+import { groupEntries, groupName } from "./groups.ts";
 import { categoryName, suggestionBox, yen } from "./suggestion.ts";
 
 // The balance charts and the overall suggestion. Every figure comes from Rust.
@@ -63,50 +64,121 @@ function barChart(view: PortfolioView, overview: Overview): SVGElement {
   return chart;
 }
 
-/** The share of each category in the whole, as a pie. */
-function pieChart(overview: Overview): SVGElement {
-  const slices = overview.categories
-    .map((c, index) => ({ share: Number(c.current_share), index }))
-    .filter((s) => s.share > 0);
+interface Slice {
+  share: number;
+  className: string;
+  opacity: number;
+}
+
+/** One ring of sectors between two radii. A single full sector is drawn as two halves. */
+function ring(slices: Slice[], inner: number, outer: number): SVGElement[] {
   const sum = slices.reduce((acc, s) => acc + s.share, 0);
+  const shapes: SVGElement[] = [];
+  const point = (radius: number, a: number) =>
+    `${(radius * Math.cos(a)).toFixed(3)} ${(radius * Math.sin(a)).toFixed(3)}`;
+  let angle = -Math.PI / 2;
+  const visible = slices.filter((s) => s.share > 0);
+  for (const slice of visible) {
+    const span = visible.length === 1 ? 2 * Math.PI - 0.0001 : (slice.share / sum) * 2 * Math.PI;
+    const next = angle + span;
+    const large = span > Math.PI ? 1 : 0;
+    const d =
+      `M ${point(outer, angle)} A ${outer} ${outer} 0 ${large} 1 ${point(outer, next)} ` +
+      `L ${point(inner, next)} A ${inner} ${inner} 0 ${large} 0 ${point(inner, angle)} Z`;
+    shapes.push(svg("path", { d, class: slice.className, "fill-opacity": slice.opacity }));
+    angle = next;
+  }
+  return shapes;
+}
+
+/** A dot's opacity as a class (inline styles are not allowed by the CSP). */
+const shadeClass = (opacity: number): string => (opacity >= 1 ? "" : `shade-${Math.round((1 - opacity) * 5)}`);
+
+/** The colors of the categories: those of a group share its color, in fading shades. */
+function categorySlices(view: PortfolioView, overview: Overview): { slices: Slice[]; groupSlices: Slice[] } {
+  const share = (id: number) =>
+    Number(overview.categories.find((c) => c.category === id)?.current_share ?? 0);
+  const entries = groupEntries(view);
+  if (entries.length === 0) {
+    return {
+      slices: overview.categories.map((c, index) => ({
+        share: Number(c.current_share),
+        className: `swatch-${index % PALETTE_SIZE}`,
+        opacity: 1,
+      })),
+      groupSlices: [],
+    };
+  }
+  const slices: Slice[] = [];
+  const groupSlices: Slice[] = [];
+  entries.forEach((entry, index) => {
+    const className = entry.id === null ? "swatch-none" : `swatch-${index % PALETTE_SIZE}`;
+    const row = overview.groups.find((g) => g.group === entry.id);
+    groupSlices.push({ share: Number(row?.current_share ?? 0), className, opacity: 1 });
+    entry.categories.forEach((category, j) => {
+      slices.push({ share: share(category.id), className, opacity: Math.max(0.45, 1 - 0.2 * j) });
+    });
+  });
+  return { slices, groupSlices };
+}
+
+/** The composition as a doughnut: the groups inside (when there are any), the categories outside. */
+function doughnutChart(view: PortfolioView, overview: Overview): SVGElement {
+  const { slices, groupSlices } = categorySlices(view, overview);
   const chart = svg("svg", {
     viewBox: "-50 -50 100 100",
     class: "chart pie",
     role: "img",
-    "aria-label": t("Composition"),
+    "aria-label": groupSlices.length > 0 ? t("Groups (inner) and categories (outer)") : t("Composition"),
   });
-  if (slices.length === 1) {
-    chart.append(svg("circle", { r: 48, class: `swatch-${(slices[0]?.index ?? 0) % PALETTE_SIZE}` }));
+  if (groupSlices.length === 0) {
+    chart.append(...ring(slices, 0, 48));
     return chart;
   }
-  let angle = -Math.PI / 2;
-  for (const slice of slices) {
-    const next = angle + (slice.share / sum) * 2 * Math.PI;
-    const large = next - angle > Math.PI ? 1 : 0;
-    const point = (a: number) => `${(48 * Math.cos(a)).toFixed(3)} ${(48 * Math.sin(a)).toFixed(3)}`;
-    chart.append(
-      svg("path", {
-        d: `M 0 0 L ${point(angle)} A 48 48 0 ${large} 1 ${point(next)} Z`,
-        class: `swatch-${slice.index % PALETTE_SIZE}`,
-      }),
-    );
-    angle = next;
-  }
+  chart.append(...ring(groupSlices, 22, 33), ...ring(slices, 35, 48));
   return chart;
 }
 
 function legend(view: PortfolioView, overview: Overview): HTMLElement {
+  const categoryItem = (id: number, className: string, opacity: number): HTMLElement => {
+    const row = overview.categories.find((c) => c.category === id);
+    return h(
+      "li",
+      {},
+      h("span", { class: `dot ${className} ${shadeClass(opacity)}`, "aria-hidden": "true" }),
+      `${categoryName(view, id)} ${row ? `${percent(row.current_share)} / ${percent(row.target_share)}` : ""}`,
+    );
+  };
+  const entries = groupEntries(view);
+  if (entries.length === 0) {
+    return h(
+      "ul",
+      { class: "legend" },
+      ...overview.categories.map((row, index) => categoryItem(row.category, `swatch-${index % PALETTE_SIZE}`, 1)),
+    );
+  }
   return h(
     "ul",
     { class: "legend" },
-    ...overview.categories.map((row, index) =>
-      h(
+    ...entries.map((entry, index) => {
+      const className = entry.id === null ? "swatch-none" : `swatch-${index % PALETTE_SIZE}`;
+      const row = overview.groups.find((g) => g.group === entry.id);
+      return h(
         "li",
-        {},
-        h("span", { class: `dot swatch-${index % PALETTE_SIZE}`, "aria-hidden": "true" }),
-        `${categoryName(view, row.category)} ${percent(row.current_share)} / ${percent(row.target_share)}`,
-      ),
-    ),
+        { class: "legend-group" },
+        h("span", { class: `dot ${className}`, "aria-hidden": "true" }),
+        h(
+          "strong",
+          {},
+          `${groupName(view, entry.id)} ${row ? `${percent(row.current_share)} / ${percent(row.target_share)}` : ""}`,
+        ),
+        h(
+          "ul",
+          { class: "legend" },
+          ...entry.categories.map((c, j) => categoryItem(c.id, className, Math.max(0.45, 1 - 0.2 * j))),
+        ),
+      );
+    }),
   );
 }
 
@@ -180,7 +252,7 @@ export function overviewPanel(ctx: Context): Panel {
         ),
         barChart(view, overview),
         h("h3", {}, t("Composition")),
-        h("div", { class: "pie-row" }, pieChart(overview), legend(view, overview)),
+        h("div", { class: "pie-row" }, doughnutChart(view, overview), legend(view, overview)),
         h("p", { class: "muted" }, `${t("Total")}: ${yen(overview.total)}`),
       );
     },
