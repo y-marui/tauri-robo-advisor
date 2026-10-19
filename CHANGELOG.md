@@ -4,7 +4,7 @@
 
 ### Changed
 
-- CI caches the Rust build with `Swatinem/rust-cache` in the lint, test, and build jobs, so dependencies are not recompiled when `Cargo.lock` is unchanged (#62).
+- CI caches the Rust build with `actions/cache` in the lint, test, and build jobs, so dependencies are not recompiled when `Cargo.lock` is unchanged (#62).
 - The funding of an account (cash or points) is gone: nothing used it, and it does not matter which a purchase is paid with. The Accounts card, the data, and `accounts.csv` no longer have it. Schema version 7; an older app refuses such a file.
 - The account choice of a preset starts on the account that its recipe already has, or on "---" (nothing chosen); the add button needs a real account.
 - The rounding unit of a new account now defaults to 1 yen (it was 1,000 yen), since many investment trusts can be bought in 1 yen steps. Existing accounts keep the unit they have, and it can still be changed per account.
