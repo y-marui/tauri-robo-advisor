@@ -13,6 +13,7 @@
 
 ### Added
 
+- Menu clicks for vetted sites (#54): the Daiwa Connect Securities presets (domestic stocks, cash) now open their page themselves after the login, by clicking the menu entry (国内株式 > 保有銘柄一覧, 資産照会 > 取引余力・預り資産). A recipe link can carry a `menu` group and an expected `heading`; only a script link of a vetted site that is the single match for both texts is clicked, the texts follow the same word rules as any link, the first heading of the page it opens must match or the batch stops, and there is no going back. `connect-sec.co.jp` is a vetted site. Schema 9. An existing saved Daiwa recipe has no menu link; add the preset again and remove the old one.
 - Daiwa Connect Securities cash preset (#37): open the page 取引余力・預り資産 after logging in and fetch; the yen balance (金銭残高) is read and linked by name to a yen product. A mapping can now limit the records read from the top of a table (`max_records`), so the valuations and the total that follow the balance are not read. Schema version 6.
 - Reorder accounts: up and down buttons in the Accounts card move an account in the list (`MoveAccount`); the order is used by the tabs, the tables, and the choices. At an end nothing changes.
 - Edit names and categories in the holdings table: the name of a category (in its heading row), and the name and the category of a product (in its row) can be changed in place; changing the category moves the product to its new group. The same edits existed in the Categories and Products cards further down, which were hard to find.

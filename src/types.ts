@@ -79,6 +79,10 @@ export interface FetchLink {
   text: string;
   /** Where the link goes (without the parts that change per visit); filled in the first time. */
   reference: string | null;
+  /** A menu entry the page handles by its own script (vetted sites only): the text of its menu group. It is clicked, not followed. */
+  menu?: string | null;
+  /** For a menu entry: the first heading the page must show after the click. */
+  heading?: string | null;
 }
 
 /** A saved way to fetch one table after the login. */

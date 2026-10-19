@@ -27,6 +27,12 @@ struct Layout {
     max_records: Option<usize>,
 }
 
+/// The click on a menu entry that a preset makes (see `FetchLink::menu`).
+struct Menu {
+    group: &'static str,
+    heading: &'static str,
+}
+
 /// A recipe for a known page, waiting for an account.
 pub struct Preset {
     pub id: &'static str,
@@ -34,6 +40,9 @@ pub struct Preset {
     /// Where to start, and what it reads, in a sentence for the screen.
     pub description: &'static str,
     links: &'static [&'static str],
+    /// For a site that works by script menus: the menu group of the one link (which is then clicked,
+    /// not followed) and the heading the page must show after the click.
+    menu: Option<Menu>,
     table_starts_with: &'static str,
     /// Sites whose other hosts the recipe may follow links to (the pages of one company are often
     /// spread over several hosts).
@@ -87,6 +96,7 @@ const PRESETS: &[Preset] = &[
         label: "SBI Securities: domestic stocks",
         description: "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the domestic stock tables of every account type (quantity x current price).",
         links: &["保有資産評価"],
+        menu: None,
         table_starts_with: "株式（現物/",
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
@@ -99,6 +109,7 @@ const PRESETS: &[Preset] = &[
         label: "SBI Securities: investment trusts",
         description: "Starts from the top page of SBI Securities (after logging in): follows \"保有資産評価\" and reads the investment trust tables of every account type (units x price per 10,000 units).",
         links: &["保有資産評価"],
+        menu: None,
         table_starts_with: "投資信託（金額/",
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
@@ -106,18 +117,23 @@ const PRESETS: &[Preset] = &[
         login_url: "https://www.sbisec.co.jp/ETGate",
         layout: sbi_layout(10_000),
     },
-    // Daiwa Connect Securities: its pages work by form posts and script links, so no link can be
-    // followed: the list of holdings (現物取引保有銘柄一覧) is opened by hand. It is a heading
+    // Daiwa Connect Securities: its pages work by form posts and script links, so the menu entry
+    // 国内株式 > 保有銘柄一覧 is clicked (the site is vetted) and the page must then show the heading
+    // 現物取引保有銘柄一覧. The page is a heading
     // table (code / name, account, quantity, sellable quantity, cost, price, evaluation, profit,
     // trade) and then one one-row table per holding. The evaluation is read from its column and
     // the quantity is recorded next to it ("10株", "1,234円": numbers with a unit).
     Preset {
         id: "daiwa-connect-stocks",
         label: "Daiwa Connect Securities: domestic stocks",
-        description: "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).",
-        links: &[],
+        description: "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (evaluation and quantity).",
+        links: &["保有銘柄一覧"],
+        menu: Some(Menu {
+            group: "国内株式",
+            heading: "現物取引保有銘柄一覧",
+        }),
         table_starts_with: "コード",
-        allowed_sites: &[],
+        allowed_sites: &["connect-sec.co.jp"],
         start_site: "connect-sec.co.jp",
         following_tables: true,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
@@ -136,17 +152,22 @@ const PRESETS: &[Preset] = &[
             max_records: None,
         },
     },
-    // Daiwa Connect Securities, the page 取引余力・預り資産 (opened by hand): a table of label and
+    // Daiwa Connect Securities, the page 取引余力・預り資産 (the menu entry 資産照会 > 取引余力・預り資産
+    // is clicked, and the page must show that heading): a table of label and
     // amount pairs, 金銭残高 (the yen balance) first and then the valuations of stocks, funds, and
     // foreign stocks and the total, and a second table (buyable and withdrawable amounts). Only
     // the first pair is read; its label is the name to link to a product (a yen product).
     Preset {
         id: "daiwa-connect-cash",
         label: "Daiwa Connect Securities: cash (yen)",
-        description: "Open the page 取引余力・預り資産 of Daiwa Connect Securities after logging in, then fetch: the yen balance (金銭残高) is read.",
-        links: &[],
+        description: "After logging in to Daiwa Connect Securities, clicks the menu 資産照会 > 取引余力・預り資産 and reads the yen balance (金銭残高).",
+        links: &["取引余力・預り資産"],
+        menu: Some(Menu {
+            group: "資産照会",
+            heading: "取引余力・預り資産",
+        }),
         table_starts_with: "金銭残高",
-        allowed_sites: &[],
+        allowed_sites: &["connect-sec.co.jp"],
         start_site: "connect-sec.co.jp",
         following_tables: false,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
@@ -217,6 +238,8 @@ impl Preset {
                 .map(|text| FetchLink {
                     text: (*text).to_owned(),
                     reference: None,
+                    menu: self.menu.as_ref().map(|m| m.group.to_owned()),
+                    heading: self.menu.as_ref().map(|m| m.heading.to_owned()),
                 })
                 .collect(),
             table_starts_with: self.table_starts_with.to_owned(),

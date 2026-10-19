@@ -740,3 +740,199 @@ fn a_login_page_is_opened_by_going_to_its_address_only() {
         "one call: nothing is attached, evaluated, clicked, or typed"
     );
 }
+
+// ---- clicking a menu entry ---------------------------------------------------
+
+fn menu_page(
+    origin: &str,
+    answer: &str,
+    after_origin: &str,
+    heading: &str,
+) -> (Endpoint, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            json!(origin),
+            json!("https://h.example/old"),
+            json!(answer),
+            probe(false, "complete"),
+            json!(true),
+            json!(after_origin),
+            json!("/web/App"),
+            json!(heading),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    (endpoint, log)
+}
+
+fn vetted() -> Vec<String> {
+    vec!["example.co.jp".to_owned()]
+}
+
+#[test]
+fn a_menu_entry_is_clicked_waited_for_and_its_heading_checked() {
+    let (endpoint, log) = menu_page(
+        "https://trade.example.co.jp",
+        "clicked",
+        "https://trade.example.co.jp",
+        "Holdings list",
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    cdp.click_menu_link(&session, "Stocks", "Holdings", "Holdings list", &vetted())
+        .unwrap();
+
+    let scripts = log.lock().unwrap().clone();
+    assert_eq!(
+        scripts.len(),
+        8,
+        "site, mark, click, readiness, settle, site, address, heading"
+    );
+    assert!(scripts[1].contains("__roboAdvisorNav"));
+    assert!(
+        scripts[2].ends_with("(\"Stocks\", \"Holdings\", \"https://trade.example.co.jp\")"),
+        "the texts and the site are passed as JSON data: {}",
+        scripts[2]
+    );
+    assert!(scripts[2].contains("a.click()"));
+    assert_eq!(
+        scripts.iter().filter(|s| s.contains("a.click()")).count(),
+        1,
+        "exactly one click"
+    );
+}
+
+#[test]
+fn a_menu_click_is_refused_outside_the_vetted_sites_and_for_risky_texts() {
+    let (endpoint, log) = menu_page(
+        "https://trade.other.test",
+        "clicked",
+        "https://trade.other.test",
+        "Holdings list",
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.click_menu_link(&session, "Stocks", "Holdings", "Holdings list", &vetted()),
+        Err(Error::LinkRefused)
+    );
+    assert!(
+        !log.lock().unwrap().iter().any(|s| s.contains("a.click()")),
+        "nothing is clicked on a site that is not vetted"
+    );
+    assert_eq!(
+        cdp.click_menu_link(&session, "Stocks", "Holdings", "Holdings list", &[]),
+        Err(Error::LinkRefused)
+    );
+
+    for (group, text) in [
+        ("Stocks", "出金指示"),
+        ("Stocks", "買付注文"),
+        ("Stocks", "ログアウト"),
+        ("入出金", "入金口座表示"),
+        ("ログアウト", "Holdings"),
+        ("Stocks", ""),
+    ] {
+        let (endpoint, log) = menu_page(
+            "https://trade.example.co.jp",
+            "clicked",
+            "https://trade.example.co.jp",
+            "Holdings list",
+        );
+        let (mut cdp, session) = attached(&endpoint);
+        assert_eq!(
+            cdp.click_menu_link(&session, group, text, "Holdings list", &vetted()),
+            Err(Error::LinkRefused),
+            "{group} / {text}"
+        );
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "the page is not asked for a risky text: {group} / {text}"
+        );
+    }
+    // A heading that is empty or has control characters is not a usable check.
+    let (endpoint, _) = menu_page(
+        "https://trade.example.co.jp",
+        "clicked",
+        "https://trade.example.co.jp",
+        "",
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.click_menu_link(&session, "Stocks", "Holdings", " ", &vetted()),
+        Err(Error::LinkRefused)
+    );
+}
+
+#[test]
+fn a_menu_entry_that_is_missing_ambiguous_or_not_scripted_is_not_clicked() {
+    for (answer, expected) in [
+        ("none", Error::LinkNotFound),
+        ("gone", Error::LinkNotFound),
+        ("ambiguous", Error::LinkRefused),
+        ("refused", Error::LinkRefused),
+        ("something else", Error::LinkRefused),
+    ] {
+        let (endpoint, _) = menu_page(
+            "https://trade.example.co.jp",
+            answer,
+            "https://trade.example.co.jp",
+            "Holdings list",
+        );
+        let (mut cdp, session) = attached(&endpoint);
+        assert_eq!(
+            cdp.click_menu_link(&session, "Stocks", "Holdings", "Holdings list", &vetted()),
+            Err(expected),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
+fn the_page_after_a_menu_click_must_be_on_the_same_site_with_the_expected_heading() {
+    // The tab went to another site.
+    let (endpoint, _) = menu_page(
+        "https://trade.example.co.jp",
+        "clicked",
+        "https://elsewhere.test",
+        "Holdings list",
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.click_menu_link(&session, "Stocks", "Holdings", "Holdings list", &vetted()),
+        Err(Error::WrongPage)
+    );
+    // The heading is not the expected one: the batch must stop.
+    let (endpoint, _) = menu_page(
+        "https://trade.example.co.jp",
+        "clicked",
+        "https://trade.example.co.jp",
+        "Something else",
+    );
+    let (mut cdp, session) = attached(&endpoint);
+    assert_eq!(
+        cdp.click_menu_link(&session, "Stocks", "Holdings", "Holdings list", &vetted()),
+        Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn the_click_script_only_clicks_one_scripted_entry_of_the_named_group() {
+    let script = crate::links::CLICK_MENU;
+    // One entry, found by its group; nothing else is touched.
+    assert!(script.contains("hits.length > 1"));
+    assert!(script.contains("!scripted"));
+    assert!(script.contains("a.target !== '_self'"));
+    assert!(script.contains("hasAttribute('download')"));
+    assert_eq!(script.matches(".click()").count(), 1);
+    for word in [
+        "submit(",
+        ".value",
+        "dispatchEvent",
+        "fetch(",
+        "XMLHttpRequest",
+        "form",
+    ] {
+        assert!(!script.contains(word), "{word}");
+    }
+}

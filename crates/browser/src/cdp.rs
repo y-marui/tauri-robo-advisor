@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{Message, WebSocket};
 
-use crate::links::{self, FIND_LINKS, NAVIGATE};
+use crate::links::{self, CLICK_MENU, FIND_LINKS, FIRST_HEADING, NAVIGATE};
 use crate::{Endpoint, Error};
 
 /// How long one answer may take, and the largest message accepted.
@@ -318,6 +318,82 @@ impl Cdp {
             _ => return Err(Error::WrongPage),
         }
         Ok(followed)
+    }
+
+    /// Clicks one entry of the page's menu (`group` is the text of the heading link of its
+    /// group, `text` the entry), waits until the page it opens has loaded, and checks that the
+    /// first heading of that page is `heading`. This is for the vetted sites only: the page must
+    /// be on one of `sites` (the allowed sites that cover the host the recipe started on), the
+    /// entry must be a link that the page handles itself, and neither text may look like an order
+    /// or a money movement. A click runs the page's own script, which cannot be shown to only
+    /// navigate, so the heading is checked afterwards and the batch stops when it differs. The tab
+    /// is left where it is (a page that was posted cannot be restored by going back).
+    pub fn click_menu_link(
+        &mut self,
+        session: &str,
+        group: &str,
+        text: &str,
+        heading: &str,
+        sites: &[String],
+    ) -> Result<(), Error> {
+        links::link_text_allowed(group)?;
+        links::link_text_allowed(text)?;
+        let heading = heading.trim();
+        if heading.is_empty()
+            || heading.chars().count() > 60
+            || heading.chars().any(char::is_control)
+        {
+            return Err(Error::LinkRefused);
+        }
+        let origin = self
+            .evaluate(session, "location.origin")?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let within = links::https_host(&origin)
+            .is_some_and(|host| sites.iter().any(|site| links::host_within(&host, site)));
+        if !within {
+            return Err(Error::LinkRefused);
+        }
+        let mark = navigation_mark();
+        let before = self
+            .evaluate(
+                session,
+                &format!("(() => {{ window.__roboAdvisorNav = {mark}; return location.href; }})()"),
+            )?
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let group_json = serde_json::to_string(group.trim()).map_err(|_| Error::Script)?;
+        let text_json = serde_json::to_string(text.trim()).map_err(|_| Error::Script)?;
+        let origin_json = serde_json::to_string(&origin).map_err(|_| Error::Script)?;
+        let answer = self.evaluate(
+            session,
+            &format!("({CLICK_MENU})({group_json}, {text_json}, {origin_json})"),
+        )?;
+        match answer.as_str() {
+            Some("clicked") => {}
+            Some("none" | "gone") => return Err(Error::LinkNotFound),
+            _ => return Err(Error::LinkRefused),
+        }
+        self.wait_navigated(session, mark, &before)?;
+        let now = self.evaluate(session, "location.origin")?;
+        if now.as_str() != Some(origin.as_str()) {
+            return Err(Error::WrongPage);
+        }
+        let reached = self.evaluate(
+            session,
+            "location.pathname + location.search + location.hash",
+        )?;
+        match reached.as_str() {
+            Some(address) if links::address_allowed(address) => {}
+            _ => return Err(Error::WrongPage),
+        }
+        let first = self.evaluate(session, FIRST_HEADING)?;
+        if first.as_str() != Some(heading) {
+            return Err(Error::WrongPage);
+        }
+        Ok(())
     }
 
     /// Goes back `steps` pages in the tab's history, to the page a recipe started from,

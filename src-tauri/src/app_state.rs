@@ -1508,6 +1508,8 @@ mod tests {
             links: vec![FetchLink {
                 text: "List".to_owned(),
                 reference: None,
+                menu: None,
+                heading: None,
             }],
             ..domestic_recipe(main)
         };
@@ -1794,8 +1796,21 @@ mod tests {
             })
             .unwrap();
         let recipe = state.view().unwrap().portfolio.recipes[0].clone();
-        assert!(recipe.links.is_empty() && recipe.following_tables && !recipe.all_tables);
+        assert!(recipe.following_tables && !recipe.all_tables);
         assert_eq!(recipe.start_site, "connect-sec.co.jp");
+        // It opens the list of holdings by a click on its menu entry, and the texts pass the same
+        // rules as any link.
+        assert_eq!(recipe.links.len(), 1);
+        let link = &recipe.links[0];
+        assert!(link.menu.is_some() && link.heading.is_some());
+        assert_eq!(recipe.allowed_sites, vec!["connect-sec.co.jp".to_owned()]);
+        for text in [
+            link.text.as_str(),
+            link.menu.as_deref().unwrap(),
+            link.heading.as_deref().unwrap(),
+        ] {
+            assert_eq!(browser::link_text_allowed(text), Ok(()), "{text}");
+        }
 
         let table = crate::browser_session::pick_table_for_test(
             raw,
@@ -1889,7 +1904,17 @@ mod tests {
             })
             .unwrap();
         let recipe = state.view().unwrap().portfolio.recipes[0].clone();
-        assert!(recipe.links.is_empty() && !recipe.following_tables);
+        assert!(!recipe.following_tables);
+        assert_eq!(recipe.links.len(), 1);
+        let link = &recipe.links[0];
+        assert!(link.menu.is_some() && link.heading.is_some());
+        for text in [
+            link.text.as_str(),
+            link.menu.as_deref().unwrap(),
+            link.heading.as_deref().unwrap(),
+        ] {
+            assert_eq!(browser::link_text_allowed(text), Ok(()), "{text}");
+        }
 
         let table =
             crate::browser_session::pick_table_for_test(raw, &recipe.table_starts_with, false);
