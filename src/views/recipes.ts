@@ -1,4 +1,4 @@
-import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, listPresets, runRecipe, setLinkReference } from "../api.ts";
+import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -20,6 +20,7 @@ export function recipesPanel(ctx: Context): Panel {
   const pageSelect = h("select", { "aria-label": t("Page") });
   const refreshButton = h("button", { type: "button" }, t("Refresh pages"));
   const runButton = h("button", { type: "button" }, t("Fetch everything"));
+  const loginButton = h("button", { type: "button" }, t("Open the login pages"));
   const message = h("p", { class: "note", role: "status" });
   const attention = h("div", { class: "recipe-attention" });
   const results = h("div", { class: "recipe-results", "aria-live": "polite" });
@@ -280,6 +281,31 @@ export function recipesPanel(ctx: Context): Panel {
     );
   }
 
+  loginButton.addEventListener("click", () => {
+    loginButton.disabled = true;
+    openLoginPages()
+      .then(async (result) => {
+        await refreshPages();
+        const parts: string[] = [];
+        if (result.opened.length > 0) {
+          parts.push(t("Opened the login page of: {sites}. Log in by hand, then open the page you want.", { sites: result.opened.join(", ") }));
+        }
+        if (result.already_open.length > 0) {
+          parts.push(t("Already open: {sites}.", { sites: result.already_open.join(", ") }));
+        }
+        if (result.unknown.length > 0) {
+          parts.push(t("No login page is known for: {sites}.", { sites: result.unknown.join(", ") }));
+        }
+        if (parts.length === 0) {
+          parts.push(t("No recipe says which site it reads, so there is no login page to open."));
+        }
+        info(parts.join(" "));
+      })
+      .catch((error) => fail(String(error)))
+      .finally(() => {
+        loginButton.disabled = false;
+      });
+  });
   refreshButton.addEventListener("click", () => void refreshPages());
   runButton.addEventListener("click", () => void runAll());
 
@@ -322,7 +348,7 @@ export function recipesPanel(ctx: Context): Panel {
     list,
     h("div", { class: "add-row" }, presetSelect, presetAccount, presetAdd),
     presetNote,
-    h("div", { class: "add-row" }, pageSelect, refreshButton, runButton),
+    h("div", { class: "add-row" }, loginButton, pageSelect, refreshButton, runButton),
     message,
     attention,
     results,

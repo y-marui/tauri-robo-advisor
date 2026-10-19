@@ -170,6 +170,13 @@ fn fake_browser_logged(
                     }
                 }
                 "Browser.close" => json!({}),
+                "Target.createTarget" => {
+                    if let Some(log) = &log {
+                        let url = request["params"]["url"].as_str().unwrap_or("");
+                        log.lock().unwrap().push(format!("createTarget {url}"));
+                    }
+                    json!({"targetId": "new1"})
+                }
                 _ => {
                     let error =
                         json!({"id": id, "error": {"code": -32601, "message": "no\nsuch method"}});
@@ -715,5 +722,21 @@ fn a_link_to_another_host_of_an_allowed_site_is_followed_and_checked_on_arrival(
     assert_eq!(
         cdp.follow_link(&session, "口座(外貨建)", None, &sites),
         Err(Error::WrongPage)
+    );
+}
+
+#[test]
+fn a_login_page_is_opened_by_going_to_its_address_only() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(vec![json!(null)], false, Some(log.clone()));
+    let mut cdp = Cdp::connect(&endpoint).unwrap();
+
+    cdp.open_tab("https://www.example.co.jp/login.html")
+        .unwrap();
+
+    assert_eq!(
+        log.lock().unwrap().clone(),
+        vec!["createTarget https://www.example.co.jp/login.html".to_owned()],
+        "one call: nothing is attached, evaluated, clicked, or typed"
     );
 }

@@ -33,6 +33,17 @@ pub struct PageInfo {
     pub title: String,
 }
 
+/// What opening the login pages did.
+#[derive(Debug, Default, Serialize)]
+pub struct LoginPages {
+    /// Sites whose login page was opened in a new tab.
+    pub opened: Vec<String>,
+    /// Sites that already had a tab open, so nothing was opened for them.
+    pub already_open: Vec<String>,
+    /// Sites of recipes for which no login page is known.
+    pub unknown: Vec<String>,
+}
+
 /// One of several same-named links: what to save to find it again, and where it goes.
 #[derive(Debug, Serialize)]
 pub struct LinkChoiceView {
@@ -273,6 +284,30 @@ impl BrowserSession {
         if let Ok(mut pinned) = self.pinned.lock() {
             pinned.clear();
         }
+    }
+
+    /// Opens the login page of each given site in a new tab, unless a tab of that site is already
+    /// open. The browser only goes to the address; the person logs in by hand. Returns what was
+    /// opened and what was already there.
+    pub fn open_login_pages(&self, pages: &[(String, String)]) -> Result<LoginPages, String> {
+        let mut cdp = self.connect()?;
+        let open = cdp.pages().map_err(|e| e.to_string())?;
+        let mut result = LoginPages::default();
+        for (site, url) in pages {
+            let there = open
+                .iter()
+                .any(|p| host_of(&p.url).is_some_and(|host| browser::host_within(&host, site)));
+            if there {
+                result.already_open.push(site.clone());
+                continue;
+            }
+            if !browser::login_url_ok(url) {
+                return Err("A login page address is not acceptable.".to_owned());
+            }
+            cdp.open_tab(url).map_err(|e| e.to_string())?;
+            result.opened.push(site.clone());
+        }
+        Ok(result)
     }
 
     /// The table the user chose from the last fetch.

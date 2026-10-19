@@ -549,6 +549,38 @@ impl AppState {
         self.replace_recipe_if_unchanged(expected, new)
     }
 
+    /// Opens the login page of every site that a recipe reads from (the person logs in by hand),
+    /// unless a tab of that site is already open.
+    pub fn open_login_pages(&self) -> Result<crate::browser_session::LoginPages, String> {
+        let sites: Vec<String> = {
+            let guard = self.lock()?;
+            let portfolio = guard.as_ref().map_err(Clone::clone)?;
+            let mut sites: Vec<String> = Vec::new();
+            for recipe in &portfolio.recipes {
+                if !recipe.start_site.is_empty() && !sites.contains(&recipe.start_site) {
+                    sites.push(recipe.start_site.clone());
+                }
+            }
+            sites
+        };
+        let mut known = Vec::new();
+        let mut unknown = Vec::new();
+        for site in sites {
+            match portfolio::login_url_for(&site) {
+                Some(url) => known.push((site, url.to_owned())),
+                None => unknown.push(site),
+            }
+        }
+        // Nothing to open: the browser is not needed, and the unknown sites are still reported.
+        let mut result = if known.is_empty() {
+            crate::browser_session::LoginPages::default()
+        } else {
+            self.browser.open_login_pages(&known)?
+        };
+        result.unknown = unknown;
+        Ok(result)
+    }
+
     /// Follows the recipe's links in the browser, reads its table, and keeps the
     /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
     /// without a saved reference gets one now, so the same link is found next time.
@@ -1795,5 +1827,34 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn opening_the_login_pages_needs_the_browser_only_when_there_is_one_to_open() {
+        let (state, main, _, _, _) = recipe_state("login");
+        // No recipe names a site: nothing to open, and no browser is needed.
+        let result = state.open_login_pages().unwrap();
+        assert!(
+            result.opened.is_empty() && result.already_open.is_empty() && result.unknown.is_empty()
+        );
+
+        // A site without a known login page is reported, again without the browser.
+        let mut recipe = domestic_recipe(main);
+        recipe.start_site = "unknown.example".to_owned();
+        state.apply(Edit::SetRecipe { recipe }).unwrap();
+        let result = state.open_login_pages().unwrap();
+        assert_eq!(result.unknown, vec!["unknown.example".to_owned()]);
+
+        // A site with a login page needs the browser.
+        for preset in portfolio::presets() {
+            state
+                .apply(Edit::AddPresetRecipe {
+                    preset: preset.id.to_owned(),
+                    account: main,
+                })
+                .unwrap();
+        }
+        let error = state.open_login_pages().unwrap_err();
+        assert!(error.contains("Open the browser first"), "{error}");
     }
 }

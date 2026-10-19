@@ -302,6 +302,15 @@ export const MESSAGES = {
   "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).": {
     ja: "ログイン後に、大和コネクト証券の「現物取引保有銘柄一覧」を開いてから取得します。保有の各行（評価額と数量）を読みます。",
   },
+  "Open the login pages": { ja: "ログインのページを開く" },
+  "Opened the login page of: {sites}. Log in by hand, then open the page you want.": {
+    ja: "{sites} のログインのページを開きました。自分でログインしてから、読みたいページを開いてください。",
+  },
+  "Already open: {sites}.": { ja: "すでに開いています: {sites}。" },
+  "No login page is known for: {sites}.": { ja: "ログインのページが分かりません: {sites}。" },
+  "No recipe says which site it reads, so there is no login page to open.": {
+    ja: "どのサイトを読むかが決まったレシピがないので、開くログインのページがありません。",
+  },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },

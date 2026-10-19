@@ -1371,3 +1371,27 @@ fn allowed_sites_of_a_recipe_must_be_vetted_sites() {
     );
     assert_eq!(p, before);
 }
+
+#[test]
+fn every_login_page_is_a_plain_https_address_of_its_own_site() {
+    let pages = login_pages();
+    assert!(!pages.is_empty());
+    for (site, url) in &pages {
+        let host = url
+            .strip_prefix("https://")
+            .unwrap()
+            .split(['/', '?', '#'])
+            .next()
+            .unwrap();
+        assert!(
+            host == *site || host.ends_with(&format!(".{site}")),
+            "{url}"
+        );
+        assert!(
+            !url.contains(['@', ' ', '\\']) && !host.contains(':'),
+            "{url}"
+        );
+        assert_eq!(login_url_for(site), Some(*url));
+    }
+    assert_eq!(login_url_for("unknown.example"), None);
+}

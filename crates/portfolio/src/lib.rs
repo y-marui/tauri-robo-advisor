@@ -18,7 +18,7 @@ pub use edit::{Edit, HoldingInput};
 pub use error::{Error, Issue};
 pub use import::{ImportPlan, ImportRow, MatchedRow};
 pub use model::*;
-pub use presets::{PresetInfo, presets};
+pub use presets::{PresetInfo, login_pages, login_url_for, presets};
 
 #[cfg(test)]
 mod tests;
