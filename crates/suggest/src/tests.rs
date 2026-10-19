@@ -51,7 +51,21 @@ fn account(p: &mut Portfolio, name: &str, kind: AccountKind) -> AccountId {
             kind,
         },
     );
-    p.accounts.last().unwrap().id
+    let id = p.accounts.last().unwrap().id;
+    // These tests are written for accounts that buy in units of 1,000 yen (the default of a
+    // new account is 1 yen).
+    apply(
+        p,
+        Edit::UpdateAccount {
+            id,
+            name: None,
+            kind: None,
+            sellable: None,
+            funding: None,
+            rounding_unit: Some(dec!(1000)),
+        },
+    );
+    id
 }
 
 fn hold(p: &mut Portfolio, account: AccountId, product: ProductId, value: Decimal) {
