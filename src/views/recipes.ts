@@ -1,7 +1,7 @@
 import { applyFetchAll, browserPages, clearFetchRuns, fetchAllPlan, listPresets, runRecipe, setLinkReference } from "../api.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
-import { t } from "../i18n.ts";
+import { t, type MessageKey } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import type { BrowserPage, PortfolioView, PresetInfo, Recipe, RecipeRun } from "../types.ts";
 import { importPlanView } from "./import-plan.ts";
@@ -32,7 +32,8 @@ export function recipesPanel(ctx: Context): Panel {
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
   const showPresetNote = (): void => {
-    presetNote.textContent = presets.find((p) => p.id === presetSelect.value)?.description ?? "";
+    const description = presets.find((p) => p.id === presetSelect.value)?.description;
+    presetNote.textContent = description === undefined ? "" : t(description as MessageKey);
   };
   presetSelect.addEventListener("change", showPresetNote);
   presetAdd.addEventListener("click", () => {
@@ -46,7 +47,7 @@ export function recipesPanel(ctx: Context): Panel {
   void listPresets()
     .then((found) => {
       presets = found;
-      presetSelect.replaceChildren(...found.map((p) => h("option", { value: p.id }, p.label)));
+      presetSelect.replaceChildren(...found.map((p) => h("option", { value: p.id }, t(p.label as MessageKey))));
       showPresetNote();
     })
     .catch(() => undefined);

@@ -671,22 +671,35 @@ impl Portfolio {
                     .ok_or_else(|| Error::Invalid("that preset does not exist".to_owned()))?;
                 let mut recipe = preset.recipe(account);
                 let account_name = self.account(account)?.name.clone();
-                if self
-                    .recipes
-                    .iter()
-                    .any(|r| r.name == recipe.name && r.account != account)
-                {
-                    recipe.name = format!("{} ({})", recipe.name, account_name);
-                }
-                let recipe = recipe.validated(self)?;
-                match self.recipes.iter_mut().find(|r| r.name == recipe.name) {
-                    Some(existing) => *existing = recipe,
-                    None => {
-                        if self.recipes.len() >= MAX_RECIPES {
-                            return Err(Error::Invalid("too many recipes".to_owned()));
-                        }
-                        self.recipes.push(recipe);
+                // The same preset for the same account is found by what it does, not by its
+                // name (the name may have been suffixed, or changed by the user): it is replaced
+                // in place, so the account never gets two copies that would add up twice.
+                let same = self.recipes.iter().position(|r| {
+                    r.account == account
+                        && r.table_starts_with == recipe.table_starts_with
+                        && r.mapping.source == recipe.mapping.source
+                        && r.links
+                            .iter()
+                            .map(|l| &l.text)
+                            .eq(recipe.links.iter().map(|l| &l.text))
+                });
+                if let Some(index) = same {
+                    recipe.name = self.recipes[index].name.clone();
+                    self.recipes[index] = recipe.validated(self)?;
+                } else {
+                    if self.recipes.iter().any(|r| r.name == recipe.name) {
+                        recipe.name = format!("{} ({})", recipe.name, account_name);
                     }
+                    let recipe = recipe.validated(self)?;
+                    if self.recipes.iter().any(|r| r.name == recipe.name) {
+                        return Err(Error::Invalid(
+                            "a recipe with that name exists; rename or remove it first".to_owned(),
+                        ));
+                    }
+                    if self.recipes.len() >= MAX_RECIPES {
+                        return Err(Error::Invalid("too many recipes".to_owned()));
+                    }
+                    self.recipes.push(recipe);
                 }
             }
             Edit::RemoveRecipe { name } => {
