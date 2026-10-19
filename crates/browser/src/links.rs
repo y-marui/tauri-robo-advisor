@@ -546,9 +546,17 @@ pub(crate) fn parse_candidates(value: &serde_json::Value) -> Result<Vec<Candidat
 pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
   const rendered = (a) => { if (a.getClientRects().length === 0) return false; for (let e = a; e; e = e.parentElement) { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false; } return true; };
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
-  // A link whose address carries a user name, or an explicit port to another site, is not
-  // taken for the site it names: the URL API drops both from the origin.
-  const authority = (raw) => { const m = String(raw).trim().match(/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\/([^\/?#\\]*)/); return m ? m[1] : null; };
+  // A link to another site is trusted only when it is written out in full and in the plain form
+  // `https://host/...`: the URL API quietly drops a user name, a default port, extra slashes,
+  // back slashes, tabs and line breaks, so what is checked is the text as written.
+  const plainHttps = (raw, url) => {
+    const text = String(raw).trim();
+    if (/[\u0000-\u001f\\]/.test(text) || url.username !== '' || url.password !== '' || url.port !== '') return false;
+    const start = 'https://' + url.hostname;
+    if (text.slice(0, start.length).toLowerCase() !== start) return false;
+    const next = text.charAt(start.length);
+    return next === '' || next === '/' || next === '?' || next === '#';
+  };
   const seen = new Map();
   const shown = rendered;
   [...document.querySelectorAll('a')].forEach((a, i) => {
@@ -563,13 +571,9 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
       try {
         const url = new URL(raw, location.href);
         const web = url.protocol === 'https:' || url.protocol === 'http:';
-        const auth = authority(raw);
-        // A back slash can stand for a slash in an address, and tabs and line breaks are dropped by
-        // the URL API; both hide the authority from the pattern: such an address is never trusted.
-        const userInfo = raw.includes('\\') || /[\u0000-\u001f]/.test(raw.trim()) || url.username !== '' || url.password !== '' || (auth !== null && auth.includes('@'));
-        const explicitPort = url.port !== '' || (auth !== null && /:\d*$/.test(auth));
-        sameSite = web && !userInfo && url.origin === location.origin;
-        target = web && !userInfo && (url.origin === location.origin || !explicitPort) ? url.origin : '';
+        const own = web && url.origin === location.origin && url.username === '' && url.password === '';
+        sameSite = own;
+        target = own ? url.origin : (url.protocol === 'https:' && plainHttps(raw, url) ? url.origin : '');
         const full = url.pathname + url.search + url.hash;
         tooLong = full.length > 500;
         href = full.slice(0, 500);
@@ -589,9 +593,17 @@ pub(crate) const FIND_LINKS: &str = r#"((wanted) => {
 pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin, target) => {
   const rendered = (a) => { if (a.getClientRects().length === 0) return false; for (let e = a; e; e = e.parentElement) { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false; } return true; };
   const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
-  // A link whose address carries a user name, or an explicit port to another site, is not
-  // taken for the site it names: the URL API drops both from the origin.
-  const authority = (raw) => { const m = String(raw).trim().match(/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\/([^\/?#\\]*)/); return m ? m[1] : null; };
+  // A link to another site is trusted only when it is written out in full and in the plain form
+  // `https://host/...`: the URL API quietly drops a user name, a default port, extra slashes,
+  // back slashes, tabs and line breaks, so what is checked is the text as written.
+  const plainHttps = (raw, url) => {
+    const text = String(raw).trim();
+    if (/[\u0000-\u001f\\]/.test(text) || url.username !== '' || url.password !== '' || url.port !== '') return false;
+    const start = 'https://' + url.hostname;
+    if (text.slice(0, start.length).toLowerCase() !== start) return false;
+    const next = text.charAt(start.length);
+    return next === '' || next === '/' || next === '?' || next === '#';
+  };
   if (!origin || origin !== location.origin) return 'gone';
   const a = document.querySelectorAll('a')[index];
   if (!a || !rendered(a)) return 'gone';
@@ -599,9 +611,8 @@ pub(crate) const NAVIGATE: &str = r#"((wanted, index, expected, origin, target) 
   let url;
   const raw = a.getAttribute('href') ?? '';
   try { url = new URL(raw, location.href); } catch (e) { return 'gone'; }
-  const auth = authority(raw);
-  if (raw.includes('\\') || /[\u0000-\u001f]/.test(raw.trim()) || url.username !== '' || url.password !== '') return 'gone';
-  if (auth !== null && (auth.includes('@') || (url.origin !== location.origin && (url.port !== '' || /:\d*$/.test(auth))))) return 'gone';
+  if (url.username !== '' || url.password !== '') return 'gone';
+  if (url.origin !== location.origin && !(url.protocol === 'https:' && plainHttps(raw, url))) return 'gone';
   // The site the link goes to must be exactly the one the Rust side accepted.
   if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !target || url.origin !== target) return 'gone';
   if (url.pathname + url.search + url.hash !== expected) return 'gone';
