@@ -254,10 +254,18 @@ export interface HoldingOverview {
   share: string;
 }
 
+export interface AccountOverview {
+  account: number;
+  /** The value of the account's holdings in JPY. */
+  value: string;
+  share: string;
+}
+
 export interface Overview {
   total: string;
   categories: CategoryOverview[];
   holdings: HoldingOverview[];
+  accounts: AccountOverview[];
 }
 
 export type SuggestMode =

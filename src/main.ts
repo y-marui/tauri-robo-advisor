@@ -7,6 +7,7 @@ import { accountsPanel } from "./views/accounts.ts";
 import { bitflyerPanel } from "./views/bitflyer.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { dataFolderPanel } from "./views/data-folder.ts";
+import { importStepsPanel } from "./views/import-steps.ts";
 import { holdingsPanel } from "./views/holdings.ts";
 import { accountTabsPanel } from "./views/account-tabs.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
@@ -32,7 +33,26 @@ let panels: Panel[] = [];
 let status = h("p", { class: "status", role: "status" });
 let issues = h("div");
 let overviewRequest = 0;
-const DASHBOARD_PANELS = 3;
+
+type TabName = "holdings" | "import" | "settings";
+const TAB_NAMES: TabName[] = ["holdings", "import", "settings"];
+
+function readTab(): TabName {
+  try {
+    const saved = localStorage.getItem("tab");
+    return TAB_NAMES.find((name) => name === saved) ?? "holdings";
+  } catch {
+    return "holdings";
+  }
+}
+
+function saveTab(tab: TabName): void {
+  try {
+    localStorage.setItem("tab", tab);
+  } catch {
+    // Only a convenience.
+  }
+}
 
 function readLanguage(): string | null {
   try {
@@ -150,28 +170,98 @@ function build(): void {
 
   status = h("p", { class: "status", role: "status" });
   issues = h("div");
-  // The three dashboard panels come first (left, center, right), then the
-  // manual entry cards.
+  const overview = overviewPanel(context);
+  const holdingsTable = holdingsTablePanel(context);
+  const accountTabs = accountTabsPanel(context);
+  const importSteps = importStepsPanel(context);
+  const tableImport = tableImportPanel(context);
+  const recipes = recipesPanel(context);
+  const bitflyer = bitflyerPanel(context);
+  const categories = categoriesPanel(context);
+  const products = productsPanel(context);
+  const accounts = accountsPanel(context);
+  const holdingsEntry = holdingsPanel(context);
+  const settings = settingsPanel(context);
+  const dataFolder = dataFolderPanel(context);
   panels = [
-    overviewPanel(context),
-    holdingsTablePanel(context),
-    accountTabsPanel(context),
-    tableImportPanel(context),
-    recipesPanel(context),
-    bitflyerPanel(context),
-    categoriesPanel(context),
-    productsPanel(context),
-    accountsPanel(context),
-    holdingsPanel(context),
-    settingsPanel(context),
-    dataFolderPanel(context),
+    overview,
+    holdingsTable,
+    accountTabs,
+    importSteps,
+    tableImport,
+    recipes,
+    bitflyer,
+    categories,
+    products,
+    accounts,
+    holdingsEntry,
+    settings,
+    dataFolder,
   ];
+
+  // The tabs only show and hide: every panel keeps rendering, so switching loses no input.
+  const panes: Record<TabName, HTMLElement> = {
+    holdings: h(
+      "div",
+      { class: "pane holdings-layout", role: "tabpanel", id: "pane-holdings" },
+      h("div", { class: "side" }, overview.el, accountTabs.el),
+      holdingsTable.el,
+    ),
+    import: h(
+      "div",
+      { class: "pane grid", role: "tabpanel", id: "pane-import" },
+      importSteps.el,
+      recipes.el,
+      tableImport.el,
+      bitflyer.el,
+    ),
+    settings: h(
+      "div",
+      { class: "pane grid", role: "tabpanel", id: "pane-settings" },
+      categories.el,
+      products.el,
+      accounts.el,
+      holdingsEntry.el,
+      settings.el,
+      dataFolder.el,
+    ),
+  };
+  const labels: Record<TabName, string> = {
+    holdings: t("Holdings"),
+    import: t("Import"),
+    settings: t("Settings"),
+  };
+  const buttons = new Map<TabName, HTMLButtonElement>();
+  const select = (tab: TabName): void => {
+    for (const name of TAB_NAMES) {
+      const active = name === tab;
+      panes[name].hidden = !active;
+      const button = buttons.get(name);
+      button?.setAttribute("aria-selected", String(active));
+      button?.setAttribute("tabindex", active ? "0" : "-1");
+    }
+    saveTab(tab);
+  };
+  for (const name of TAB_NAMES) {
+    const button = h("button", { type: "button", class: "tab", role: "tab", "aria-controls": `pane-${name}` }, labels[name]);
+    button.addEventListener("click", () => select(name));
+    button.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (step !== 0) {
+        const next = TAB_NAMES[(TAB_NAMES.indexOf(name) + step + TAB_NAMES.length) % TAB_NAMES.length] as TabName;
+        select(next);
+        buttons.get(next)?.focus();
+      }
+    });
+    buttons.set(name, button);
+  }
+  select(readTab());
   app.replaceChildren(
     h("header", { class: "top" }, h("h1", {}, t("Portfolio")), h("div", { class: "tools" }, exportButton, language)),
+    h("div", { class: "tabs main-tabs", role: "tablist", "aria-label": t("Main sections") }, ...buttons.values()),
     status,
     issues,
-    h("main", { class: "dashboard" }, ...panels.slice(0, DASHBOARD_PANELS).map((p) => p.el)),
-    h("main", { class: "grid" }, ...panels.slice(DASHBOARD_PANELS).map((p) => p.el)),
+    h("main", {}, ...TAB_NAMES.map((name) => panes[name])),
   );
 }
 
@@ -185,7 +275,13 @@ async function start(): Promise<void> {
     renderAll();
   } catch (error) {
     // An unreadable data file is reported and never overwritten.
-    showStatus(t("Could not load: {reason}", { reason: String(error) }), true);
+    const reason = String(error);
+    showStatus(
+      reason.includes("schema version")
+        ? t("Could not load: {reason}", { reason }) + " " + t("The file is left untouched. To start a new file, move portfolio.json out of the data folder and open the app again.")
+        : t("Could not load: {reason}", { reason }),
+      true,
+    );
   }
 }
 

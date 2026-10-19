@@ -12,6 +12,54 @@ export const LANGUAGES: { code: Lang; label: string }[] = [
 
 export const MESSAGES = {
   "Portfolio": { ja: "ポートフォリオ" },
+  "Fetch": { ja: "取得" },
+  "What to fetch": { ja: "取得する対象" },
+  "Everything": { ja: "すべて" },
+  "Account: {name}": { ja: "口座: {name}" },
+  "Site: {name}": { ja: "サイト: {name}" },
+  "Fetch this recipe": { ja: "このレシピだけ取得" },
+  "Fetch this recipe again": { ja: "このレシピをもう一度取得" },
+  "Worked: {names}.": { ja: "取得できたもの: {names}。" },
+  "Needs attention: {names}.": { ja: "対応が必要なもの: {names}。" },
+  "Not tried: {names}.": { ja: "試していないもの: {names}。" },
+  "Open the page that shows the table starting with “{title}” in the browser, then fetch this recipe again.": {
+    ja: "「{title}」で始まる表があるページをブラウザで開いてから、このレシピをもう一度取得してください。",
+  },
+  "“{recipe}” ({account}) needs an open page of {site}: log in and open it in the browser first.": {
+    ja: "「{recipe}」（{account}）には、{site} のページが開いている必要があります。ブラウザでログインして、ページを開いてください。",
+  },
+  "“{recipe}” ({account}) failed: {reason}": { ja: "「{recipe}」（{account}）が失敗しました: {reason}" },
+  "Add an account first (below), then add the preset.": {
+    ja: "先に口座を追加してください（下の欄）。そのあとでレシピを追加します。",
+  },
+  "Name of a new account": { ja: "新しい口座の名前" },
+  "New account name": { ja: "新しい口座の名前" },
+  "Enter a name for the new account.": { ja: "新しい口座の名前を入力してください。" },
+  "Import": { ja: "取り込み" },
+  "Main sections": { ja: "メインの区分" },
+  "Preset import: steps": { ja: "組み込みのレシピで取り込む手順" },
+  "Done": { ja: "済" },
+  "To do": { ja: "未" },
+  "Add a category and an account (Settings tab).": { ja: "カテゴリと口座を追加します（設定タブ）。" },
+  "Choose a preset and an account, and add it (Fetch recipes card).": {
+    ja: "組み込みのレシピと口座を選んで追加します（取得レシピのカード）。",
+  },
+  "Open the browser and the login pages, and log in yourself (Fetch recipes card).": {
+    ja: "ブラウザとログインのページを開き、ログインは自分で行います（取得レシピのカード）。",
+  },
+  "Fetch (Fetch recipes card).": { ja: "取得します（取得レシピのカード）。すべて、口座ごと、サイトごと、レシピ 1 つずつのどれでも選べます。" },
+  "Link the names to products (one click creates a product), then apply.": {
+    ja: "名前を商品に結び付け（1クリックで商品を作れます）、反映します。",
+  },
+  "A table from a file, pasted text, or the browser, with your own columns, is in the Import a table card below.": {
+    ja: "ファイル、貼り付け、ブラウザの表を、自分で列を選んで取り込む方法は、下の「表の取り込み」のカードにあります。",
+  },
+  "The file is left untouched. To start a new file, move portfolio.json out of the data folder and open the app again.": {
+    ja: "ファイルはそのまま残してあります。新しく始めるには、データの保存場所から portfolio.json を別の場所へ移して、アプリを開き直してください。",
+  },
+  "No value yet": { ja: "評価額はまだありません" },
+  "Group by": { ja: "まとめ方" },
+  "By category": { ja: "カテゴリ別" },
   "Language": { ja: "言語" },
   "Categories": { ja: "カテゴリ" },
   "Products": { ja: "商品" },
@@ -317,9 +365,6 @@ export const MESSAGES = {
   "To make a product from a name, add a category first (in the Categories card).": {
     ja: "名前から商品を作るには、先に「カテゴリ」のカードでカテゴリを追加してください。",
   },
-  "Add an account first (in the Accounts card), then add the preset.": {
-    ja: "先に「口座」のカードで口座を追加してから、組み込みのレシピを追加してください。",
-  },
   "Category name": { ja: "カテゴリの名前" },
   "Product name": { ja: "商品の名前" },
   "Category of the product": { ja: "商品のカテゴリ" },
@@ -336,7 +381,6 @@ export const MESSAGES = {
   "The recipe was changed or removed in the meantime. Fetch again.": {
     ja: "その間に、レシピが変更または削除されました。もう一度取得してください。",
   },
-  "Fetch everything": { ja: "すべて取得" },
   "Where the link goes": { ja: "リンクの行き先" },
   "Choose the link again": { ja: "リンクを選び直す" },
   "The link “{text}” of “{recipe}” has changed since it was saved.": {
@@ -364,8 +408,8 @@ export const MESSAGES = {
     ja: "レシピはまだありません。「表の取り込み」で一度手で表を取得してから、「レシピとして保存」を使ってください。",
   },
   "(this page)": { ja: "（このページ）" },
-  "After you log in to the browser opened by the app, “Fetch everything” follows each recipe’s links (they only show other pages), reads its table, and shows the result of all of them. Nothing changes until you confirm.": {
-    ja: "アプリが開いたブラウザにログインしたあと、「すべて取得」を押すと、各レシピのリンク（別のページを表示するだけのもの）をたどって表を読み、すべての結果をまとめて見せます。確認するまで、何も変わりません。",
+  "After you log in to the browser opened by the app, “Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. Choose everything, one account, or one site, or fetch a single recipe. Nothing changes until you confirm.": {
+    ja: "アプリが開いたブラウザにログインしたあと、「取得」を押すと、各レシピのリンク（別のページを表示するだけのもの）をたどって表を読み、結果を見せます。すべて、1 つの口座、1 つのサイトのどれかを選ぶか、レシピを 1 つだけ取得できます。確認するまで、何も変わりません。",
   },
   "Save as a recipe": { ja: "レシピとして保存" },
   "Recipe name": { ja: "レシピの名前" },

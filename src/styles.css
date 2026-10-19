@@ -473,3 +473,51 @@ textarea {
 
 .record-weights { display: flex; flex-direction: column; gap: 0.25rem; }
 .record-weight { display: flex; align-items: center; gap: 0.5rem; }
+
+/* The main tabs and their panes. Only the chosen pane is shown. */
+.main-tabs {
+  margin-bottom: 12px;
+}
+
+.pane[hidden] {
+  display: none;
+}
+
+/* Holdings: the balance and the accounts stack on the left; the table takes the rest of the
+   width and scrolls sideways itself when it is still too wide. */
+.holdings-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.holdings-layout .side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .holdings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.group-by {
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.steps {
+  padding-left: 20px;
+}
+
+.step-state {
+  display: inline-block;
+  min-width: 2em;
+}
+
+.step.done .step-state {
+  font-weight: 600;
+}
