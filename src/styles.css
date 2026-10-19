@@ -551,6 +551,8 @@ td.clip {
 }
 
 .suggestion th[scope="row"] {
+  /* The general `th, td` rule does not wrap; a row header may. */
+  white-space: normal;
   overflow-wrap: anywhere;
   text-align: left;
 }
