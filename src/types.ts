@@ -101,6 +101,14 @@ export interface Recipe {
   currency: string;
   account: number;
   mapping: ImportMapping;
+  /** The id of the built-in preset this recipe refers to (its definition is the app's current preset). */
+  preset?: string | null;
+}
+
+/** A recipe as it is run: for a preset recipe, the definition of the preset the app has now. */
+export interface RecipeView extends Recipe {
+  /** The preset it refers to does not exist in this version of the app (the definition is empty). */
+  preset_missing: boolean;
 }
 
 /** What opening the login pages did. */
@@ -163,6 +171,8 @@ export interface DataInfo {
 
 export interface PortfolioView {
   portfolio: Portfolio;
+  /** The recipes as they are run (`portfolio.recipes` holds what is stored). */
+  recipes: RecipeView[];
   issues: Issue[];
   data: DataInfo;
 }
@@ -231,6 +241,7 @@ export type Edit =
   | { type: "set_recipe"; recipe: Recipe }
   | { type: "remove_recipe"; name: string }
   | { type: "add_preset_recipe"; preset: string; account: number }
+  | { type: "detach_preset_recipe"; name: string }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "add_product_with_alias"; name: string; category: number; currency: string; source: string; alias: string }
   | { type: "remove_alias"; product: number; source: string; name: string }

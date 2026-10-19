@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-use crate::{AccountId, FetchLink, ImportMapping, Recipe};
+use crate::{AccountId, Error, FetchLink, ImportMapping, Recipe};
 
 /// How a preset reads its table: the columns and rows of a record. Counted from 0.
 struct Layout {
@@ -231,6 +231,7 @@ impl Preset {
     pub(crate) fn recipe(&self, account: AccountId) -> Recipe {
         let layout = &self.layout;
         Recipe {
+            preset: None,
             name: self.label.to_owned(),
             links: self
                 .links
@@ -268,6 +269,59 @@ impl Preset {
                 quantity_part: None,
                 max_records: layout.max_records,
             },
+        }
+    }
+}
+
+impl Recipe {
+    /// The definition the recipe stands for. An ordinary recipe is its own definition. A recipe
+    /// made from a preset is the app's current preset (read each time, so an app update updates
+    /// it) with this recipe's name, account, and the remembered destinations of its links. It is
+    /// an error when the preset no longer exists; the stored recipe is then kept as it is.
+    pub fn effective(&self) -> Result<Recipe, Error> {
+        let Some(id) = &self.preset else {
+            return Ok(self.clone());
+        };
+        let preset = Preset::find(id).ok_or(Error::NotFound(
+            "the preset of this recipe does not exist in this version of the app",
+        ))?;
+        let mut recipe = preset.recipe(self.account);
+        recipe.name = self.name.clone();
+        recipe.preset = self.preset.clone();
+        for link in recipe.links.iter_mut().filter(|l| l.menu.is_none()) {
+            if let Some(saved) = self.links.iter().find(|s| s.text == link.text) {
+                link.reference = saved.reference.clone();
+            }
+        }
+        Ok(recipe)
+    }
+
+    /// What is stored of a recipe made from a preset: its name, the preset id, the account, and the
+    /// links that have a remembered destination (text and destination only). The definition is
+    /// not copied. `self` is an effective recipe.
+    pub(crate) fn into_preset_reference(self) -> Recipe {
+        Recipe {
+            name: self.name,
+            links: self
+                .links
+                .into_iter()
+                .filter(|l| l.reference.is_some())
+                .map(|l| FetchLink {
+                    text: l.text,
+                    reference: l.reference,
+                    menu: None,
+                    heading: None,
+                })
+                .collect(),
+            table_starts_with: String::new(),
+            all_tables: false,
+            following_tables: false,
+            start_site: String::new(),
+            allowed_sites: Vec::new(),
+            currency: String::new(),
+            account: self.account,
+            mapping: ImportMapping::default(),
+            preset: self.preset,
         }
     }
 }

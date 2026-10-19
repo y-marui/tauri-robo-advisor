@@ -3,7 +3,7 @@ import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
-import type { BrowserPage, PortfolioView, PresetInfo, Recipe, RecipeRun } from "../types.ts";
+import type { BrowserPage, PortfolioView, PresetInfo, Recipe, RecipeRun, RecipeView } from "../types.ts";
 import { importPlanView } from "./import-plan.ts";
 
 // Saved fetch recipes: after the user has logged in to the browser opened by the
@@ -14,16 +14,6 @@ import { importPlanView } from "./import-plan.ts";
 // Only one run drives the browser tab at a time, even if the panel is rebuilt (for example
 // after a language change) while a batch is still running; a later run waits for the one before.
 let running: Promise<void> = Promise.resolve();
-
-/** Whether a saved recipe is the one a preset makes (same table, source, and links, as the backend decides). */
-function isPresetRecipe(recipe: Recipe, preset: PresetInfo): boolean {
-  return (
-    recipe.table_starts_with === preset.table_starts_with &&
-    recipe.mapping.source === preset.source &&
-    recipe.links.length === preset.links.length &&
-    recipe.links.every((l, i) => l.text === preset.links[i])
-  );
-}
 
 export function recipesPanel(ctx: Context): Panel {
   const list = h("div", { class: "recipe-list" });
@@ -37,7 +27,8 @@ export function recipesPanel(ctx: Context): Panel {
   const attention = h("div", { class: "recipe-attention" });
   const results = h("div", { class: "recipe-results", "aria-live": "polite" });
 
-  // Recipes that ship with the app: pick one and an account, and it is added as an ordinary recipe.
+  // Recipes that ship with the app: pick one and an account, and a recipe that refers to the preset is added
+  // (its definition is the app's current one, so it is read-only; it can be detached to edit it).
   const presetSelect = h("select", { "aria-label": t("Preset") });
   const presetAccount = h("select", { "aria-label": t("Account to update") });
   const presetAdd = h("button", { type: "button" }, t("Add the preset"));
@@ -74,13 +65,12 @@ export function recipesPanel(ctx: Context): Panel {
   /** The account to start from for a preset: the one its recipe already has, else none ("---"). */
   const accountOfPreset = (): string => {
     const preset = presets.find((p) => p.id === presetSelect.value);
-    // Found by what the recipe does (table, source, links, as the backend does), not by its name.
-    const existing = current?.portfolio.recipes.find((r) => preset !== undefined && isPresetRecipe(r, preset));
+    const existing = current?.recipes.find((r) => preset !== undefined && r.preset === preset.id);
     return existing === undefined ? "" : String(existing.account);
   };
   /** What to do when a recipe could not read its table: the page to open, as its preset says. */
   const whatToOpen = (recipe: Recipe): string => {
-    const preset = presets.find((p) => isPresetRecipe(recipe, p));
+    const preset = presets.find((p) => p.id === recipe.preset);
     return preset
       ? t(preset.description as MessageKey)
       : t("Open the page that shows the table starting with “{title}” in the browser, then fetch this recipe again.", {
@@ -223,7 +213,7 @@ export function recipesPanel(ctx: Context): Panel {
       }
       return pageSelect.value === "" ? [] : [pageSelect.value];
     };
-    const wanted = view.portfolio.recipes.filter((r) => !only || only.includes(r.name));
+    const wanted = view.recipes.filter((r) => !only || only.includes(r.name));
     if (wanted.every((r) => !r.start_site) && pageSelect.value === "") {
       fail(t("Open the browser, log in, and open a page of the site first."));
       return;
@@ -249,6 +239,13 @@ export function recipesPanel(ctx: Context): Panel {
       }
       for (const recipe of wanted) {
         info(t("Fetching “{recipe}”…", { recipe: recipe.name }));
+        if (recipe.preset_missing) {
+          // An error of this recipe only: the others still run, and the saved recipe is kept.
+          await discardFetchRun(recipe.name).catch(() => undefined);
+          attention.append(h("p", { class: "note error" }, t("“{recipe}” refers to a preset that this version of the app does not have. Remove the recipe.", { recipe: recipe.name })));
+          outcome.attention.push(recipe.name);
+          continue;
+        }
         const pages = pagesFor(recipe);
         if (pages.length === 0) {
           // Its earlier result must not survive a retry that could not start.
@@ -435,7 +432,7 @@ export function recipesPanel(ctx: Context): Panel {
   /** The names of the recipes the chosen scope covers; `undefined` is everything. */
   const scopedNames = (): string[] | undefined => {
     const scope = scopeSelect.value;
-    const recipes = current?.portfolio.recipes ?? [];
+    const recipes = current?.recipes ?? [];
     if (scope.startsWith("account:")) {
       return recipes.filter((r) => `account:${r.account}` === scope).map((r) => r.name);
     }
@@ -454,7 +451,7 @@ export function recipesPanel(ctx: Context): Panel {
   }
 
   function renderList(view: PortfolioView): void {
-    if (view.portfolio.recipes.length === 0) {
+    if (view.recipes.length === 0) {
       list.replaceChildren(
         h("p", { class: "note" }, t("No recipes yet. Fetch a table once by hand in “Import a table”, then use “Save as a recipe”.")),
       );
@@ -463,8 +460,8 @@ export function recipesPanel(ctx: Context): Panel {
     }
     runButton.disabled = false;
     const previousScope = scopeSelect.value;
-    const accountIds = [...new Set(view.portfolio.recipes.map((r) => r.account))];
-    const sites = [...new Set(view.portfolio.recipes.map((r) => r.start_site ?? "").filter((x) => x !== ""))];
+    const accountIds = [...new Set(view.recipes.map((r) => r.account))];
+    const sites = [...new Set(view.recipes.map((r) => r.start_site ?? "").filter((x) => x !== ""))];
     scopeSelect.replaceChildren(
       h("option", { value: "" }, t("Everything")),
       ...accountIds.map((id) =>
@@ -473,23 +470,31 @@ export function recipesPanel(ctx: Context): Panel {
       ...sites.map((site) => h("option", { value: `site:${site}` }, t("Site: {name}", { name: site }))),
     );
     scopeSelect.value = [...scopeSelect.options].some((o) => o.value === previousScope) ? previousScope : "";
-    const accountName = (id: number): string =>
-      view.portfolio.accounts.find((a) => a.id === id)?.name ?? "?";
     list.replaceChildren(
-      ...view.portfolio.recipes.map((recipe) =>
-        h(
-          "div",
-          { class: "add-row" },
-          h(
-            "span",
-            {},
-            `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`,
-          ),
-          fetchOne(recipe),
-          deleteButton(() => void ctx.apply({ type: "remove_recipe", name: recipe.name })),
-        ),
-      ),
+      ...view.recipes.map((recipe) => recipeRow(view, recipe)),
     );
+  }
+
+  /** One recipe of the list. A preset recipe is read-only: it can be fetched, detached, or removed. */
+  function recipeRow(view: PortfolioView, recipe: RecipeView): HTMLElement {
+    const accountName = (id: number): string => view.portfolio.accounts.find((a) => a.id === id)?.name ?? "?";
+    const remove = deleteButton(() => void ctx.apply({ type: "remove_recipe", name: recipe.name }));
+    if (recipe.preset_missing) {
+      return h(
+        "div",
+        { class: "add-row" },
+        h("span", { class: "note error" }, t("“{recipe}” refers to a preset that this version of the app does not have. Remove the recipe.", { recipe: recipe.name })),
+        remove,
+      );
+    }
+    const text = `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`;
+    if (!recipe.preset) {
+      return h("div", { class: "add-row" }, h("span", {}, text), fetchOne(recipe), remove);
+    }
+    const detach = h("button", { type: "button" }, t("Detach as a custom recipe"));
+    detach.title = t("Makes an ordinary recipe of it with the definition it has now. It no longer follows app updates, and can be edited.");
+    detach.addEventListener("click", () => void ctx.apply({ type: "detach_preset_recipe", name: recipe.name }));
+    return h("div", { class: "add-row" }, h("span", {}, `${text} [${t("built-in, read-only")}]`), fetchOne(recipe), detach, remove);
   }
 
   const el = h(
@@ -526,7 +531,7 @@ export function recipesPanel(ctx: Context): Panel {
       presetAdd.disabled = view.portfolio.accounts.length === 0;
       // Recipes that were added, removed, or moved to another account change the default account
       // of the chosen preset.
-      const recipesSignature = view.portfolio.recipes.map((r) => `${r.name}:${r.account}`).join("|");
+      const recipesSignature = view.recipes.map((r) => `${r.name}:${r.account}:${r.preset ?? ""}`).join("|");
       const recipesChanged = recipesSignature !== presetRecipesSignature;
       presetRecipesSignature = recipesSignature;
       const accountsSignature = view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join("|");

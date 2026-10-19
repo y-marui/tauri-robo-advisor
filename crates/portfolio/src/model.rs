@@ -11,10 +11,12 @@ use serde::{Deserialize, Serialize};
 /// nothing used (an older app needs the field, so it refuses). Version 8 moved the relative
 /// weight of a product onto the record of the product in an account (an older app would read
 /// every weight as missing, so it refuses). Version 9 added the menu click of a link (`menu` and
-/// `heading`: an older app would try to follow it as a plain link, so it refuses).
+/// `heading`: an older app would try to follow it as a plain link, so it refuses). Version 10 added
+/// the preset id of a recipe (`preset`: a recipe made from a preset carries only its account, and an
+/// older app would read it as an empty custom recipe, so it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -222,6 +224,7 @@ pub struct Recipe {
     pub name: String,
     #[serde(default)]
     pub links: Vec<FetchLink>,
+    #[serde(default)]
     pub table_starts_with: String,
     /// Read every table whose first cell starts with `table_starts_with` (one table per kind of
     /// account on a page) and put their rows together; off: exactly one table must match.
@@ -242,9 +245,40 @@ pub struct Recipe {
     /// of its own company, never another site.
     #[serde(default)]
     pub allowed_sites: Vec<String>,
+    #[serde(default)]
     pub currency: String,
     pub account: AccountId,
+    #[serde(default)]
     pub mapping: ImportMapping,
+    /// The id of a built-in preset (see `presets`). A recipe made from a preset is stored with only
+    /// its name, this id, the account, and the remembered destinations of its links: the rest of
+    /// the definition is read from the app's current preset data (`Recipe::effective`), so an app
+    /// update updates it. `None`: an ordinary recipe that holds its own definition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+}
+
+impl Default for ImportMapping {
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            name_column: 0,
+            value_column: 0,
+            price_column: None,
+            price_unit: 1,
+            header_rows: 0,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            name_part: None,
+            value_part: None,
+            price_part: None,
+            loose_numbers: false,
+            quantity_column: None,
+            quantity_part: None,
+            max_records: None,
+        }
+    }
 }
 
 fn one() -> u64 {
