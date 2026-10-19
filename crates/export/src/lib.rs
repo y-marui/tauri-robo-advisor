@@ -44,6 +44,7 @@ pub fn build(portfolio: &Portfolio, info: &Info) -> Result<Vec<ExportFile>, Erro
 
     Ok(vec![
         file("holdings.csv", holdings(portfolio, &values)),
+        file("groups.csv", groups(portfolio, &values)),
         file("categories.csv", categories(portfolio, &values)),
         file("products.csv", products(portfolio, &values)),
         file("aliases.csv", aliases(portfolio)),
@@ -135,6 +136,8 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
         "product",
         "category_id",
         "category",
+        "group_id",
+        "group",
         "currency",
         "value",
         "quantity",
@@ -157,6 +160,8 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
             text_cell(product.map_or("", |p| &p.name)),
             plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),
             text_cell(category.map_or("", |c| &c.name)),
+            plain_cell(&category.map_or(String::new(), group_id)),
+            text_cell(group_name(portfolio, category)),
             plain_cell(product.map_or("", |p| &p.currency)),
             number(holding.value),
             optional_number(holding.quantity),
@@ -170,10 +175,58 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
     table
 }
 
+fn group_id(category: &Category) -> String {
+    category.group.map_or(String::new(), |g| g.0.to_string())
+}
+
+fn group_name<'a>(portfolio: &'a Portfolio, category: Option<&Category>) -> &'a str {
+    category
+        .and_then(|c| c.group)
+        .and_then(|g| portfolio.groups.iter().find(|x| x.id == g))
+        .map_or("", |g| &g.name)
+}
+
+/// A group has no target of its own: its target is the sum of its categories' targets.
+fn groups(portfolio: &Portfolio, values: &Values) -> Table {
+    let mut table = Table::new(&[
+        "group_id",
+        "group",
+        "target_weight",
+        "value_jpy",
+        "current_share",
+    ]);
+    for group in &portfolio.groups {
+        let own = |c: &&Category| c.group == Some(group.id);
+        let target = portfolio
+            .categories
+            .iter()
+            .filter(own)
+            .fold(Decimal::ZERO, |acc, c| acc.saturating_add(c.target_weight));
+        let value = values.sum(portfolio, |h| {
+            product_of(portfolio, h.product).is_some_and(|p| {
+                portfolio
+                    .categories
+                    .iter()
+                    .any(|c| c.id == p.category && c.group == Some(group.id))
+            })
+        });
+        table.push(vec![
+            plain_cell(&group.id.0.to_string()),
+            text_cell(&group.name),
+            number(target),
+            optional_number(value),
+            optional_number(values.share(value)),
+        ]);
+    }
+    table
+}
+
 fn categories(portfolio: &Portfolio, values: &Values) -> Table {
     let mut table = Table::new(&[
         "category_id",
         "category",
+        "group_id",
+        "group",
         "target_weight",
         "product_targeting",
         "value_jpy",
@@ -186,6 +239,8 @@ fn categories(portfolio: &Portfolio, values: &Values) -> Table {
         table.push(vec![
             plain_cell(&category.id.0.to_string()),
             text_cell(&category.name),
+            plain_cell(&group_id(category)),
+            text_cell(group_name(portfolio, Some(category))),
             number(category.target_weight),
             plain_cell(&keyword(&category.targeting)),
             optional_number(value),
@@ -322,7 +377,8 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          Files\n\
          -----\n\
          holdings.csv     One row per record of a product in an account (the amounts and relative weight you entered).\n\
-         categories.csv   Categories with their target weight and current value.\n\
+         groups.csv       Groups of categories with the sum of their targets and their current value.\n\
+         categories.csv   Categories (with their group) with their target weight and current value.\n\
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
          accounts.csv     Accounts with their rules (sellable, tradable products, rounding unit).\n\

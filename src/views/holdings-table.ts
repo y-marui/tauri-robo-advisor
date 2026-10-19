@@ -3,7 +3,8 @@ import { h } from "../dom.ts";
 import { selectField, textField } from "../fields.ts";
 import { getLanguage, t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
-import type { Holding, Overview, PortfolioView } from "../types.ts";
+import type { Category, Holding, Overview, PortfolioView } from "../types.ts";
+import { groupEntries, groupName } from "./groups.ts";
 
 // The center panel: holding records grouped by category (or by account), each group opened by
 // a subtotal row. The amounts are edited in place (in the product's own currency); the JPY
@@ -18,6 +19,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
   let holdingCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
   let accountCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
   let categoryCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
+  // The group subtotals; the key is the group id, or "none" for the ungrouped categories.
+  let groupCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
   const note = h("p", { class: "note", role: "status" });
   let groupBy: "category" | "account" = "category";
   let lastView: PortfolioView | null = null;
@@ -29,7 +32,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
       [
         groupBy,
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
-        view.portfolio.categories.map((c) => `${c.id}:${c.name}`).join(","),
+        view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.group ?? ""}`).join(","),
+        view.portfolio.groups.map((g) => `${g.id}:${g.name}`).join(","),
         // A product's name is followed by its field (no rebuild); its category and currency move or relabel the row.
         view.portfolio.products.map((p) => `${p.id}:${p.category}:${p.currency}`).join(","),
         view.portfolio.holdings.map((x) => `${x.account}:${x.product}`).join(","),
@@ -37,6 +41,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
     (view, bind) => {
       holdingCells = new Map();
       categoryCells = new Map();
+      groupCells = new Map();
       accountCells = new Map();
       const { categories, products, accounts, holdings } = view.portfolio;
       if (holdings.length === 0) {
@@ -172,7 +177,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
           }
         }
       } else {
-        for (const category of categories) {
+        const categoryRows = (category: Category): void => {
           const own = products.filter((p) => p.category === category.id);
           const records = holdings.filter((x) => own.some((p) => p.id === x.product));
 
@@ -202,6 +207,47 @@ export function holdingsTablePanel(ctx: Context): Panel {
           );
           for (const record of records) {
             recordRow(record);
+          }
+        };
+        const entries = groupEntries(view);
+        const groupRow = (id: number | null): void => {
+          const subtotal = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
+          groupCells.set(id === null ? "none" : String(id), subtotal);
+          rows.push(
+            h(
+              "tr",
+              { class: "group group-main" },
+              h(
+                "th",
+                { scope: "rowgroup", colspan: 3 },
+                id === null
+                  ? groupName(view, null)
+                  : textField({
+                      ctx,
+                      bind,
+                      label: t("Group name"),
+                      get: (v) => v.portfolio.groups.find((g) => g.id === id)?.name ?? "",
+                      edit: (text) => ({ type: "rename_group", id, name: text }),
+                    }),
+              ),
+              h("td", {}),
+              h("td", {}),
+              h("td", {}),
+              subtotal.value,
+              subtotal.share,
+            ),
+          );
+        };
+        if (entries.length === 0) {
+          for (const category of categories) {
+            categoryRows(category);
+          }
+        } else {
+          for (const entry of entries) {
+            groupRow(entry.id);
+            for (const category of entry.categories) {
+              categoryRows(category);
+            }
           }
         }
       }
@@ -271,6 +317,13 @@ export function holdingsTablePanel(ctx: Context): Panel {
       if (cells) {
         cells.value.textContent = yen(account.value);
         cells.share.textContent = percent(account.share);
+      }
+    }
+    for (const group of overview.groups) {
+      const cells = groupCells.get(group.group === null ? "none" : String(group.group));
+      if (cells) {
+        cells.value.textContent = yen(group.current);
+        cells.share.textContent = percent(group.current_share);
       }
     }
     for (const category of overview.categories) {

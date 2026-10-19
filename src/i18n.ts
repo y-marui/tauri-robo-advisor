@@ -12,6 +12,16 @@ export const LANGUAGES: { code: Lang; label: string }[] = [
 
 export const MESSAGES = {
   "Portfolio": { ja: "ポートフォリオ" },
+  "Groups": { ja: "グループ" },
+  "Group": { ja: "グループ" },
+  "Group name": { ja: "グループの名前" },
+  "Group of the category": { ja: "カテゴリのグループ" },
+  "Add a group": { ja: "グループを追加" },
+  "Ungrouped": { ja: "グループなし" },
+  "Groups sit above the categories. A group has no target of its own: it adds up its categories’ targets. Deleting a group keeps its categories.": {
+    ja: "グループはカテゴリの上の分類です。グループ自身に目標はなく、カテゴリの目標を合計します。グループを削除しても、カテゴリは残ります。",
+  },
+  "Groups (inner) and categories (outer)": { ja: "グループ（内側）とカテゴリ（外側）" },
   "Fetch": { ja: "取得" },
   "What to fetch": { ja: "取得する対象" },
   "Everything": { ja: "すべて" },
