@@ -398,6 +398,8 @@ export function tableImportPanel(ctx: Context): Panel {
       loose_numbers: chosen.loose_numbers,
       quantity_column: chosen.quantity,
       quantity_part: chosen.quantity_part,
+      // Not shown in this form: kept from the mapping that is being saved over.
+      max_records: current?.portfolio.import_mappings.find((m) => m.source === source())?.max_records ?? null,
     });
   });
 
@@ -492,6 +494,8 @@ export function tableImportPanel(ctx: Context): Panel {
             loose_numbers: chosen.loose_numbers,
             quantity_column: chosen.quantity,
             quantity_part: chosen.quantity_part,
+            // Not shown in this form: kept from the recipe that is being saved over.
+            max_records: existing?.mapping.max_records ?? null,
           },
         },
       })

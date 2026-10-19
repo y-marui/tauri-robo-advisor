@@ -218,6 +218,7 @@ export type Edit =
       loose_numbers?: boolean;
       quantity_column?: number | null;
       quantity_part?: number | null;
+      max_records?: number | null;
     }
   | { type: "remove_import_mapping"; source: string }
   | { type: "set_recipe"; recipe: Recipe }

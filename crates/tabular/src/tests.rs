@@ -589,3 +589,20 @@ fn only_the_first_records_are_read_when_a_limit_is_set() {
     assert_eq!(result.rows[0].value, dec!(1000));
     assert_eq!(extract(&table, &mapping(0, 1, 0)).rows.len(), 3);
 }
+
+#[test]
+fn an_unreadable_first_record_counts_toward_the_limit() {
+    let table = cells(&[&["Cash", "n/a"], &["Stocks", "2,000円"]]);
+    let limited = ColumnMapping {
+        max_records: Some(1),
+        ..mapping(0, 1, 0)
+    };
+
+    let result = extract(&table, &limited);
+
+    assert!(
+        result.rows.is_empty(),
+        "the later figure is not taken instead"
+    );
+    assert_eq!(result.skipped.len(), 1);
+}

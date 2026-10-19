@@ -107,7 +107,12 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
     let unit = Decimal::from(mapping.price_unit.max(1));
     let mut start = mapping.header_rows;
     while start < table.len() {
-        if mapping.max_records.is_some_and(|max| rows.len() >= max) {
+        // Every record that was tried counts, read or left out: an unreadable first record
+        // must not let the search go on to the figures after it.
+        if mapping
+            .max_records
+            .is_some_and(|max| rows.len() + skipped.len() >= max)
+        {
             break;
         }
         let row = start + 1;
