@@ -1645,3 +1645,21 @@ fn only_the_supported_schema_versions_are_opened() {
     p.schema_version = 0;
     assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
 }
+
+#[test]
+fn the_weight_of_a_product_does_not_overflow_when_its_records_add_up() {
+    let (mut p, _, prod, acc) = sample();
+    let other = account(&mut p, "Account 2", AccountKind::Nisa);
+    apply(
+        &mut p,
+        weight_edit(acc, prod, Some(rust_decimal::Decimal::MAX)),
+    );
+    apply(
+        &mut p,
+        weight_edit(other, prod, Some(rust_decimal::Decimal::MAX)),
+    );
+
+    assert_eq!(p.product_weight(prod), Some(rust_decimal::Decimal::MAX));
+    // The issues are worked out on every view, so they must not panic either.
+    let _ = p.issues();
+}

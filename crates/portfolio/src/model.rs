@@ -293,14 +293,13 @@ impl Portfolio {
     /// The relative weight of a product over the whole portfolio: the weights of its records
     /// added up. `None` when no record of it has a weight.
     pub fn product_weight(&self, product: ProductId) -> Option<Decimal> {
-        let mut weights = self
-            .holdings
+        self.holdings
             .iter()
             .filter(|h| h.product == product)
             .filter_map(|h| h.weight)
-            .peekable();
-        weights.peek()?;
-        Some(weights.sum())
+            // Stored weights are only checked to be positive, so the sum saturates rather than
+            // overflowing (the calculations refuse a weight above their own limit).
+            .reduce(|sum, w| sum.checked_add(w).unwrap_or(Decimal::MAX))
     }
 
     /// The relative weight of the record of a product in one account.
