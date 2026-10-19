@@ -4,6 +4,7 @@
 
 ### Changed
 
+- The relative weight of a product inside its category now belongs to the record of the product in an account (`Holding::weight`, edit `SetHoldingWeight`), so the same product can have a different weight in each account (#59). The weight of a product over the whole portfolio is the sum of its records' weights; the balance inside an account uses that account's record. An import keeps the weights of the records it replaces, and a record with a weight stays (with nothing held) when the page no longer lists the product. Schema version 8: an older data file is refused and left untouched (nothing converts it). `products.csv` lost its `relative_weight` column; `holdings.csv` gained one. In the Products card the weight is typed per account.
 - The funding of an account (cash or points) is gone: nothing used it, and it does not matter which a purchase is paid with. The Accounts card, the data, and `accounts.csv` no longer have it. Schema version 7; an older app refuses such a file.
 - The account choice of a preset starts on the account that its recipe already has, or on "---" (nothing chosen); the add button needs a real account.
 - The rounding unit of a new account now defaults to 1 yen (it was 1,000 yen), since many investment trusts can be bought in 1 yen steps. Existing accounts keep the unit they have, and it can still be changed per account.

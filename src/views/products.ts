@@ -13,6 +13,7 @@ export function productsPanel(ctx: Context): Panel {
       [
         view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.targeting}`).join(","),
         view.portfolio.products.map((p) => `${p.id}:${p.category}`).join(","),
+        view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
       ].join("|"),
     (view, bind) => {
       const categories = view.portfolio.categories;
@@ -71,22 +72,40 @@ export function productsPanel(ctx: Context): Panel {
             "td",
             {},
             weighted
-              ? textField({
-                  ctx,
-                  bind,
-                  label: t("Relative weight inside the category"),
-                  get: (v) => find(v)?.weight ?? "",
-                  edit: (text) => {
-                    if (text === "") {
-                      return { type: "set_product_weight", id, weight: null };
-                    }
-                    const clean = cleanDecimal(text);
-                    return clean === null
-                      ? null
-                      : { type: "set_product_weight", id, weight: clean };
-                  },
-                  attrs: { inputmode: "decimal", class: "number" },
-                })
+              ? h(
+                  "div",
+                  { class: "record-weights" },
+                  ...view.portfolio.accounts.map((account) =>
+                    h(
+                      "div",
+                      { class: "record-weight" },
+                      h("span", {}, account.name),
+                      textField({
+                        ctx,
+                        bind,
+                        label: t("Relative weight inside the category: {account}", {
+                          account: account.name,
+                        }),
+                        get: (v) =>
+                          v.portfolio.holdings.find(
+                            (r) => r.account === account.id && r.product === id,
+                          )?.weight ?? "",
+                        edit: (text) => {
+                          const weight = text === "" ? null : cleanDecimal(text);
+                          return text !== "" && weight === null
+                            ? null
+                            : {
+                                type: "set_holding_weight",
+                                account: account.id,
+                                product: id,
+                                weight,
+                              };
+                        },
+                        attrs: { inputmode: "decimal", class: "number" },
+                      }),
+                    ),
+                  ),
+                )
               : null,
           ),
           h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_product", id }))),

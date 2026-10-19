@@ -41,7 +41,8 @@ pub fn load_hashed(path: &Path) -> Result<(Portfolio, Option<u64>), String> {
     portfolio
         .validate_integrity()
         .map_err(|e| format!("{e}; the data file was left untouched."))?;
-    // An older file is read as it is and saved as the current version.
+    // A version older than the supported ones was refused by the check above (nothing converts
+    // it); a supported older version is saved as the current one.
     portfolio.schema_version = portfolio.schema_version.max(portfolio::SCHEMA_VERSION);
     Ok((portfolio, Some(hash)))
 }
@@ -329,10 +330,31 @@ mod tests {
     }
 
     #[test]
-    fn a_version_1_file_loads_and_is_saved_as_the_current_version() {
-        let dir = temp_dir("v1");
+    fn a_file_from_an_older_version_is_refused_and_left_untouched() {
+        let dir = temp_dir("v-older");
         let path = dir.join("portfolio.json");
-        fs::write(&path, br#"{"schema_version":1,"next_id":1}"#).unwrap();
+        let older = format!(
+            r#"{{"schema_version":{},"next_id":1}}"#,
+            portfolio::MIN_SCHEMA_VERSION - 1
+        );
+        fs::write(&path, &older).unwrap();
+
+        assert!(load(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), older);
+    }
+
+    #[test]
+    fn the_oldest_supported_file_loads_and_is_saved_as_the_current_version() {
+        let dir = temp_dir("v-min");
+        let path = dir.join("portfolio.json");
+        fs::write(
+            &path,
+            format!(
+                r#"{{"schema_version":{},"next_id":1}}"#,
+                portfolio::MIN_SCHEMA_VERSION
+            ),
+        )
+        .unwrap();
 
         let loaded = load(&path).unwrap();
         assert_eq!(loaded.schema_version, portfolio::SCHEMA_VERSION);

@@ -23,7 +23,6 @@ export interface Product {
   name: string;
   category: number;
   currency: string;
-  weight: string | null;
   aliases: { source: string; name: string }[];
 }
 
@@ -45,6 +44,8 @@ export interface Holding {
   /** The price the value was worked out from, per `price_unit` units; null when not known. */
   price: string | null;
   price_unit: number;
+  /** Relative weight of this record inside its category; null when none is set. */
+  weight: string | null;
 }
 
 /** Which columns of a source's table hold the name and the value (counted from 0). */
@@ -180,7 +181,7 @@ export type Edit =
       category?: number;
       currency?: string;
     }
-  | { type: "set_product_weight"; id: number; weight: string | null }
+  | { type: "set_holding_weight"; account: number; product: number; weight: string | null }
   | { type: "remove_product"; id: number }
   | { type: "add_account"; name: string; kind: AccountKind }
   | {
