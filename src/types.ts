@@ -191,6 +191,7 @@ export type Edit =
     }
   | { type: "set_tradable"; id: number; products: number[] | null }
   | { type: "remove_account"; id: number }
+  | { type: "move_account"; id: number; up: boolean }
   | {
       type: "set_holding";
       account: number;

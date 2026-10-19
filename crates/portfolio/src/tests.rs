@@ -1469,3 +1469,36 @@ fn the_presets_say_what_identifies_their_recipe() {
         assert_eq!(recipe.account, acc);
     }
 }
+
+#[test]
+fn an_account_moves_up_and_down_and_stops_at_the_ends() {
+    let mut p = Portfolio::default();
+    let a = account(&mut p, "A", AccountKind::Taxable);
+    let b = account(&mut p, "B", AccountKind::Taxable);
+    let c = account(&mut p, "C", AccountKind::Taxable);
+    let order = |p: &Portfolio| p.accounts.iter().map(|x| x.id).collect::<Vec<_>>();
+    assert_eq!(order(&p), vec![a, b, c]);
+
+    apply(&mut p, Edit::MoveAccount { id: c, up: true });
+    assert_eq!(order(&p), vec![a, c, b]);
+    apply(&mut p, Edit::MoveAccount { id: c, up: true });
+    assert_eq!(order(&p), vec![c, a, b]);
+    // At the top (and the bottom) nothing changes, and it is not an error.
+    apply(&mut p, Edit::MoveAccount { id: c, up: true });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveAccount { id: b, up: false });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveAccount { id: c, up: false });
+    assert_eq!(order(&p), vec![a, c, b]);
+
+    // An unknown account is refused and nothing changes.
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::MoveAccount {
+            id: AccountId(9999),
+            up: true
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+}

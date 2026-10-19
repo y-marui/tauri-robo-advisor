@@ -82,6 +82,12 @@ pub enum Edit {
     RemoveAccount {
         id: AccountId,
     },
+    /// Moves an account one place up or down in the list (the order is the order everywhere:
+    /// the tabs, the tables, the choices). At the end of the list nothing changes.
+    MoveAccount {
+        id: AccountId,
+        up: bool,
+    },
     SetHolding {
         account: AccountId,
         product: ProductId,
@@ -620,6 +626,18 @@ impl Portfolio {
                     list
                 });
                 self.account_mut(id)?.tradable = products;
+            }
+            Edit::MoveAccount { id, up } => {
+                self.account(id)?;
+                let index = self.accounts.iter().position(|a| a.id == id).unwrap_or(0);
+                let other = if up {
+                    index.checked_sub(1)
+                } else {
+                    Some(index + 1)
+                };
+                if let Some(other) = other.filter(|o| *o < self.accounts.len()) {
+                    self.accounts.swap(index, other);
+                }
             }
             Edit::RemoveAccount { id } => {
                 self.account(id)?;
