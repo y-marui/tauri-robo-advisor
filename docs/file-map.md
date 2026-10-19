@@ -65,7 +65,7 @@ _最終更新: 2026-10-15_
 | `crates/suggest/src/round.rs` | 丸め単位への丸め（合計を保つ最大剰余法。上限つき） | `rust_decimal` |
 | `crates/suggest/src/types.rs`, `error.rs` | `Mode`、`Request`、`Suggestion`、`Note`、`Error` | `portfolio` |
 | `crates/browser/src/detect.rs` | Chrome・Edge・Brave のインストール先の検出（OS ごとの標準の場所） | — |
-| `crates/browser/src/launch.rs` | 専用プロファイルでの起動と、`DevToolsActivePort` の読み取り。動作中のブラウザは再利用する | — |
+| `crates/browser/src/launch.rs` | 専用プロファイルでの起動と、`DevToolsActivePort` の読み取り。動作中のブラウザは再利用する。macOS では LaunchServices（`open -n -a`）経由で起動する（#71） | — |
 | `crates/browser/src/cdp.rs` | DevTools プロトコルの最小のクライアント（ページ一覧、接続、読み取り専用のスクリプト実行、終了） | `tungstenite` |
 | `crates/tabular/src/decode.rs` | バイト列の文字コード判別（UTF-8 か Shift-JIS）。バイナリは拒否する | `encoding_rs` |
 | `crates/tabular/src/parse.rs` | CSV・タブ区切りの解析（引用符、サイズの上限） | — |

@@ -8,6 +8,10 @@ pub enum Error {
     Launch(String),
     #[error("the browser did not open its debugging connection in time")]
     NotReady,
+    #[error(
+        "the browser was started but did not open its debugging connection in time; close it and try again"
+    )]
+    NotReadyOpened,
     #[error("the connection to the browser failed: {0}")]
     Connection(String),
     #[error("the browser did not answer in time")]
