@@ -52,6 +52,9 @@ pub struct ColumnMapping {
     pub quantity: Option<usize>,
     #[serde(default)]
     pub quantity_part: Option<usize>,
+    /// Read at most this many records from the top; `None`: all.
+    #[serde(default)]
+    pub max_records: Option<usize>,
 }
 
 /// A row that was read.
@@ -104,6 +107,14 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
     let unit = Decimal::from(mapping.price_unit.max(1));
     let mut start = mapping.header_rows;
     while start < table.len() {
+        // Every record that was tried counts, read or left out: an unreadable first record
+        // must not let the search go on to the figures after it.
+        if mapping
+            .max_records
+            .is_some_and(|max| rows.len() + skipped.len() >= max)
+        {
+            break;
+        }
         let row = start + 1;
         let record = start;
         // A record that is read moves on by its whole length. A row that does

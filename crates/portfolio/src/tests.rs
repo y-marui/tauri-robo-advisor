@@ -705,6 +705,7 @@ fn import_mappings_are_saved_per_source_and_replaced() {
         loose_numbers: false,
         quantity_column: None,
         quantity_part: None,
+        max_records: None,
     };
 
     apply(&mut p, set(" SBI ", 0, 5));
@@ -752,6 +753,7 @@ fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
         loose_numbers: false,
         quantity_column: None,
         quantity_part: None,
+        max_records: None,
     };
 
     for edit in [
@@ -795,6 +797,7 @@ fn a_two_row_record_may_keep_the_name_and_the_value_in_one_column() {
             loose_numbers: false,
             quantity_column: None,
             quantity_part: None,
+            max_records: None,
         },
     );
 
@@ -834,6 +837,7 @@ fn mapping_for(source: &str) -> ImportMapping {
         loose_numbers: false,
         quantity_column: None,
         quantity_part: None,
+        max_records: None,
     }
 }
 
@@ -1017,6 +1021,7 @@ fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
             loose_numbers: false,
             quantity_column: None,
             quantity_part: None,
+            max_records: None,
         },
     );
     mappings.validate_integrity().unwrap();
@@ -1111,6 +1116,7 @@ fn set_mapping(m: ImportMapping) -> Edit {
         loose_numbers: m.loose_numbers,
         quantity_column: None,
         quantity_part: None,
+        max_records: None,
     }
 }
 

@@ -132,6 +132,8 @@ pub enum Edit {
         quantity_column: Option<usize>,
         #[serde(default)]
         quantity_part: Option<usize>,
+        #[serde(default)]
+        max_records: Option<usize>,
     },
     RemoveImportMapping {
         source: String,
@@ -220,6 +222,9 @@ impl ImportMapping {
         .any(|p| p.is_some_and(|p| p >= MAX_PARTS))
         {
             return Err(invalid("a part number"));
+        }
+        if self.max_records.is_some_and(|n| n == 0 || n > MAX_ITEMS) {
+            return Err(invalid("the record limit"));
         }
         if !(1..=MAX_PRICE_UNIT).contains(&self.price_unit) {
             return Err(invalid("the price unit"));
@@ -740,6 +745,7 @@ impl Portfolio {
                 loose_numbers,
                 quantity_column,
                 quantity_part,
+                max_records,
             } => {
                 let mapping = ImportMapping {
                     source,
@@ -757,6 +763,7 @@ impl Portfolio {
                     loose_numbers,
                     quantity_column,
                     quantity_part,
+                    max_records,
                 }
                 .validated()?;
                 match self
