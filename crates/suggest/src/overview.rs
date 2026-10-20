@@ -46,6 +46,8 @@ pub struct GroupOverview {
 pub struct HoldingOverview {
     pub account: AccountId,
     pub product: ProductId,
+    /// The type of the record (`None`: not set).
+    pub account_type: Option<String>,
     /// The holding's value in JPY.
     #[serde(serialize_with = "crate::display::yen")]
     pub value: Decimal,
@@ -92,7 +94,7 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
     }
 
     let mut values: BTreeMap<CategoryId, Decimal> = BTreeMap::new();
-    let mut rows: Vec<(AccountId, ProductId, Decimal)> = Vec::new();
+    let mut rows: Vec<(AccountId, ProductId, Option<String>, Decimal)> = Vec::new();
     for holding in &portfolio.holdings {
         let product = portfolio
             .products
@@ -101,7 +103,12 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
             .ok_or(Error::Inconsistent)?;
         let value = to_jpy(portfolio, &product.currency, holding.value)?;
         *values.entry(product.category).or_default() += value;
-        rows.push((holding.account, product.id, value));
+        rows.push((
+            holding.account,
+            product.id,
+            holding.account_type.clone(),
+            value,
+        ));
     }
     let total: Decimal = values.values().copied().sum();
     if total > MAX_AMOUNT {
@@ -138,8 +145,8 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
         .map(|account| {
             let value: Decimal = rows
                 .iter()
-                .filter(|(id, _, _)| *id == account.id)
-                .map(|(_, _, v)| *v)
+                .filter(|(id, _, _, _)| *id == account.id)
+                .map(|(_, _, _, v)| *v)
                 .sum();
             AccountOverview {
                 account: account.id,
@@ -150,9 +157,10 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
         .collect();
     let holdings = rows
         .into_iter()
-        .map(|(account, product, value)| HoldingOverview {
+        .map(|(account, product, account_type, value)| HoldingOverview {
             account,
             product,
+            account_type,
             value,
             share: share_of_total(value),
         })

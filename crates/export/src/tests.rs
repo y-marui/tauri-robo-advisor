@@ -1,6 +1,6 @@
 // Every name and amount in these tests is made up.
 
-use portfolio::{AccountKind, Edit, Portfolio, ProductTargeting};
+use portfolio::{Edit, Portfolio, ProductTargeting};
 use rust_decimal::{Decimal, dec};
 
 use crate::*;
@@ -61,14 +61,12 @@ fn sample() -> Portfolio {
         &mut p,
         Edit::AddAccount {
             name: "Main".to_owned(),
-            kind: AccountKind::Taxable,
         },
     );
     apply(
         &mut p,
         Edit::AddAccount {
             name: "Tax-free".to_owned(),
-            kind: AccountKind::Nisa,
         },
     );
     let (main, nisa) = (p.accounts[0].id, p.accounts[1].id);
@@ -79,14 +77,15 @@ fn sample() -> Portfolio {
             products: Some(vec![s1, b1]),
         },
     );
-    for (account, product, value) in [
-        (main, s1, dec!(500000)),
-        (main, us, dec!(1000)),
-        (nisa, b1, dec!(100000)),
+    for (account, product, account_type, value) in [
+        (main, s1, Some("specific"), dec!(500000)),
+        (main, us, None, dec!(1000)),
+        (nisa, b1, Some("nisa"), dec!(100000)),
     ] {
         apply(
             &mut p,
             Edit::SetHolding {
+                account_type: account_type.map(str::to_owned),
                 account,
                 product,
                 value,
@@ -172,17 +171,17 @@ fn holdings_have_one_row_per_holding_with_jpy_values_and_shares() {
 
     assert_eq!(
         rows[0],
-        "account_id,account,account_kind,product_id,product,category_id,category,group_id,group,currency,value,quantity,price,price_unit,relative_weight,value_jpy,share_of_total"
+        "account_id,account,account_type,product_id,product,category_id,category,group_id,group,currency,value,quantity,price,price_unit,relative_weight,value_jpy,share_of_total"
     );
     assert_eq!(rows.len(), 4);
     // Total = 500,000 + 150,000 (1,000 USD at 150) + 100,000 = 750,000.
     assert_eq!(
         rows[1],
-        "6,Main,taxable,3,Stock Fund,1,Stocks,,,JPY,500000,,,1,,500000,0.666667"
+        "6,Main,specific,3,Stock Fund,1,Stocks,,,JPY,500000,,,1,,500000,0.666667"
     );
     assert_eq!(
         rows[2],
-        "6,Main,taxable,4,US Fund,1,Stocks,,,USD,1000,,,1,,150000,0.2"
+        "6,Main,,4,US Fund,1,Stocks,,,USD,1000,,,1,,150000,0.2"
     );
     assert_eq!(
         rows[3],
@@ -214,9 +213,9 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["accounts.csv"]),
         [
-            "account_id,account,kind,sellable,rounding_unit,tradable_product_ids,value_jpy",
-            "6,Main,taxable,true,1,all,650000",
-            "7,Tax-free,nisa,false,1,3;5,100000",
+            "account_id,account,sellable,rounding_unit,tradable_product_ids,value_jpy",
+            "6,Main,true,1,all,650000",
+            "7,Tax-free,true,1,3;5,100000",
         ]
     );
 }
@@ -272,6 +271,7 @@ fn a_weighted_category_exports_its_targeting_and_product_weights() {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: s1,
             weight: Some(dec!(2.50)),
@@ -311,13 +311,13 @@ fn names_that_look_like_formulas_are_written_as_text() {
         &mut p,
         Edit::AddAccount {
             name: "@SUM(1)".to_owned(),
-            kind: AccountKind::Other,
         },
     );
     let acc = p.accounts[0].id;
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(1),
@@ -386,6 +386,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: main,
             product: eu,
             value: dec!(10),
@@ -405,7 +406,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
             .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,,"))
     );
     assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,free,,");
-    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,taxable,true,1,all,");
+    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,all,");
     // Shares need the total, which is also unknown.
     assert!(holdings[1].ends_with(",500000,"));
 }
@@ -487,7 +488,6 @@ fn astronomical_values_do_not_panic() {
         &mut p,
         Edit::AddAccount {
             name: "Acc".to_owned(),
-            kind: AccountKind::Other,
         },
     );
     let (p1, p2, acc) = (p.products[0].id, p.products[1].id, p.accounts[0].id);
@@ -495,6 +495,7 @@ fn astronomical_values_do_not_panic() {
         apply(
             &mut p,
             Edit::SetHolding {
+                account_type: None,
                 account: acc,
                 product,
                 value: Decimal::MAX,
@@ -555,6 +556,7 @@ fn exports_keep_the_exact_amounts_that_the_screen_rounds() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: main,
             product: us_fund,
             value: dec!(1000.456),

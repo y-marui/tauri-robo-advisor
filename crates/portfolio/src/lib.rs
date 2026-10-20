@@ -9,6 +9,7 @@
 mod edit;
 mod error;
 mod import;
+mod migrate;
 mod model;
 mod money;
 mod presets;
@@ -18,6 +19,7 @@ mod valuation;
 pub use edit::{Edit, HoldingInput, MergeConflict};
 pub use error::{Error, Issue};
 pub use import::{ImportPlan, ImportRow, MatchedRow};
+pub use migrate::parse;
 pub use model::*;
 pub use money::{ShownValue, minor_units, round_for_display};
 pub use presets::{PresetInfo, login_pages, login_url_for, presets};

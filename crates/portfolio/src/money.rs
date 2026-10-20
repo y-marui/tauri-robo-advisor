@@ -49,6 +49,7 @@ pub fn round_for_display(currency: &str, amount: Decimal) -> Decimal {
 pub struct ShownValue {
     pub account: AccountId,
     pub product: ProductId,
+    pub account_type: Option<String>,
     pub value: Decimal,
 }
 
@@ -63,6 +64,7 @@ impl Portfolio {
                 Some(ShownValue {
                     account: holding.account,
                     product: holding.product,
+                    account_type: holding.account_type.clone(),
                     value: round_for_display(&product.currency, holding.value),
                 })
             })
@@ -140,7 +142,6 @@ mod tests {
             &mut p,
             Edit::AddAccount {
                 name: "Main".to_owned(),
-                kind: crate::AccountKind::Taxable,
             },
         );
         let (account, yen, dollar) = (p.accounts[0].id, p.products[0].id, p.products[1].id);
@@ -148,6 +149,7 @@ mod tests {
             apply(
                 &mut p,
                 Edit::SetHolding {
+                    account_type: None,
                     account,
                     product,
                     value,

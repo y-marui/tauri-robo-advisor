@@ -891,6 +891,7 @@ impl AppState {
                         products.insert(
                             row.product,
                             HoldingInput {
+                                account_type: None,
                                 product: row.product,
                                 value: row.value,
                                 quantity: row.quantity,
@@ -995,7 +996,7 @@ fn with_learned_references(recipe: &Recipe, references: Vec<String>) -> Recipe {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use portfolio::{AccountKind, Issue};
+    use portfolio::Issue;
 
     fn temp_path(label: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
@@ -1013,7 +1014,6 @@ mod tests {
     fn add_account(name: &str) -> Edit {
         Edit::AddAccount {
             name: name.to_owned(),
-            kind: AccountKind::Taxable,
         }
     }
 
@@ -1436,6 +1436,7 @@ mod tests {
         link(&state, fund, "Fund X");
         state
             .apply(Edit::SetHolding {
+                account_type: None,
                 account: main,
                 product: fund,
                 value: rust_decimal::Decimal::from(1),
@@ -1472,6 +1473,7 @@ mod tests {
         let (state, main, other, stock, _) = recipe_state("untouched");
         state
             .apply(Edit::SetHolding {
+                account_type: None,
                 account: other,
                 product: stock,
                 value: rust_decimal::Decimal::from(42),
@@ -1685,6 +1687,7 @@ mod tests {
         save_recipe(&state, "Funds", main);
         state
             .apply(Edit::SetHolding {
+                account_type: None,
                 account: main,
                 product: stock,
                 value: rust_decimal::Decimal::from(9),

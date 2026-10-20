@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The account type moves from the account to the record (#99, stage 1). An account is now a container with no type; a record (account, product, type) carries one of the built-in types (general, specific, NISA, old NISA, deposit, crypto assets; fixed in the app, names translated) or a custom type the user adds (`custom_types`, `AddAccountType`, `UpdateAccountType`, `RemoveAccountType`). One account can hold the same product under several types. `Account::kind` and `AccountKind` are gone; `SetHolding`, `RemoveHolding`, `SetHoldingWeight` and `HoldingInput` take an optional `account_type`, `SetRecordType` changes the type of a record (refused when the target exists), and an import without a type keeps the type of the only existing record of the product. Selling: NISA and old NISA records (and custom types marked not sellable) are never sold by a suggestion; the account's own `sellable` still applies. Points are no longer a type. Schema version 14 (an older app refuses the file); an older file is converted on load (`migrate.rs`): taxable -> specific, NISA/deposit/crypto -> the same, iDeCo and Points -> custom types made only if used, other -> not set. The Accounts card has no type column; a new "Account types" card manages custom types; the Records card has a type per record; the Holdings tab shows the type; `holdings.csv` has `account_type` instead of `account_kind` and `accounts.csv` has no `kind`. Reading the type from table titles and filtering by it are stage 2.
+
 ### Added
 
 - Reorder accounts, groups, and categories by drag and drop (#111): `Edit::MoveAccountTo`, `MoveGroupTo` and `MoveCategoryTo` move a row to a given place (`index` is the place afterwards; out-of-range index and unknown id are refused, the same place is a no-op, the other rows keep their order). The three lists share one frontend part (`src/sortable.ts`, pointer events on a grip, no dependency): the dragged row is dimmed, a line shows the drop position, Esc cancels, and the moved row is highlighted for a moment (also after the up/down buttons, which stay). The order computation is in `src/reorder.ts` with tests.

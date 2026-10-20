@@ -48,7 +48,7 @@ export function recipesPanel(ctx: Context): Panel {
     }
     newAccountAdd.disabled = true;
     void ctx
-      .apply({ type: "add_account", name, kind: "taxable" })
+      .apply({ type: "add_account", name })
       .then((ok) => {
         if (ok && current) {
           newAccountName.value = "";

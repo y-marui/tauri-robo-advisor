@@ -4,6 +4,7 @@ import { getLanguage, t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Category, Holding, Overview, PortfolioView } from "../types.ts";
 import { groupEntries, groupName } from "./groups.ts";
+import { recordKey, typeLabel } from "./labels.ts";
 
 // The center panel: holding records grouped by category (or by account), each group opened by
 // a subtotal row. The table only shows: names, categories and amounts (in the product's own
@@ -15,8 +16,12 @@ const yen = (amount: string): string => formatAmount(amount, getLanguage());
 
 /** The record's value rounded by Rust for display; the exact value if Rust gave none. */
 const shownValue = (view: PortfolioView, record: Holding): string =>
-  view.shown_values.find((s) => s.account === record.account && s.product === record.product)
-    ?.value ?? record.value;
+  view.shown_values.find(
+    (s) =>
+      s.account === record.account &&
+      s.product === record.product &&
+      (s.account_type ?? null) === (record.account_type ?? null),
+  )?.value ?? record.value;
 
 export function holdingsTablePanel(ctx: Context): Panel {
   // Cells that show Rust's valuation, found again by key after each refresh.
@@ -46,7 +51,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
         view.portfolio.groups.map((g) => `${g.id}:${g.name}`).join(","),
         // Everything shown as text is part of the signature, so an edit in Settings rebuilds the table.
         view.portfolio.products.map((p) => `${p.id}:${p.name}:${p.category}:${p.currency}`).join(","),
-        view.portfolio.holdings.map((x) => `${x.account}:${x.product}:${x.value}`).join(","),
+        view.portfolio.holdings.map((x) => `${recordKey(x.account, x.product, x.account_type)}:${x.value}`).join(","),
       ].join("|"),
     (view, bind) => {
       holdingCells = new Map();
@@ -68,8 +73,13 @@ export function holdingsTablePanel(ctx: Context): Panel {
           refresh();
         }
       });
-      const holdingOf = (v: PortfolioView, account: number, product: number) =>
-        v.portfolio.holdings.find((x) => x.account === account && x.product === product);
+      const holdingOf = (v: PortfolioView, record: Holding) =>
+        v.portfolio.holdings.find(
+          (x) =>
+            x.account === record.account &&
+            x.product === record.product &&
+            (x.account_type ?? null) === (record.account_type ?? null),
+        );
 
       const rows: HTMLElement[] = [];
 
@@ -80,11 +90,11 @@ export function holdingsTablePanel(ctx: Context): Panel {
           return;
         }
         const cells = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
-        holdingCells.set(`${record.account}:${record.product}`, cells);
+        holdingCells.set(recordKey(record.account, record.product, record.account_type), cells);
         const quantityCell = h("td", { class: "num" });
         const priceCell = h("td", { class: "num" });
         const showQuantityAndPrice = (): void => {
-          const held = holdingOf(current, record.account, record.product);
+          const held = holdingOf(current, record);
           quantityCell.textContent = held?.quantity ?? "";
           const price = priceText(held);
           priceCell.textContent = price === "" ? "" : `${price} ${product.currency}`;
@@ -93,7 +103,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
         // label follows every refresh, since an edit or an import can change either.
         const weightOnlyLabel = h("span", { class: "muted weight-only" }, ` (${t("No value yet")})`);
         const showWeightOnly = (): void => {
-          const held = holdingOf(current, record.account, record.product);
+          const held = holdingOf(current, record);
           weightOnlyLabel.hidden = !(held && held.weight !== null && Number(held.value) === 0);
         };
         showQuantityAndPrice();
@@ -103,7 +113,18 @@ export function holdingsTablePanel(ctx: Context): Panel {
           h(
             "tr",
             {},
-            h("th", { scope: "row", class: "product-cell", title: product.name }, product.name),
+            h(
+              "th",
+              { scope: "row", class: "product-cell", title: product.name },
+              product.name,
+              record.account_type
+                ? h(
+                    "span",
+                    { class: "muted record-type" },
+                    ` (${typeLabel(record.account_type, view.portfolio.custom_types)})`,
+                  )
+                : null,
+            ),
             ...(groupBy === "category" ? [h("td", { class: "clip" }, account.name)] : []),
             h(
               "td",
@@ -264,7 +285,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
     note.textContent = "";
     note.classList.remove("error");
     for (const record of overview.holdings) {
-      const cells = holdingCells.get(`${record.account}:${record.product}`);
+      const cells = holdingCells.get(recordKey(record.account, record.product, record.account_type));
       if (cells) {
         cells.value.textContent = yen(record.value);
         cells.share.textContent = percent(record.share);

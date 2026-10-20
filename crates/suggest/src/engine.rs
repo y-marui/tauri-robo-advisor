@@ -86,7 +86,11 @@ impl<'a> Book<'a> {
                 .ok_or(Error::Inconsistent)?;
             let value = to_jpy(portfolio, &product.currency, holding.value)?;
             *product_value.entry(product.id).or_default() += value;
-            if holding.account == account.id {
+            // Only what a suggestion may sell counts as held here (the type of a record can forbid
+            // selling it, like a NISA record).
+            if holding.account == account.id
+                && portfolio.type_sellable(holding.account_type.as_deref())
+            {
                 *account_value.entry(product.id).or_default() += value;
             }
         }

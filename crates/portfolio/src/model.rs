@@ -20,9 +20,13 @@ use serde::{Deserialize, Serialize};
 /// Version 13 added the kind column and kind rules of a mapping (`kind_column`, `kind_rules`: an
 /// older app would ignore them and read every row of a mixed table the same way, misvaluing some, so
 /// it refuses).
+/// Version 14 moved the account type from the account to the record (`Holding::account_type`, and
+/// the user's own types in `custom_types`; `Account::kind` was dropped: an older app would read every
+/// record as untyped and write the old kind back, so it refuses). An older file is converted on
+/// load (see `migrate`).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 13;
+pub const SCHEMA_VERSION: u32 = 14;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -97,24 +101,34 @@ pub struct Product {
     pub aliases: Vec<Alias>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AccountKind {
-    Taxable,
-    Nisa,
-    Ideco,
-    Points,
-    Crypto,
-    Deposit,
-    Other,
+/// The account types that ship with the app: the id (stored in a record) and whether a record of
+/// the type may be sold by a suggestion. The display names belong to the screen (translated).
+/// NISA and old NISA are not sellable: selling would forfeit tax-free room.
+pub const BUILTIN_ACCOUNT_TYPES: [(&str, bool); 6] = [
+    ("general", true),
+    ("specific", true),
+    ("nisa", false),
+    ("old_nisa", false),
+    ("deposit", true),
+    ("crypto", true),
+];
+
+/// An account type the user added (for manual entry and custom recipes).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomType {
+    /// `custom-<n>`, from the id counter, never reused.
+    pub id: String,
+    pub name: String,
+    /// Whether suggestions may propose selling a record of this type.
+    pub sellable: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Account {
     pub id: AccountId,
     pub name: String,
-    pub kind: AccountKind,
-    /// Whether suggestions may propose selling in this account.
+    /// Whether suggestions may propose selling in this account (a record is also bound by the
+    /// selling rule of its type).
     pub sellable: bool,
     /// Products that can be bought here; `None` means any product.
     #[serde(default)]
@@ -143,6 +157,10 @@ pub struct Holding {
     /// `Weighted`. A record can have a weight and no value yet (a product to start buying).
     #[serde(default)]
     pub weight: Option<Decimal>,
+    /// The custody type of the record (a built-in id such as `nisa`, or a custom type's id); `None`:
+    /// not set. The record is identified by the account, the product, and this type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -380,6 +398,8 @@ pub struct Portfolio {
     pub revision: u64,
     #[serde(default)]
     pub recipes: Vec<Recipe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom_types: Vec<CustomType>,
 }
 
 impl Default for Portfolio {
@@ -396,11 +416,34 @@ impl Default for Portfolio {
             import_mappings: Vec::new(),
             revision: 0,
             recipes: Vec::new(),
+            custom_types: Vec::new(),
         }
     }
 }
 
 impl Portfolio {
+    /// Whether an account type id is a built-in one or one of the user's.
+    pub fn has_account_type(&self, id: &str) -> bool {
+        BUILTIN_ACCOUNT_TYPES.iter().any(|(b, _)| *b == id)
+            || self.custom_types.iter().any(|t| t.id == id)
+    }
+
+    /// Whether a record of this type may be sold (not set: yes).
+    pub fn type_sellable(&self, id: Option<&str>) -> bool {
+        let Some(id) = id else { return true };
+        BUILTIN_ACCOUNT_TYPES
+            .iter()
+            .find(|(b, _)| *b == id)
+            .map(|(_, sellable)| *sellable)
+            .or_else(|| {
+                self.custom_types
+                    .iter()
+                    .find(|t| t.id == id)
+                    .map(|t| t.sellable)
+            })
+            .unwrap_or(true)
+    }
+
     /// The relative weight of a product over the whole portfolio: the weights of its records
     /// added up. `None` when no record of it has a weight.
     pub fn product_weight(&self, product: ProductId) -> Option<Decimal> {
@@ -413,11 +456,13 @@ impl Portfolio {
             .reduce(|sum, w| sum.checked_add(w).unwrap_or(Decimal::MAX))
     }
 
-    /// The relative weight of the record of a product in one account.
+    /// The relative weight of the record of a product in one account (the weights of its records
+    /// of the several types added up).
     pub fn record_weight(&self, account: AccountId, product: ProductId) -> Option<Decimal> {
         self.holdings
             .iter()
-            .find(|h| h.account == account && h.product == product)
-            .and_then(|h| h.weight)
+            .filter(|h| h.account == account && h.product == product)
+            .filter_map(|h| h.weight)
+            .reduce(|sum, w| sum.checked_add(w).unwrap_or(Decimal::MAX))
     }
 }

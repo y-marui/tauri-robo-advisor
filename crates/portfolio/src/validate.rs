@@ -127,8 +127,28 @@ impl Portfolio {
             }
         }
 
+        let mut type_ids = HashSet::new();
+        let mut type_names = HashSet::new();
+        for t in &self.custom_types {
+            name(&t.name, "account type").map_err(into_corrupt)?;
+            let numbered =
+                t.id.strip_prefix("custom-")
+                    .and_then(|n| n.parse::<u64>().ok())
+                    .is_some_and(|n| n != 0 && n < self.next_id);
+            if !numbered || !type_ids.insert(t.id.as_str()) || !type_names.insert(t.name.as_str()) {
+                return corrupt("an account type is duplicated or out of range");
+            }
+        }
+
         let mut seen = HashSet::new();
         for holding in &self.holdings {
+            if holding
+                .account_type
+                .as_deref()
+                .is_some_and(|t| !self.has_account_type(t))
+            {
+                return corrupt("a holding refers to a missing account type");
+            }
             non_negative(holding.value, "holding value").map_err(into_corrupt)?;
             if let Some(quantity) = holding.quantity {
                 non_negative(quantity, "quantity").map_err(into_corrupt)?;
@@ -147,8 +167,12 @@ impl Portfolio {
             {
                 return corrupt("a holding refers to a missing account or product");
             }
-            if !seen.insert((holding.account, holding.product)) {
-                return corrupt("a product is held twice in the same account");
+            if !seen.insert((
+                holding.account,
+                holding.product,
+                holding.account_type.as_deref(),
+            )) {
+                return corrupt("a product is held twice in the same account with the same type");
             }
         }
 

@@ -14,7 +14,8 @@ _最終更新: 2026-10-19_
 | `src/i18n.ts` | 画面の文言（英語がキー、日本語は翻訳） | — |
 | `src/panel.ts`, `src/fields.ts`, `src/dom.ts` | パネルの描画、入力部品、DOM の補助 | `src/i18n.ts` |
 | `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別の一覧、グループとカテゴリの小計（表示だけ。編集は全レコードのカード） | `src/panel.ts`, `src/views/groups.ts` |
-| `src/views/records.ts` | 設定タブの「全レコード」カード。商品とレコードの編集、レコードと商品の追加、商品名の絞り込み | `src/panel.ts`, `src/fields.ts`, `src/views/holdings-table.ts`（`priceText`） |
+| `src/views/account-types.ts` | 設定タブの「口座の種類」カード。追加した種別の追加・名前・売却可・削除 | `src/panel.ts`, `src/fields.ts` |
+| `src/views/records.ts` | 設定タブの「全レコード」カード。商品とレコード（口座・商品・種別）の編集、レコードと商品の追加、商品名の絞り込み | `src/panel.ts`, `src/fields.ts`, `src/views/holdings-table.ts`（`priceText`） |
 | `src/views/groups.ts` | グループのカード（追加・名前の変更・削除）と、グループの表示の順序・名前の補助 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
 | `src/views/suggestions.ts` | 保有タブの副タブ「提案」。対象口座の選択と全体の提案 | `src/views/suggestion.ts` |
