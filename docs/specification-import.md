@@ -53,7 +53,19 @@
 - JPY 市場がない通貨（HTTP 400）は評価できないので、`unpriced` として一覧で返す。黙って捨てるとポートフォリオを誤って表示するため。
 - 数値は JSON の文字列のまま十進数へ変換し、浮動小数点を通さない。
 - API キーとシークレットは OS のキーチェーンにだけ保存し、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
-- フロントエンドから呼べるコマンド: `save_bitflyer_credentials`、`has_bitflyer_credentials`、`delete_bitflyer_credentials`、`fetch_bitflyer_holdings`。
+- フロントエンドから呼べるコマンド: `save_bitflyer_credentials`、`has_bitflyer_credentials`、`delete_bitflyer_credentials`、`fetch_bitflyer_holdings`、`fetch_bitflyer_holdings_with_page_prices`。
+
+### Prices from the Price Page (#103)
+
+数量は API、価格は公開の価格ページ（`https://bitflyer.com/ja-jp/virtual-currency-chart`、ログイン不要）から取る選択肢。Lightning に円の市場がない通貨（AXS、BAT、BCH、DOT、ETC、LINK、LTC、MANA、MKR、SAND、SHIB、XTZ など）も評価できる。
+
+- **ページの構造**（実ページで 1 回確認）: 表が 1 つ（見出し「通貨ペア」「価格」「前日比」、1 行 1 ペア、`BTC/JPY` と `12,986,322 円`、小さい価格は `0.0007897 円`）。遅延読み込みやタブはなく、約 40 ペアが最初から出る。価格は 1 種類だけ（買値・売値の区別はない）なので、「1 つの価格の基準」はページの価格そのものになる。
+- **価格の基準は 1 つ**: 価格ページを選んだときは、すべての通貨をページの価格で評価する（円はそのまま）。評価額 = 数量 × 価格で、数量と価格を保有に記録する（ほかの証券会社と同じ形）。
+- **読み方**: ページは、既存の「ブラウザで取得」で人が開いて表を読み、「この表を使う」で取り込みの表として Rust が保持する。`fetch_bitflyer_holdings_with_page_prices` は表をフロントエンドから受け取らず、保持している表を `bitflyer::PagePrices::from_table` で読む。見出しが「通貨ペア」「価格」で始まらない表は断る（別の表を価格として読まない）。`<コード>/JPY` で価格が正の行だけ読み、同じ通貨が 2 行あれば断る。アプリ自身はページに接続せず、新しい通信は増えない。
+- **保存形式**: 価格は保存しないので、レシピやプリセットのスキーマ（版）は変えない。価格の列の位置は `crates/bitflyer` の固定のレイアウト（見出し 2 つ）で、ページが変わったら表を断って知らせる。
+- **API の価格との比較**: Lightning の市場がある通貨は、最終取引価格も読み、差（（ページの価格 − API の価格）÷ API の価格、%、小数 2 桁）を参考として返す。意味も更新の時刻も違うので、差はエラーではなく、取り込みも止めない。市場がない・読めない場合は比較が空になる。
+- **ページにない通貨**: API の価格があっても、基準が混ざるので評価に使わない。`unpriced` として「価格ページにない」と知らせ、取り込まない。価格がどちらにもない通貨も同じ。
+- 画面: 価格の選択（Lightning の最終取引価格 / bitFlyer の価格ページ）。ページを選んだときは、取り込みの結果の上に比較の表（折りたたみ）を出す。
 
 ### bitFlyer in the UI
 

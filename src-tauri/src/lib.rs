@@ -55,15 +55,37 @@ async fn delete_bitflyer_credentials() -> Result<(), String> {
 
 #[tauri::command]
 async fn fetch_bitflyer_holdings() -> Result<Holdings, String> {
+    let client = bitflyer_client().await?;
+    client.holdings().await.map_err(|e| e.to_string())
+}
+
+// Quantities from the API, prices from the public price page: the table the person
+// loaded from the page (kept here, never sent through the frontend) gives one yen
+// price per currency. The app opens no connection to the page; the browser path read it.
+#[tauri::command]
+async fn fetch_bitflyer_holdings_with_page_prices(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Holdings, String> {
+    let prices = {
+        let state = Arc::clone(&state);
+        tauri::async_runtime::spawn_blocking(move || state.bitflyer_page_prices())
+            .await
+            .map_err(|e| e.to_string())??
+    };
+    let client = bitflyer_client().await?;
+    client
+        .holdings_with_page_prices(&prices)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn bitflyer_client() -> Result<Client<ReqwestTransport>, String> {
     let credentials = tauri::async_runtime::spawn_blocking(secrets::load_bitflyer)
         .await
         .map_err(|e| e.to_string())??
         .ok_or_else(|| "No bitFlyer API credentials are saved.".to_owned())?;
     let transport = ReqwestTransport::new().map_err(|e| e.to_string())?;
-    Client::new(transport, credentials)
-        .holdings()
-        .await
-        .map_err(|e| e.to_string())
+    Ok(Client::new(transport, credentials))
 }
 
 // The portfolio lives in Rust. The frontend asks for a snapshot and sends
@@ -408,6 +430,7 @@ pub fn run() {
             has_bitflyer_credentials,
             delete_bitflyer_credentials,
             fetch_bitflyer_holdings,
+            fetch_bitflyer_holdings_with_page_prices,
             get_portfolio,
             apply_portfolio_edit,
             get_overview,

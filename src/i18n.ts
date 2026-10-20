@@ -244,6 +244,21 @@ export const MESSAGES = {
   },
   "Add a product first.": { ja: "先に商品を追加してください。" },
   "Value ({currency})": { ja: "評価額 ({currency})" },
+  Prices: { ja: "価格" },
+  "Prices: Lightning last price": { ja: "価格: Lightning の最終取引価格" },
+  "Prices: bitFlyer price page": { ja: "価格: bitFlyer の価格ページ" },
+  "Open {url} in the browser (Fetch with the browser), use its table, then fetch the balances. The app does not connect to the page itself.": {
+    ja: "ブラウザで取得で {url} を開いてその表を使ってから、残高を取得してください。アプリ自身はそのページに接続しません。",
+  },
+  "Not on the price page, so these could not be valued and are left out: {names}": {
+    ja: "価格ページにないため評価できず、除外します: {names}",
+  },
+  "Page price vs Lightning last price (for reference)": {
+    ja: "ページの価格と Lightning の最終取引価格（参考）",
+  },
+  "Page price": { ja: "ページの価格" },
+  "Lightning price": { ja: "Lightning の価格" },
+  Difference: { ja: "差" },
   "No JPY market, so these could not be valued and are left out: {names}": {
     ja: "円の市場がなく評価できないため、除外します: {names}",
   },

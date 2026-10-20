@@ -1,15 +1,17 @@
 import {
   deleteBitflyerCredentials,
   fetchBitflyerHoldings,
+  fetchBitflyerHoldingsWithPagePrices,
   hasBitflyerCredentials,
   planImport,
   saveBitflyerCredentials,
 } from "../api.ts";
+import { formatAmount } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
-import { t } from "../i18n.ts";
+import { getLanguage, t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
-import type { ImportPlan, ImportRow, PortfolioView } from "../types.ts";
+import type { BitflyerHoldings, ImportPlan, ImportRow, PortfolioView } from "../types.ts";
 import { importPlanView } from "./import-plan.ts";
 
 // bitFlyer: the API key, and the balances. The key is typed here, handed to
@@ -19,6 +21,7 @@ import { importPlanView } from "./import-plan.ts";
 
 const SOURCE = "bitflyer";
 const CURRENCY = "JPY";
+const PRICE_PAGE = "https://bitflyer.com/ja-jp/virtual-currency-chart";
 
 export function bitflyerPanel(ctx: Context): Panel {
   const credentialStatus = h("p", { class: "note", role: "status" });
@@ -83,11 +86,33 @@ export function bitflyerPanel(ctx: Context): Panel {
 
   const accountSelect = h("select", { "aria-label": t("Account to update") });
   const fetchButton = h("button", { type: "button" }, t("Fetch balances"));
+  // One price basis for every currency: either the Lightning last price (a currency with no
+  // market is left out), or the price page, whose table the person loaded with the browser.
+  const basisSelect = h(
+    "select",
+    { "aria-label": t("Prices") },
+    h("option", { value: "api" }, t("Prices: Lightning last price")),
+    h("option", { value: "page" }, t("Prices: bitFlyer price page")),
+  );
+  const pageNote = h(
+    "p",
+    { class: "note" },
+    t(
+      "Open {url} in the browser (Fetch with the browser), use its table, then fetch the balances. The app does not connect to the page itself.",
+      { url: PRICE_PAGE },
+    ),
+  );
+  pageNote.hidden = true;
+  basisSelect.addEventListener("change", () => {
+    pageNote.hidden = basisSelect.value !== "page";
+  });
   const result = h("div", { class: "bitflyer-result", "aria-live": "polite" });
 
   let current: PortfolioView | null = null;
   let rows: ImportRow[] | null = null;
   let unpriced: string[] = [];
+  let compared: BitflyerHoldings["holdings"] = [];
+  let usedPage = false;
   let sequence = 0;
   let accountSignature: string | null = null;
 
@@ -101,9 +126,17 @@ export function bitflyerPanel(ctx: Context): Panel {
   fetchButton.addEventListener("click", () => {
     fetchButton.disabled = true;
     result.replaceChildren(h("p", { class: "note" }, t("Fetching…")));
-    fetchBitflyerHoldings()
+    const page = basisSelect.value === "page";
+    (page ? fetchBitflyerHoldingsWithPagePrices() : fetchBitflyerHoldings())
       .then((fetched) => {
-        rows = fetched.holdings.map((x) => ({ name: x.symbol, value: x.value, quantity: x.amount }));
+        usedPage = page;
+        rows = fetched.holdings.map((x) => ({
+          name: x.symbol,
+          value: x.value,
+          quantity: x.amount,
+          price: x.price ?? null,
+        }));
+        compared = fetched.holdings.filter((x) => x.api_price != null);
         unpriced = fetched.unpriced;
         return showPlan();
       })
@@ -139,19 +172,68 @@ export function bitflyerPanel(ctx: Context): Panel {
       source: SOURCE,
       currency: CURRENCY,
       accountSelect,
-      notes:
-        unpriced.length === 0
+      notes: [
+        ...(unpriced.length === 0
           ? []
           : [
               h(
                 "p",
                 { class: "note error" },
-                t("No JPY market, so these could not be valued and are left out: {names}", {
-                  names: unpriced.join(", "),
-                }),
+                t(
+                  usedPage
+                    ? "Not on the price page, so these could not be valued and are left out: {names}"
+                    : "No JPY market, so these could not be valued and are left out: {names}",
+                  { names: unpriced.join(", ") },
+                ),
               ),
-            ],
+            ]),
+        ...(usedPage && compared.length > 0 ? [comparisonView()] : []),
+      ],
     });
+  }
+
+  // For reference only: the page price and the Lightning last price differ in meaning and timing.
+  function comparisonView(): HTMLElement {
+    const yen = (amount: string) => formatAmount(amount, getLanguage());
+    return h(
+      "details",
+      { class: "bitflyer-comparison" },
+      h("summary", {}, t("Page price vs Lightning last price (for reference)")),
+      h(
+        "div",
+        { class: "table-wrap" },
+        h(
+          "table",
+          {},
+          h(
+            "thead",
+            {},
+            h(
+              "tr",
+              {},
+              h("th", {}, t("Currency")),
+              h("th", { class: "num" }, t("Page price")),
+              h("th", { class: "num" }, t("Lightning price")),
+              h("th", { class: "num" }, t("Difference")),
+            ),
+          ),
+          h(
+            "tbody",
+            {},
+            ...compared.map((x) =>
+              h(
+                "tr",
+                {},
+                h("td", {}, x.symbol),
+                h("td", { class: "num" }, yen(x.price ?? "")),
+                h("td", { class: "num" }, yen(x.api_price ?? "")),
+                h("td", { class: "num" }, x.difference_percent == null ? "" : `${x.difference_percent}%`),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   const el = h(
@@ -166,7 +248,8 @@ export function bitflyerPanel(ctx: Context): Panel {
     credentialStatus,
     h("div", { class: "add-row" }, keyInput, secretInput, saveButton, removeKey),
     h("h3", {}, t("Balances")),
-    h("div", { class: "add-row" }, accountSelect, fetchButton),
+    h("div", { class: "add-row" }, accountSelect, basisSelect, fetchButton),
+    pageNote,
     result,
   );
 
