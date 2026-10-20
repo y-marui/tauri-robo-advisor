@@ -180,6 +180,11 @@ export interface DataInfo {
 
 export interface PortfolioView {
   portfolio: Portfolio;
+  /**
+   * Each holding's value rounded to the smallest unit of its currency, for display only. The
+   * holding's own `value` stays exact (edit fields show it as it is).
+   */
+  shown_values: { account: number; product: number; value: string }[];
   /** The recipes as they are run (`portfolio.recipes` holds what is stored). */
   recipes: RecipeView[];
   issues: Issue[];

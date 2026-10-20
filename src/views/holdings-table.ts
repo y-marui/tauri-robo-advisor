@@ -13,6 +13,11 @@ import { groupEntries, groupName } from "./groups.ts";
 const percent = (fraction: string): string => `${fractionToPercent(fraction)}%`;
 const yen = (amount: string): string => formatAmount(amount, getLanguage());
 
+/** The record's value rounded by Rust for display; the exact value if Rust gave none. */
+const shownValue = (view: PortfolioView, record: Holding): string =>
+  view.shown_values.find((s) => s.account === record.account && s.product === record.product)
+    ?.value ?? record.value;
+
 export function holdingsTablePanel(ctx: Context): Panel {
   // Cells that show Rust's valuation, found again by key after each refresh.
   let holdingCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
@@ -107,7 +112,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
             h(
               "td",
               { class: "num" },
-              `${yen(record.value)} ${product.currency}`,
+              `${yen(shownValue(view, record))} ${product.currency}`,
               weightOnlyLabel,
             ),
             quantityCell,
