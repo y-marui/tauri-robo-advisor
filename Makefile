@@ -54,7 +54,7 @@ all: lint test
 bundle-app:
 	@if [ -n "$(SIGN_IDENTITY)" ]; then echo "Signing with: $(SIGN_IDENTITY)"; \
 	else echo "No Developer ID Application certificate found: signing ad-hoc (permissions are asked again after every build). Set TEAM_ID / DEVELOPER_NAME or SIGN_IDENTITY in .env."; fi
-	APPLE_SIGNING_IDENTITY="$(SIGN_IDENTITY)" npm run tauri build -- --bundles app
+	APPLE_SIGNING_IDENTITY="$(or $(SIGN_IDENTITY),-)" npm run tauri build -- --bundles app
 	bash scripts/verify-signature.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app"
 
 # Build the .app and install it into $(DEPLOY_DIR) (macOS only).
