@@ -117,15 +117,13 @@ export function holdingsTablePanel(ctx: Context): Panel {
               "th",
               { scope: "row", class: "product-cell", title: product.name },
               product.name,
-              record.account_type
-                ? h(
-                    "span",
-                    { class: "muted record-type" },
-                    ` (${typeLabel(record.account_type, view.portfolio.custom_types)})`,
-                  )
-                : null,
             ),
             ...(groupBy === "category" ? [h("td", { class: "clip" }, account.name)] : []),
+            h(
+              "td",
+              { class: "clip record-type" },
+              record.account_type ? typeLabel(record.account_type, view.portfolio.custom_types) : "",
+            ),
             h(
               "td",
               { class: "clip" },
@@ -157,7 +155,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
             h(
               "tr",
               { class: "group" },
-              h("th", { scope: "rowgroup", colspan: 2 }, account.name),
+              h("th", { scope: "rowgroup", colspan: 4 }, account.name),
               h("td", {}),
               h("td", {}),
               h("td", {}),
@@ -182,7 +180,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
               { class: "group" },
               h(
                 "th",
-                { scope: "rowgroup", colspan: 3 },
+                { scope: "rowgroup", colspan: 4 },
                 category.name,
               ),
               h("td", {}),
@@ -206,7 +204,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
               { class: "group group-main" },
               h(
                 "th",
-                { scope: "rowgroup", colspan: 3 },
+                { scope: "rowgroup", colspan: 4 },
                 groupName(view, id),
               ),
               h("td", {}),
@@ -246,6 +244,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 {},
                 h("th", {}, t("Product")),
                 ...(groupBy === "category" ? [h("th", {}, t("Account"))] : []),
+                h("th", {}, t("Type")),
                 h("th", {}, t("Category")),
                 h("th", {}, t("Price")),
                 h("th", {}, t("Quantity")),
