@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
+
 ### Changed
 
 - Browser reading follow-ups (#39): the fixed page scripts (table read, link search and move, menu click, settle wait) now run in an isolated world (`Page.createIsolatedWorld`), so a page cannot replace `URL`, `querySelectorAll`, or similar built-ins before the app reads it; the world is made again once if the browser reports the context gone. A recipe read now waits (up to 10 s, polling every 0.5 s) until a table with the recipe's title shows up and the same tables are read twice in a row, instead of relying only on the DOM-quiet heuristic (`Cdp::read_tables_until`); the safety rules are unchanged. The refused-word lists gained password, PIN, reissue, reset, unsubscribe, download and upload words (tests use made-up pages). The decision to keep treating 13+ digit and 24+ hex values as per-visit in link fingerprints is recorded and tested. Trying a real SBI page is still open.

@@ -39,10 +39,12 @@ export function exportAll(): Promise<string> {
 
 /**
  * Sends one edit. Rust validates it, saves it, and returns the new state; a
- * rejected edit rejects this promise with a message and changes nothing.
+ * rejected edit rejects this promise with a message and changes nothing. `location` is
+ * `data.location` of the view the edit was made from; Rust refuses it if the data folder
+ * was switched since.
  */
-export function applyEdit(edit: Edit): Promise<PortfolioView> {
-  return invoke<PortfolioView>("apply_portfolio_edit", { edit });
+export function applyEdit(edit: Edit, location: number): Promise<PortfolioView> {
+  return invoke<PortfolioView>("apply_portfolio_edit", { edit, location });
 }
 
 /**

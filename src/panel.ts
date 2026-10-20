@@ -4,8 +4,8 @@ import type { Edit, Overview, PortfolioView } from "./types.ts";
 
 /** What the views need from the app. */
 export interface Context {
-  /** Sends an edit; the app shows the result and refreshes every panel. Resolves to whether it was accepted. */
-  apply(edit: Edit): Promise<boolean>;
+  /** Sends an edit (tied to the given data location, or the one shown now); the app shows the result and refreshes every panel. Resolves to whether it was accepted. */
+  apply(edit: Edit, location?: number): Promise<boolean>;
   /** Shows a message without sending anything. */
   fail(message: string): void;
   /** Takes a new state that did not come from an edit (for example after the data folder changed). */
