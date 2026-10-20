@@ -412,6 +412,10 @@ export const MESSAGES = {
   "Open the page 取引余力・預り資産 of Daiwa Connect Securities after logging in, then fetch: the yen balance (金銭残高) is read.": {
     ja: "ログイン後に、大和コネクト証券の「取引余力・預り資産」のページを開いてから取得します。円の残高（金銭残高）を読みます。",
   },
+  "PayPay Securities: holdings (provisional)": { ja: "PayPay 証券: 保有銘柄（暫定）" },
+  "Reads the cards under 保有銘柄 of PayPay Securities (evaluation only: the page shows no quantity or price). After logging in, open the page that shows the holdings by hand (it is a web app that needs a click on the mini app entry, which this app does not make), then fetch.": {
+    ja: "PayPay 証券の「保有銘柄」の下のカードを読みます（評価額だけ。ページには数量も価格も出ません）。ログイン後、保有が出るページを手で開いてから取得してください（Web アプリで、ミニアプリの項目のクリックが要りますが、このアプリはクリックしません）。",
+  },
   "Move up": { ja: "上へ" },
   "Move down": { ja: "下へ" },
   "Preset": { ja: "組み込みのレシピ" },

@@ -322,6 +322,44 @@ const PRESETS: &[Preset] = &[
             kinds: &[],
         },
     },
+    // PayPay Securities (provisional): the logged-in top page lists each holding as a card under
+    // the heading 保有銘柄 (the evaluation, the gain, then the name; no quantity or price is
+    // shown), so only the evaluation is read. Checked against the structure of the real page
+    // once; the page after "more" or with many holdings is not.
+    Preset {
+        id: "paypay-sec-holdings",
+        label: "PayPay Securities: holdings (provisional)",
+        description: "Reads the cards under 保有銘柄 of PayPay Securities (evaluation only: the page shows no quantity or price). After logging in, open the page that shows the holdings by hand (it is a web app that needs a click on the mini app entry, which this app does not make), then fetch.",
+        links: &[],
+        menu: None,
+        table_starts_with: "",
+        allowed_sites: &[],
+        start_site: "paypay-sec.co.jp",
+        following_tables: false,
+        cards: Some(PresetCards {
+            heading: "保有銘柄",
+            item_depth: 1,
+        }),
+        login_url: "",
+        currency: "",
+        layout: Layout {
+            source: "PayPay",
+            name_column: 2,
+            value_column: 0,
+            price_column: None,
+            price_unit: 1,
+            price_part: None,
+            header_rows: 0,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            loose_numbers: false,
+            quantity_column: None,
+            max_records: None,
+            kind_column: None,
+            kinds: &[],
+        },
+    },
 ];
 
 /// The presets, in the order they are shown.
