@@ -56,13 +56,6 @@ CI（GitHub Actions）は push / PR のたびに `security` → `lint` → `test
 **技術スタック:**
 
 | 層 | 技術 |
-|
-
-## Tech Stack and Main Directories
-
-**技術スタック:**
-
-| 層 | 技術 |
 |---|---|
 | アプリ基盤 | Tauri 2（Rust 2024 edition） |
 | フロントエンド | TypeScript（vanilla）+ Vite |
