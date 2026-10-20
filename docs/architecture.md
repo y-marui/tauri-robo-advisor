@@ -11,6 +11,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 - `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録（`propose_rebalance` は `rebalance` crate への薄い委譲）
 - `crates/rebalance/src/lib.rs` — リバランス計算（`propose`）
 - `crates/bitflyer/src/lib.rs` — bitFlyer クライアント（`Client`、`Credentials`、`Transport`、価格ページの表を読む `PagePrices`）
+- `crates/coincheck/src/lib.rs` — Coincheck クライアント（`Client`、`Credentials`、`Transport`。公開のティッカーで評価）
 - `crates/export/src/lib.rs` — `build(portfolio, info)`。各ファイルの内容をバイト列で返す
 - `src-tauri/src/exporter.rs` — エクスポートのフォルダとファイルの書き込み（所有者のみの権限、上書きしない）
 - `crates/suggest/src/lib.rs` — `suggest(portfolio, request)`、`Mode`、`Suggestion`
@@ -30,6 +31,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
 | `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
 | `crates/bitflyer/` | bitFlyer の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない |
+| `crates/coincheck/` | Coincheck の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない。`Transport`・`Holding` などは `crates/bitflyer` と同形の重複で、3 つ目の API crate を作る時点で共通 crate への抽出を判断する（Extraction Policy） |
 | `crates/browser/` | Chrome・Edge・Brave の検出、専用プロファイルでの起動、DevTools プロトコル（localhost の WebSocket）での読み取り。ログインは利用者が手で行い、このクレートは認証情報に触れない。Tauri に依存しない。読む表は、ほかの表を含まない表と、中の表がどれも深い入れ子を持たない外側の表の 2 つの組（`PageTables`）で返し、どちらを使うかは書き出しに合うかで決まる（葉の表を先に探す。ほかの入れ子の表は、ページの配置用なので読まない）。表のないページ向けに、見出しの下のカード（同じ形のブロックの繰り返し）も、固定の読み取り専用スクリプト（`js/read_cards.js`）で行の組にして返し、以降は表と同じ流れに載せる（#76。仕様は `docs/specification.md`） |
 | `crates/tabular/` | CSV・貼り付けテキストの読み取り（UTF-8 / Shift-JIS）と、名前・評価額の列の選択。証券会社ごとのコードは持たない。Tauri に依存しない |
 | `crates/export/` | フルレコードのエクスポート（CSV・JSON・README の内容を作る）。Tauri に依存しない |
@@ -84,9 +86,9 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 | `tauri` | アプリ基盤 |
 | `serde` / `serde_json` | シリアライズ |
 | `rust_decimal` | 金額の正確な十進演算（`rebalance`）。IPC では文字列として受け渡す |
-| `thiserror` | `rebalance`・`bitflyer` のエラー型 |
-| `reqwest`（`rustls`、default features なし） | bitFlyer への HTTPS 通信（`bitflyer`）。Tauri 経由で依存ツリーにも既にある |
-| `hmac` / `sha2` | bitFlyer の API リクエスト署名（HMAC-SHA256） |
+| `thiserror` | `rebalance`・`bitflyer`・`coincheck` のエラー型 |
+| `reqwest`（`rustls`、default features なし） | bitFlyer・Coincheck への HTTPS 通信（`bitflyer`・`coincheck`）。Tauri 経由で依存ツリーにも既にある |
+| `hmac` / `sha2` | bitFlyer・Coincheck の API リクエスト署名（HMAC-SHA256） |
 | `keyring` | OS のキーチェーンへの保存（macOS Keychain、Windows Credential Manager、Secret Service） |
-| `serde_json`（`raw_value`） | bitFlyer の数値を丸めずに十進数へ読む |
+| `serde_json`（`raw_value`） | bitFlyer・Coincheck の数値を丸めずに十進数へ読む |
 | `vite` / `typescript` | フロントエンドのビルド |

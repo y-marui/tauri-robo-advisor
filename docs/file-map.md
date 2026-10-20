@@ -29,11 +29,12 @@ _最終更新: 2026-10-19_
 | `src/views/data-folder.ts` | データの保存場所のカードと、同期に関する知らせ | `src/api.ts` |
 | `src-tauri/src/browser_settings.rs` | 最後に使ったブラウザの種類とプロファイルのフォルダ（ローカルの `browser-settings.json`。ポートフォリオのデータには入れない） | — |
 | `src-tauri/src/data_folder.rs` | 保存先のフォルダの選択（ポインタファイル）、競合のコピーと未ダウンロードの検出、iCloud Drive のフォルダ | — |
-| `src/views/recipes.ts` | 取得レシピのカード（サイトごとの一覧、取得、口座の変更、ログインのページ、リンクの選択、反映） | `src/views/import-plan.ts` |
+| `src/views/recipes.ts` | 取得レシピのカード（サイトごとの一覧、取得、口座の変更、ログインのページ、リンクの選択、反映） | `src/views/coincheck.ts` | Coincheck のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
+| `src/views/import-plan.ts` |
 | `src/recipe-groups.ts` | 取得レシピのカードの純粋な補助（表示名、サイトごとの分け方、ログインが要るサイトの判定） | `src/i18n.ts`, `src/types.ts` |
 | `crates/browser/src/links.rs` | リンクをたどる規則（押してよいリンク、行き先の参照、安全な文字列の受け渡し） | — |
 | `src/views/table-import.ts` | 表の取り込みのカード（ファイル・貼り付け・列の指定・保存） | `src/views/import-plan.ts` |
-| `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer と表の取り込みで共有 | `src/api.ts` |
+| `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer・Coincheck と表の取り込みで共有 | `src/api.ts` |
 | `src/views/differences.ts` | 評価額が 数量 × 価格 と合わない行の文面（取り込みの確認の画面用） | `src/types.ts` |
 | `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネル、全体のバランス（グラフと提案）のパネル、不備の表示 | `src/panel.ts`, `src/fields.ts` |
 | `src/*.test.ts` | Node の組み込みテストランナーによる単体テスト（`npm test`） | — |
@@ -44,10 +45,10 @@ _最終更新: 2026-10-19_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `src-tauri/src/main.rs` | デスクトップのエントリ | `src-tauri/src/lib.rs` |
-| `src-tauri/src/lib.rs` | Tauri のセットアップ、`propose_rebalance`、ポートフォリオ（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）と bitFlyer 関連のコマンド | `tauri`, `crates/rebalance`, `crates/bitflyer`, `src-tauri/src/secrets.rs` |
+| `src-tauri/src/lib.rs` | Tauri のセットアップ、`propose_rebalance`、ポートフォリオ（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）と bitFlyer・Coincheck 関連のコマンド | `tauri`, `crates/rebalance`, `crates/bitflyer`, `src-tauri/src/secrets.rs` |
 | `src-tauri/src/store.rs` | ポートフォリオ JSON の読み書き（一時ファイル → 同期 → 置き換え、権限 0600、サイズ上限） | `crates/portfolio` |
 | `src-tauri/src/app_state.rs` | メモリ上のポートフォリオ。編集を検証・保存してから反映する | `store.rs`, `crates/portfolio` |
-| `src-tauri/src/secrets.rs` | OS キーチェーンへの API キーの保存・読み出し・削除と入力検証 | `keyring`, `crates/bitflyer` |
+| `src-tauri/src/secrets.rs` | OS キーチェーンへの API キーの保存・読み出し・削除と入力検証 | `keyring`, `crates/bitflyer`, `crates/coincheck` |
 | `src-tauri/tauri.conf.json` | アプリ設定 | — |
 | `src-tauri/capabilities/default.json` | 権限定義 | — |
 
@@ -64,6 +65,12 @@ _最終更新: 2026-10-19_
 | `crates/bitflyer/src/sign.rs` | HMAC-SHA256 署名 | `hmac`, `sha2` |
 | `crates/bitflyer/src/credentials.rs` | 値を表示しない認証情報の型 | — |
 | `crates/bitflyer/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
+| `crates/coincheck/src/client.rs` | `Client`：残高取得、JPY 評価（公開ティッカー）、単調増加の nonce、署名付きリクエスト生成 | `transport.rs`, `model.rs`, `sign.rs` |
+| `crates/coincheck/src/transport.rs` | `Transport` トレイトと HTTPS 実装（リダイレクトなし・サイズ上限） | `reqwest` |
+| `crates/coincheck/src/model.rs` | 応答の解析と検証（通貨コード・金額・エラーメッセージ） | `serde_json`, `rust_decimal` |
+| `crates/coincheck/src/sign.rs` | HMAC-SHA256 署名（nonce + URL + 本文） | `hmac`, `sha2` |
+| `crates/coincheck/src/credentials.rs` | 値を表示しない認証情報の型 | — |
+| `crates/coincheck/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
 | `crates/portfolio/src/model.rs` | データ型（`Portfolio`、`Group`、`Category`、`Product`、`Account`、`Holding`、`Settings`）とスキーマのバージョン | `rust_decimal`, `serde` |
 | `crates/portfolio/src/edit.rs` | `Edit` と `Portfolio::apply`（検証してから変更し、ID を採番する） | `validate.rs` |
 | `crates/portfolio/src/validate.rs` | 入力の検査、`validate_integrity`（読み込み時の整合性）、`issues`（提案をブロックする不備） | `error.rs` |
@@ -93,7 +100,7 @@ _最終更新: 2026-10-19_
 | ファイル | 役割 |
 |---|---|
 | `docs/specification.md` | 仕様の索引（状態・範囲・データフロー・制約）。詳細は次のファイル |
-| `docs/specification-import.md` | 取得方法、表の取り込み、証券会社の出力、bitFlyer の残高 |
+| `docs/specification-import.md` | 取得方法、表の取り込み、証券会社の出力、bitFlyer と Coincheck の残高 |
 | `docs/specification-browser.md` | ブラウザで取得（Browser Fetch） |
 | `docs/specification-recipes.md` | 取得レシピ（リンクのたどり方、メニューのクリック、表の選び方） |
 | `docs/specification-presets.md` | 組み込みのレシピ（プリセット）、ログインのページ、結果の反映 |

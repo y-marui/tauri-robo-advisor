@@ -8,6 +8,7 @@ import type {
   BrowserSettings,
   FetchedTables,
   BitflyerHoldings,
+  CoincheckHoldings,
   Edit,
   ImportPlan,
   ImportRow,
@@ -105,6 +106,24 @@ export function fetchBitflyerHoldingsWithPagePrices(): Promise<BitflyerHoldings>
 /** Starts the browser and sends it to the bitFlyer price page (nothing is typed or clicked). */
 export function openBitflyerPricePage(): Promise<void> {
   return invoke<void>("open_bitflyer_price_page");
+}
+
+/** Saves the Coincheck key in the OS keychain. It is never returned to the frontend. */
+export function saveCoincheckCredentials(apiKey: string, apiSecret: string): Promise<void> {
+  return invoke<void>("save_coincheck_credentials", { apiKey, apiSecret });
+}
+
+export function hasCoincheckCredentials(): Promise<boolean> {
+  return invoke<boolean>("has_coincheck_credentials");
+}
+
+export function deleteCoincheckCredentials(): Promise<void> {
+  return invoke<void>("delete_coincheck_credentials");
+}
+
+/** Fetches the Coincheck balances (read-only) and values them in JPY with the public ticker. */
+export function fetchCoincheckHoldings(): Promise<CoincheckHoldings> {
+  return invoke<CoincheckHoldings>("fetch_coincheck_holdings");
 }
 
 /** Sends a CSV or text file's bytes to Rust, which decodes (UTF-8 or Shift-JIS) and parses them. */

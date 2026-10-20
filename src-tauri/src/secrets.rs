@@ -12,9 +12,11 @@ use keyring::Entry;
 const SERVICE: &str = "dev.marui.robo-advisor";
 const BITFLYER_KEY: &str = "bitflyer-api-key";
 const BITFLYER_SECRET: &str = "bitflyer-api-secret";
+const COINCHECK_KEY: &str = "coincheck-api-key";
+const COINCHECK_SECRET: &str = "coincheck-api-secret";
 
 /// Both parts are pasted by hand, so reject anything that could not be a real
-/// bitFlyer key: empty, very long, or containing whitespace or control
+/// exchange key: empty, very long, or containing whitespace or control
 /// characters (which would also be invalid in an HTTP header).
 fn validate(label: &str, value: &str) -> Result<(), String> {
     let valid = (1..=128).contains(&value.len()) && value.bytes().all(|b| b.is_ascii_graphic());
@@ -68,6 +70,28 @@ pub fn delete_bitflyer() -> Result<(), String> {
     remove(BITFLYER_SECRET)
 }
 
+pub fn save_coincheck(api_key: &str, api_secret: &str) -> Result<(), String> {
+    validate("API key", api_key)?;
+    validate("API secret", api_secret)?;
+    let key = entry(COINCHECK_KEY)?;
+    let secret = entry(COINCHECK_SECRET)?;
+    key.set_password(api_key)
+        .and_then(|()| secret.set_password(api_secret))
+        .map_err(|e| format!("Could not save to the OS keychain: {e}"))
+}
+
+pub fn load_coincheck() -> Result<Option<coincheck::Credentials>, String> {
+    match (read(COINCHECK_KEY)?, read(COINCHECK_SECRET)?) {
+        (Some(key), Some(secret)) => Ok(Some(coincheck::Credentials::new(key, secret))),
+        _ => Ok(None),
+    }
+}
+
+pub fn delete_coincheck() -> Result<(), String> {
+    remove(COINCHECK_KEY)?;
+    remove(COINCHECK_SECRET)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +131,14 @@ mod tests {
 
         delete_bitflyer().unwrap();
         assert!(load_bitflyer().unwrap().is_none());
+
+        delete_coincheck().unwrap();
+        assert!(load_coincheck().unwrap().is_none());
+
+        save_coincheck("dummy-key", "dummy-secret").unwrap();
+        assert!(load_coincheck().unwrap().is_some());
+
+        delete_coincheck().unwrap();
+        assert!(load_coincheck().unwrap().is_none());
     }
 }
