@@ -124,6 +124,19 @@ export function tableImportPanel(ctx: Context): Panel {
     "aria-label": t("Sites the recipe may follow links to (optional)"),
     placeholder: t("Sites the recipe may follow links to (optional)"),
   });
+  const startSiteInput = h("input", {
+    type: "text",
+    autocomplete: "off",
+    "aria-label": t("Site the recipe reads (for example example.co.jp)"),
+    placeholder: t("Site the recipe reads (for example example.co.jp)"),
+  });
+  recipeName.addEventListener("change", () => {
+    // Saving over a recipe of the same name keeps its site.
+    const same = current?.recipes.find((r) => r.name === recipeName.value.trim());
+    if (startSiteInput.value.trim() === "" && same?.start_site) {
+      startSiteInput.value = same.start_site;
+    }
+  });
   const saveRecipe = h("button", { type: "button" }, t("Save recipe"));
   const recipeBox = h(
     "details",
@@ -132,6 +145,7 @@ export function tableImportPanel(ctx: Context): Panel {
     h("div", { class: "fields" },
       h("label", { class: "field" }, h("span", {}, t("Recipe name")), recipeName),
       h("label", { class: "field" }, h("span", {}, t("Text the table’s first cell starts with")), tableTitleInput),
+      h("label", { class: "field" }, h("span", {}, t("Site the recipe reads (for example example.co.jp)")), startSiteInput),
       h("label", { class: "field" }, h("span", {}, t("Sites the recipe may follow links to (optional)")), allowedSitesInput),
     ),
     recipeLinks,
@@ -443,6 +457,11 @@ export function tableImportPanel(ctx: Context): Panel {
     const account = Number(accountSelect.value);
     const title = tableTitleInput.value.trim();
     const cards = chosenCards;
+    const startSite = startSiteInput.value.trim();
+    if (startSite === "") {
+      fail(t("Enter the site the recipe reads first."));
+      return;
+    }
     if (!chosen || source() === "" || recipeName.value.trim() === "" || (cards === null && title === "") || accountSelect.value === "" || !Number.isFinite(account)) {
       fail(t("Choose an account and enter the recipe name and the table title first."));
       return;
@@ -465,7 +484,7 @@ export function tableImportPanel(ctx: Context): Panel {
           links,
           all_tables: cards === null ? (existing?.all_tables ?? false) : false,
           following_tables: cards === null ? (existing?.following_tables ?? false) : false,
-          start_site: existing?.start_site ?? "",
+          start_site: startSite,
           // Only the sites the app knows (for example sbisec.co.jp); Rust refuses any other.
           allowed_sites: typedSites.length > 0 ? typedSites : (existing?.allowed_sites ?? []),
           table_starts_with: cards === null ? title : "",

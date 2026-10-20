@@ -296,6 +296,12 @@ pub enum Edit {
     DetachPresetRecipe {
         name: String,
     },
+    /// Moves a recipe to another account. A recipe of a preset keeps referring to it, and an
+    /// account never gets the same preset twice (the rows would add up twice).
+    SetRecipeAccount {
+        name: String,
+        account: AccountId,
+    },
     SetExchangeRate {
         usd_jpy: Option<Decimal>,
     },
@@ -1501,6 +1507,16 @@ impl Portfolio {
             }
             Edit::SetRecipe { recipe } => {
                 let recipe = recipe.validated(self)?;
+                // Every recipe says the site it reads (so the right tab is found and its login
+                // page can be opened). Only a recipe stored by an older version may lack one; it
+                // stays loadable, but cannot be saved again. (A recipe of a preset takes its site from the
+                // preset.)
+                if recipe.preset.is_none() && recipe.start_site.is_empty() {
+                    return Err(Error::Invalid(
+                        "the site the recipe reads is required (for example example.co.jp)"
+                            .to_owned(),
+                    ));
+                }
                 match self.recipes.iter_mut().find(|r| r.name == recipe.name) {
                     Some(existing) => *existing = recipe,
                     None => {
@@ -1568,6 +1584,27 @@ impl Portfolio {
                     .effective()
                     .map_err(|_| Error::Invalid("that preset does not exist".to_owned()))?;
                 recipe.preset = None;
+                self.recipes[index] = recipe.validated(self)?;
+            }
+            Edit::SetRecipeAccount { name, account } => {
+                let name = name.trim();
+                self.account(account)?;
+                let index = self
+                    .recipes
+                    .iter()
+                    .position(|r| r.name == name)
+                    .ok_or(Error::NotFound("recipe"))?;
+                if let Some(preset) = &self.recipes[index].preset
+                    && self.recipes.iter().enumerate().any(|(i, r)| {
+                        i != index && r.account == account && r.preset.as_ref() == Some(preset)
+                    })
+                {
+                    return Err(Error::Invalid(
+                        "that account already has this recipe".to_owned(),
+                    ));
+                }
+                let mut recipe = self.recipes[index].clone();
+                recipe.account = account;
                 self.recipes[index] = recipe.validated(self)?;
             }
             Edit::RemoveRecipe { name } => {

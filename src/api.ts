@@ -163,9 +163,9 @@ export function closeBrowser(): Promise<void> {
   return invoke<void>("close_browser");
 }
 
-/** Opens the login page of each site a recipe reads from; the person logs in by hand. */
-export function openLoginPages(): Promise<LoginPages> {
-  return invoke<LoginPages>("open_login_pages");
+/** Opens the login page of each of the given sites that a recipe reads from; the person logs in by hand. */
+export function openLoginPages(sites: string[]): Promise<LoginPages> {
+  return invoke<LoginPages>("open_login_pages", { sites });
 }
 
 /** The recipes that ship with the app. */

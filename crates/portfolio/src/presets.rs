@@ -94,6 +94,10 @@ pub struct PresetInfo {
     pub table_starts_with: &'static str,
     pub source: &'static str,
     pub links: &'static [&'static str],
+    /// The site the recipe reads (empty: the page chosen on the screen), and the company's name
+    /// (the label before the colon), to group recipes under a heading.
+    pub site: &'static str,
+    pub company: &'static str,
 }
 
 /// SBI Securities: the title of each table names the custody type (the `types` of the presets; the
@@ -379,7 +383,8 @@ const PRESETS: &[Preset] = &[
             heading: "保有銘柄",
             item_depth: 1,
         }),
-        login_url: "",
+        // The top page only: after logging in, the person opens the holdings page by hand.
+        login_url: "https://www.paypay-sec.co.jp/",
         currency: "",
         layout: Layout {
             source: "PayPay",
@@ -413,6 +418,11 @@ pub fn presets() -> Vec<PresetInfo> {
             table_starts_with: p.table_starts_with,
             source: p.layout.source,
             links: p.links,
+            site: p.start_site,
+            company: p
+                .label
+                .split_once(": ")
+                .map_or(p.label, |(company, _)| company),
         })
         .collect()
 }

@@ -26,10 +26,14 @@ interface Options {
   onOpened(): Promise<void> | void;
   /** Called after the browser was closed. */
   onClosed(): void;
+  /** Only the browser and the profile folder (no Open/Close buttons): the browser is started by the fetch. */
+  compact?: boolean;
 }
 
 export interface BrowserControls {
   el: HTMLElement;
+  /** Starts the browser as chosen on the screen, unless it is running; false when none was found to start. */
+  ensureOpen(): Promise<boolean>;
 }
 
 export function browserControls(options: Options): BrowserControls {
@@ -37,13 +41,14 @@ export function browserControls(options: Options): BrowserControls {
   const browserSelect = h("select", { "aria-label": t("Browser") });
   const profileInput = h("input", {
     type: "text",
+    class: "profile-input",
     autocomplete: "off",
     "aria-label": t("Profile folder"),
     placeholder: t("Profile folder (empty: inside the app's data folder)"),
   });
   const openButton = h("button", { type: "button" }, t("Open browser"));
   const closeButton = h("button", { type: "button" }, t("Close browser"));
-  const row = h("div", { class: "add-row" }, browserSelect, profileInput, openButton, closeButton);
+  const row = h("div", { class: "add-row" }, browserSelect, profileInput, ...(options.compact ? [] : [openButton, closeButton]));
   row.hidden = true;
   const none = h("p", { class: "note" }, t("No Chrome, Edge, or Brave was found on this computer."));
   none.hidden = true;
@@ -59,13 +64,15 @@ export function browserControls(options: Options): BrowserControls {
     }
   };
 
+  const openNow = async (): Promise<void> => {
+    info(t("Opening the browser…"));
+    const folder = profileInput.value.trim();
+    await openBrowser(browserSelect.value as BrowserKind, folder === "" ? null : folder);
+    await onOpened();
+  };
+
   openButton.addEventListener("click", () => {
-    void run(openButton, async () => {
-      info(t("Opening the browser…"));
-      const folder = profileInput.value.trim();
-      await openBrowser(browserSelect.value as BrowserKind, folder === "" ? null : folder);
-      await onOpened();
-    });
+    void run(openButton, openNow);
   });
 
   closeButton.addEventListener("click", () => {
@@ -90,5 +97,15 @@ export function browserControls(options: Options): BrowserControls {
     })
     .catch((error) => fail(String(error)));
 
-  return { el: h("div", {}, none, row) };
+  return {
+    el: h("div", {}, none, row),
+    async ensureOpen() {
+      if (browserSelect.value === "") {
+        return false;
+      }
+      // Opening is a no-op for a browser the app already started.
+      await openNow();
+      return true;
+    },
+  };
 }

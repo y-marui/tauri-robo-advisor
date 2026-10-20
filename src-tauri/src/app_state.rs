@@ -681,15 +681,21 @@ impl AppState {
         self.replace_recipe_if_unchanged(expected, new)
     }
 
-    /// Opens the login page of every site that a recipe reads from (the person logs in by hand),
-    /// unless a tab of that site is already open.
-    pub fn open_login_pages(&self) -> Result<crate::browser_session::LoginPages, String> {
+    /// Opens the login page of each of the given sites that a recipe reads from (the person logs
+    /// in by hand), unless a tab of that site is already open. A site no recipe reads is ignored.
+    pub fn open_login_pages(
+        &self,
+        wanted: &[String],
+    ) -> Result<crate::browser_session::LoginPages, String> {
         let sites: Vec<String> = {
             let guard = self.lock()?;
             let portfolio = guard.as_ref().map_err(Clone::clone)?;
             let mut sites: Vec<String> = Vec::new();
             for recipe in portfolio.recipes.iter().filter_map(|r| r.effective().ok()) {
-                if !recipe.start_site.is_empty() && !sites.contains(&recipe.start_site) {
+                if !recipe.start_site.is_empty()
+                    && wanted.contains(&recipe.start_site)
+                    && !sites.contains(&recipe.start_site)
+                {
                     sites.push(recipe.start_site.clone());
                 }
             }
@@ -1768,7 +1774,7 @@ mod tests {
                     all_tables: false,
                     following_tables: false,
                     cards: None,
-                    start_site: String::new(),
+                    start_site: "example.test".to_owned(),
                     allowed_sites: Vec::new(),
                     currency: "JPY".to_owned(),
                     preset: None,
@@ -1844,7 +1850,7 @@ mod tests {
             all_tables: false,
             following_tables: false,
             cards: None,
-            start_site: String::new(),
+            start_site: "example.test".to_owned(),
             allowed_sites: Vec::new(),
             currency: "JPY".to_owned(),
             preset: None,
@@ -2351,8 +2357,11 @@ mod tests {
     #[test]
     fn opening_the_login_pages_needs_the_browser_only_when_there_is_one_to_open() {
         let (state, main, _, _, _) = recipe_state("login");
+        let sites: Vec<String> = ["unknown.example", "sbisec.co.jp", "monex.co.jp"]
+            .map(str::to_owned)
+            .to_vec();
         // No recipe names a site: nothing to open, and no browser is needed.
-        let result = state.open_login_pages().unwrap();
+        let result = state.open_login_pages(&sites).unwrap();
         assert!(
             result.opened.is_empty() && result.already_open.is_empty() && result.unknown.is_empty()
         );
@@ -2361,8 +2370,12 @@ mod tests {
         let mut recipe = domestic_recipe(main);
         recipe.start_site = "unknown.example".to_owned();
         state.apply(Edit::SetRecipe { recipe }).unwrap();
-        let result = state.open_login_pages().unwrap();
+        let result = state.open_login_pages(&sites).unwrap();
         assert_eq!(result.unknown, vec!["unknown.example".to_owned()]);
+
+        // Only the sites asked for are looked at.
+        let result = state.open_login_pages(&[]).unwrap();
+        assert!(result.unknown.is_empty() && result.opened.is_empty());
 
         // A site with a login page needs the browser.
         for preset in portfolio::presets() {
@@ -2373,8 +2386,25 @@ mod tests {
                 })
                 .unwrap();
         }
-        let error = state.open_login_pages().unwrap_err();
+        let error = state.open_login_pages(&sites).unwrap_err();
         assert!(error.contains("Open the browser first"), "{error}");
+
+        // Every shipped site has a login page, so a fetch with no open tab reaches the step that
+        // opens it (here: the browser is not open) and never reports an unknown site.
+        for site in portfolio::login_pages()
+            .iter()
+            .map(|(site, _)| (*site).to_owned())
+        {
+            let error = state
+                .open_login_pages(std::slice::from_ref(&site))
+                .unwrap_err();
+            assert!(error.contains("Open the browser first"), "{site}: {error}");
+        }
+        assert!(
+            portfolio::presets()
+                .iter()
+                .all(|p| portfolio::login_url_for(p.site).is_some())
+        );
     }
 
     #[test]

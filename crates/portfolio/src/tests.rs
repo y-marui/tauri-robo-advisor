@@ -890,7 +890,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         all_tables: false,
         following_tables: false,
         cards: None,
-        start_site: String::new(),
+        start_site: "example.test".to_owned(),
         allowed_sites: Vec::new(),
         preset: None,
     }
@@ -1338,6 +1338,43 @@ fn a_file_without_prices_loads_with_defaults() {
 }
 
 #[test]
+fn a_recipe_needs_a_site_to_be_saved() {
+    let (mut p, _, _, acc) = sample();
+    let mut recipe = recipe_for(acc);
+    recipe.start_site = " ".to_owned();
+    let before = p.clone();
+    let error = p.apply(Edit::SetRecipe { recipe }).unwrap_err();
+    assert!(error.to_string().contains("site"), "{error}");
+    assert_eq!(p, before);
+}
+
+#[test]
+fn a_stored_recipe_without_a_site_still_loads_and_can_be_removed_or_moved() {
+    let (mut p, _, _, a) = sample();
+    let b = account(&mut p, "Account 2");
+    let mut recipe = recipe_for(a);
+    recipe.start_site = String::new();
+    // What an older version could have stored.
+    recipe.name = "Old".to_owned();
+    p.recipes.push(recipe);
+    assert!(
+        p.issues()
+            .iter()
+            .all(|i| !format!("{i:?}").contains("recipe"))
+    );
+    let name = "Old".to_owned();
+    apply(
+        &mut p,
+        Edit::SetRecipeAccount {
+            name: name.clone(),
+            account: b,
+        },
+    );
+    apply(&mut p, Edit::RemoveRecipe { name });
+    assert!(p.recipes.is_empty());
+}
+
+#[test]
 fn a_recipe_may_leave_its_currency_empty() {
     let (mut p, _, _, acc) = sample();
     let mut recipe = recipe_for(acc);
@@ -1346,6 +1383,60 @@ fn a_recipe_may_leave_its_currency_empty() {
     apply(&mut p, Edit::SetRecipe { recipe });
 
     assert_eq!(p.recipes[0].currency, "");
+}
+
+#[test]
+fn a_recipe_can_be_moved_to_another_account_but_not_onto_a_duplicate() {
+    let (mut p, _, _, a) = sample();
+    let b = account(&mut p, "Account 2");
+    let add = |p: &mut Portfolio, account| {
+        apply(
+            p,
+            Edit::AddPresetRecipe {
+                preset: "sbi-funds".to_owned(),
+                account,
+            },
+        )
+    };
+    add(&mut p, a);
+    let name = p.recipes[0].name.clone();
+    apply(
+        &mut p,
+        Edit::SetRecipeAccount {
+            name: name.clone(),
+            account: b,
+        },
+    );
+    assert_eq!(p.recipes[0].account, b);
+    assert_eq!(p.recipes[0].preset.as_deref(), Some("sbi-funds"));
+
+    // The same preset for the account it already feeds would add the rows up twice.
+    add(&mut p, a);
+    assert_eq!(p.recipes.len(), 2);
+    let before = p.clone();
+    let second = p.recipes[1].name.clone();
+    assert!(
+        p.apply(Edit::SetRecipeAccount {
+            name: second,
+            account: b
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::SetRecipeAccount {
+            name: name.clone(),
+            account: AccountId(9999)
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::SetRecipeAccount {
+            name: "missing".to_owned(),
+            account: a
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
 }
 
 #[test]
@@ -1660,6 +1751,25 @@ fn every_login_page_is_a_plain_https_address_of_its_own_site() {
         assert_eq!(login_url_for(site), Some(*url));
     }
     assert_eq!(login_url_for("unknown.example"), None);
+}
+
+#[test]
+fn every_site_a_preset_reads_has_a_login_page_to_open() {
+    for preset in presets() {
+        let recipe_site = {
+            let (mut p, _, _, acc) = sample();
+            apply(
+                &mut p,
+                Edit::AddPresetRecipe {
+                    preset: preset.id.to_owned(),
+                    account: acc,
+                },
+            );
+            p.recipes[0].effective().unwrap().start_site
+        };
+        assert!(!recipe_site.is_empty(), "{}", preset.id);
+        assert!(login_url_for(&recipe_site).is_some(), "{}", preset.id);
+    }
 }
 
 #[test]

@@ -159,6 +159,9 @@ export interface PresetInfo {
   table_starts_with: string;
   source: string;
   links: string[];
+  /** The site the preset reads (empty: any page) and the company's name, for grouping. */
+  site: string;
+  company: string;
 }
 
 export interface Settings {
@@ -311,6 +314,7 @@ export type Edit =
   | { type: "remove_recipe"; name: string }
   | { type: "add_preset_recipe"; preset: string; account: number }
   | { type: "detach_preset_recipe"; name: string }
+  | { type: "set_recipe_account"; name: string; account: number }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "add_product_with_alias"; name: string; category: number; currency: string; source: string; alias: string }
   | { type: "set_products_category"; products: number[]; category?: number; new_category?: string }
