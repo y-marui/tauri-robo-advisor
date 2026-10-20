@@ -1,6 +1,6 @@
 //! Read-only client for the Coincheck API.
 //!
-//! The crate signs requests, fetches balances and public tickers, and converts
+//! The crate signs requests, fetches balances and public sales rates, and converts
 //! the balances into JPY [`Holding`]s (value, amount and price). It is
 //! independent of Tauri; the HTTP transport is a trait so the logic can be
 //! tested without the network, and secrets never leave [`Credentials`].

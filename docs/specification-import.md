@@ -90,7 +90,7 @@
 - nonce はミリ秒の時刻で、直前の値より必ず大きくする（時計が戻っても重複しない）。
 - 通信は固定の `https://coincheck.com` のみ。リダイレクトは追従せず、タイムアウトと応答サイズの上限を設ける。
 - 数量は、通貨ごとの自由な数量に、注文で拘束中の数量（`<通貨>_reserved`）を足したもの（拘束中でも保有である）。貸出（`_lending` など）、借入（`_debt`）、つみたて（`_tsumitate`）は数えない（つみたてが `<通貨>` に含まれるかは公式の記載から確認できていないため、二重に数えないよう外している。実サービスで確認する）。応答が `success: false` のときはエラーにする。
-- JPY 以外の通貨は、公開 API の `GET /api/ticker?pair=<通貨>_jpy` の `last` で評価する（認証情報は送らない）。取得した価格は数量と一緒に記録する。残高 0 は除く。JPY の通貨ペアがない通貨（HTTP 400/404、または `success: false`）は、`unpriced` として一覧で返し、保有からは除く。
+- JPY 以外の通貨は、公開 API の `GET /api/rate/<通貨>_jpy` の販売所レート（`rate`、文字列を十進数として読む）で評価する（認証情報は送らない）。取得した価格は数量と一緒に記録する。残高 0 は除く。JPY の通貨ペアがない通貨（`Invalid pair`: HTTP 400/404、または `success: false`）は、`unpriced` として一覧で返し、保有からは除く。
 - 数値は文字列のまま十進数へ変換し、浮動小数点を通さない。
 - API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `coincheck-api-key` / `coincheck-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
 - フロントエンドから呼べるコマンド: `save_coincheck_credentials`、`has_coincheck_credentials`、`delete_coincheck_credentials`、`fetch_coincheck_holdings`。

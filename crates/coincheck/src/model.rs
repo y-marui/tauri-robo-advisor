@@ -21,9 +21,9 @@ pub struct Balance {
 }
 
 #[derive(Deserialize)]
-struct RawTicker<'a> {
+struct RawRate<'a> {
     #[serde(borrow)]
-    last: &'a RawValue,
+    rate: &'a RawValue,
 }
 
 #[derive(Deserialize)]
@@ -68,16 +68,17 @@ pub(crate) fn parse_balances(body: &str) -> Result<Vec<Balance>, Error> {
     Ok(balances)
 }
 
-pub(crate) fn parse_last_price(body: &str) -> Result<Decimal, Error> {
-    let ticker: RawTicker = serde_json::from_str(body).map_err(|e| Error::Format(e.to_string()))?;
-    let price = parse_decimal(ticker.last)?;
+/// The sales rate from `GET /api/rate/<pair>` (`{"rate":"..."}`).
+pub(crate) fn parse_sales_rate(body: &str) -> Result<Decimal, Error> {
+    let rate: RawRate = serde_json::from_str(body).map_err(|e| Error::Format(e.to_string()))?;
+    let price = parse_decimal(rate.rate)?;
     if price <= Decimal::ZERO {
-        return Err(Error::Format("the last price must be positive".to_owned()));
+        return Err(Error::Format("the sales rate must be positive".to_owned()));
     }
     Ok(price)
 }
 
-/// Whether a body says `success: false` (for a ticker: the pair does not exist).
+/// Whether a body says `success: false` (for a rate: the pair does not exist).
 pub(crate) fn is_failure(body: &str) -> bool {
     serde_json::from_str::<BTreeMap<String, &RawValue>>(body)
         .is_ok_and(|f| f.get("success").is_some_and(|v| v.get() == "false"))
@@ -181,15 +182,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_last_price_requires_a_positive_price_in_any_number_form() {
+    fn parse_sales_rate_requires_a_positive_rate_in_any_number_form() {
         assert_eq!(
-            parse_last_price(r#"{"last":4000000.5}"#).unwrap(),
+            parse_sales_rate(r#"{"rate":4000000.5}"#).unwrap(),
             dec!(4000000.5)
         );
-        assert_eq!(parse_last_price(r#"{"last":"12.5"}"#).unwrap(), dec!(12.5));
-        assert!(parse_last_price(r#"{"last":0}"#).is_err());
-        assert!(parse_last_price(r#"{"last":-1}"#).is_err());
-        assert!(parse_last_price(r#"{}"#).is_err());
+        assert_eq!(parse_sales_rate(r#"{"rate":"12.5"}"#).unwrap(), dec!(12.5));
+        assert!(parse_sales_rate(r#"{"rate":0}"#).is_err());
+        assert!(parse_sales_rate(r#"{"rate":-1}"#).is_err());
+        assert!(parse_sales_rate(r#"{}"#).is_err());
     }
 
     #[test]
@@ -203,7 +204,7 @@ mod tests {
     #[test]
     fn is_failure_detects_the_success_flag() {
         assert!(is_failure(r#"{"success":false,"error":"x"}"#));
-        assert!(!is_failure(r#"{"last":1}"#));
+        assert!(!is_failure(r#"{"rate":"1"}"#));
         assert!(!is_failure("not json"));
     }
 }

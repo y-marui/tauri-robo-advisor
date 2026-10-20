@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::Error;
 use crate::credentials::Credentials;
 use crate::model::{
-    Balance, is_failure, parse_balances, parse_error_message, parse_last_price,
+    Balance, is_failure, parse_balances, parse_error_message, parse_sales_rate,
     validate_currency_code,
 };
 use crate::sign::sign;
@@ -27,7 +27,7 @@ pub struct Holding {
     pub value: Decimal,
     /// How much of the currency is held (kept so an import can record the quantity).
     pub amount: Decimal,
-    /// The yen price (the ticker's last price) the value was worked out with, so an import
+    /// The yen price (the sales rate) the value was worked out with, so an import
     /// can record the price next to the quantity. `None` for yen itself.
     #[serde(default)]
     pub price: Option<Decimal>,
@@ -82,8 +82,8 @@ impl<T: Transport> Client<T> {
         parse_balances(&body_text(response)?)
     }
 
-    /// Fetches balances and values each one in JPY with the public ticker
-    /// (the last price, one basis for every currency). Zero balances are
+    /// Fetches balances and values each one in JPY with the public sales rate
+    /// (the price the person trades at, one basis for every currency). Zero balances are
     /// skipped; a currency with no JPY pair is reported in `unpriced`.
     pub async fn holdings(&self) -> Result<Holdings, Error> {
         let mut holdings = Vec::new();
@@ -101,7 +101,7 @@ impl<T: Transport> Client<T> {
                 });
                 continue;
             }
-            let Some(price) = self.last_price_jpy(&balance.currency).await? else {
+            let Some(price) = self.sales_rate_jpy(&balance.currency).await? else {
                 unpriced.push(balance.currency);
                 continue;
             };
@@ -117,14 +117,15 @@ impl<T: Transport> Client<T> {
         Ok(Holdings { holdings, unpriced })
     }
 
-    /// The last traded price of `<currency>_jpy` from the public ticker, or
-    /// `None` when Coincheck has no such pair.
-    async fn last_price_jpy(&self, currency: &str) -> Result<Option<Decimal>, Error> {
+    /// The sales rate of `<currency>_jpy` (`GET /api/rate/<pair>`), or `None`
+    /// when Coincheck reports an invalid pair. Unlike the exchange board's
+    /// ticker, it also covers currencies sold only at the sales desk.
+    async fn sales_rate_jpy(&self, currency: &str) -> Result<Option<Decimal>, Error> {
         let code = currency.to_ascii_lowercase();
         validate_currency_code(&code)?;
         let pair = format!("{code}_jpy");
         let request = Request {
-            path_and_query: format!("/api/ticker?pair={pair}"),
+            path_and_query: format!("/api/rate/{pair}"),
             headers: Vec::new(),
         };
         let response = self.transport.get(request).await?;
@@ -135,7 +136,7 @@ impl<T: Transport> Client<T> {
         if is_failure(&text) {
             return Ok(None);
         }
-        parse_last_price(&text).map(Some)
+        parse_sales_rate(&text).map(Some)
     }
 
     /// A nonce that is the time in milliseconds, and strictly greater than the
@@ -323,11 +324,11 @@ mod tests {
     fn holdings_values_balances_in_jpy_and_skips_zero_balances() {
         let fake = FakeTransport::new(&[
             ("/api/accounts/balance", 200, BALANCES),
-            ("/api/ticker?pair=btc_jpy", 200, r#"{"last":4000000}"#),
+            ("/api/rate/btc_jpy", 200, r#"{"rate":"4000000"}"#),
             (
-                "/api/ticker?pair=xym_jpy",
+                "/api/rate/xym_jpy",
                 200,
-                r#"{"success":false,"error":"Pair is not supported"}"#,
+                r#"{"success":false,"error":"Invalid pair"}"#,
             ),
         ]);
 
@@ -357,14 +358,14 @@ mod tests {
     }
 
     #[test]
-    fn a_ticker_http_400_means_unpriced() {
+    fn an_http_400_rate_means_unpriced() {
         let fake = FakeTransport::new(&[
             (
                 "/api/accounts/balance",
                 200,
                 r#"{"success":true,"xym":"1"}"#,
             ),
-            ("/api/ticker?pair=xym_jpy", 400, "{}"),
+            ("/api/rate/xym_jpy", 400, "{}"),
         ]);
 
         let result = block_on(client(&fake).holdings()).unwrap();
@@ -374,11 +375,76 @@ mod tests {
     }
 
     #[test]
+    fn a_currency_sold_only_at_the_sales_desk_is_priced_with_its_decimal_rate() {
+        let fake = FakeTransport::new(&[
+            (
+                "/api/accounts/balance",
+                200,
+                r#"{"success":true,"matic":"100"}"#,
+            ),
+            ("/api/rate/matic_jpy", 200, r#"{"rate":"14.51692983"}"#),
+        ]);
+
+        let result = block_on(client(&fake).holdings()).unwrap();
+
+        assert_eq!(
+            result.holdings,
+            vec![Holding {
+                symbol: "MATIC".to_owned(),
+                value: dec!(1451.692983),
+                amount: dec!(100),
+                price: Some(dec!(14.51692983)),
+            }]
+        );
+        assert!(result.unpriced.is_empty());
+    }
+
+    #[test]
+    fn an_invalid_pair_body_with_http_400_means_unpriced() {
+        let fake = FakeTransport::new(&[
+            (
+                "/api/accounts/balance",
+                200,
+                r#"{"success":true,"pol":"1"}"#,
+            ),
+            (
+                "/api/rate/pol_jpy",
+                400,
+                r#"{"success":false,"error":"Invalid pair"}"#,
+            ),
+        ]);
+
+        let result = block_on(client(&fake).holdings()).unwrap();
+
+        assert!(result.holdings.is_empty());
+        assert_eq!(result.unpriced, vec!["POL".to_owned()]);
+    }
+
+    #[test]
+    fn a_malformed_rate_stops_the_import() {
+        for body in [r#"{"rate":"abc"}"#, r#"{"rate":"0"}"#, r#"{"price":"1"}"#] {
+            let fake = FakeTransport::new(&[
+                (
+                    "/api/accounts/balance",
+                    200,
+                    r#"{"success":true,"btc":"1"}"#,
+                ),
+                ("/api/rate/btc_jpy", 200, body),
+            ]);
+
+            assert!(matches!(
+                block_on(client(&fake).holdings()),
+                Err(Error::Format(_))
+            ));
+        }
+    }
+
+    #[test]
     fn only_the_balance_request_is_signed_and_every_request_is_a_get_path() {
         let fake = FakeTransport::new(&[
             ("/api/accounts/balance", 200, BALANCES),
-            ("/api/ticker?pair=btc_jpy", 200, r#"{"last":1}"#),
-            ("/api/ticker?pair=xym_jpy", 200, r#"{"last":1}"#),
+            ("/api/rate/btc_jpy", 200, r#"{"rate":"1"}"#),
+            ("/api/rate/xym_jpy", 200, r#"{"rate":"1"}"#),
         ]);
 
         block_on(client(&fake).holdings()).unwrap();

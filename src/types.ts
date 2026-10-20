@@ -501,7 +501,7 @@ export interface CoincheckHoldings {
     value: string;
     /** How much of the currency is held. */
     amount: string;
-    /** The yen price (the ticker's last price) the value was worked out with. */
+    /** The yen price (the sales rate) the value was worked out with. */
     price?: string | null;
   }[];
   unpriced: string[];
