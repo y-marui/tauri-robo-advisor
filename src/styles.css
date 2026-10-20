@@ -535,7 +535,13 @@ tbody.record-product td.record-head-cell {
 
 .record-head input.product-name {
   width: 12rem;
+  max-width: 100%;
   text-overflow: ellipsis;
+}
+
+/* The choices of the merge and the split show whole names (td select is clipped to 11rem). */
+details.product-tools select {
+  max-width: 100%;
 }
 
 table.records input.number {
@@ -712,4 +718,13 @@ tr.just-moved > td {
     animation: none;
     background: var(--field);
   }
+}
+
+details.product-tools {
+  flex-basis: 100%;
+}
+
+details.product-tools summary {
+  cursor: pointer;
+  color: var(--muted);
 }

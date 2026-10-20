@@ -4,6 +4,7 @@ import { deleteButton, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Holding, PortfolioView } from "../types.ts";
+import { productTools } from "./merge-split.ts";
 import { priceText } from "./holdings-table.ts";
 
 const upper = (text: string): string => text.trim().toUpperCase();
@@ -54,7 +55,9 @@ export function recordsPanel(ctx: Context): Panel {
     (view) =>
       [
         view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.targeting}`).join(","),
-        view.portfolio.products.map((p) => `${p.id}:${p.category}:${p.currency}`).join(","),
+        view.portfolio.products
+          .map((p) => `${p.id}:${p.category}:${p.currency}:${p.aliases.map((a) => `${a.source}/${a.name}`).join(";")}`)
+          .join(","),
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
         view.portfolio.holdings.map((r) => `${r.account}:${r.product}`).join(","),
       ].join("|"),
@@ -247,17 +250,29 @@ export function recordsPanel(ctx: Context): Panel {
         for (const product of products.filter((p) => p.category === category.id)) {
           const id = product.id;
           const find = (v: PortfolioView) => v.portfolio.products.find((p) => p.id === id);
-          const head = h(
-            "div",
-            { class: "record-head" },
-            textField({
+          // The name box grows with the name (the full name is also the tooltip), so two products
+          // with similar names can be told apart.
+          const nameField = (): HTMLInputElement => {
+            const input = textField({
               ctx,
               bind,
               label: t("Product name"),
               get: (v) => find(v)?.name ?? "",
               edit: (text) => ({ type: "update_product", id, name: text }),
               attrs: { class: "product-name" },
-            }),
+            });
+            const fit = (): void => {
+              input.title = input.value;
+              input.style.width = `max(12rem, calc(${[...input.value].length}em + 2rem))`;
+            };
+            bind(fit);
+            input.addEventListener("input", fit);
+            return input;
+          };
+          const head = h(
+            "div",
+            { class: "record-head" },
+            nameField(),
             selectField({
               ctx,
               bind,
@@ -279,6 +294,7 @@ export function recordsPanel(ctx: Context): Panel {
             }),
             deleteButton(() => void ctx.apply({ type: "remove_product", id }), t("Delete product")),
             addRecordForm(product, weighted),
+            productTools(ctx, view, product),
           );
           const own = view.portfolio.holdings.filter((r) => r.product === id);
           const rows = accounts
