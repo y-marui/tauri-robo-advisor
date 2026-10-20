@@ -18,7 +18,7 @@ fn one<T: From<u8>>() -> T {
 /// is the number in column `value`; or, when `price` is set, `value` is a
 /// quantity and the value is quantity x price / `price_unit` (funds quote the
 /// price per 10,000 units).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColumnMapping {
     pub name: usize,
     pub value: usize,
@@ -55,6 +55,46 @@ pub struct ColumnMapping {
     /// Read at most this many records from the top; `None`: all.
     #[serde(default)]
     pub max_records: Option<usize>,
+    /// A cell of the record's name row that says what kind of holding the row is (a table that
+    /// lists stocks and funds together). With a column here, `kind_rules` say how each kind is
+    /// read, and a row whose kind matches no rule is left out (`SkipReason::UnknownKind`). `None`:
+    /// every row is read the same way.
+    #[serde(default)]
+    pub kind_column: Option<usize>,
+    #[serde(default)]
+    pub kind_rules: Vec<KindRule>,
+}
+
+/// How the rows of one kind are read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KindRule {
+    /// The text of the kind cell (compared whole, after the line breaks are made spaces).
+    pub kind: String,
+    pub read: KindRead,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum KindRead {
+    /// The value is quantity (the `value` column) x price (the `price` column) / `price_unit`.
+    QuantityTimesPrice { price_unit: u64 },
+    /// The value is read from this column (and part); the `value` column is then the quantity,
+    /// which is recorded next to it, and no price is kept.
+    Evaluation {
+        column: usize,
+        #[serde(default)]
+        part: Option<usize>,
+    },
+}
+
+impl ColumnMapping {
+    /// The unit a price is quoted per for a row read by `rule` (or by the plain mapping).
+    fn price_unit_of(&self, rule: Option<KindRead>) -> u64 {
+        match rule {
+            Some(KindRead::QuantityTimesPrice { price_unit }) => price_unit.max(1),
+            _ => self.price_unit.max(1),
+        }
+    }
 }
 
 /// A row that was read.
@@ -67,11 +107,15 @@ pub struct Extracted {
     /// recorded next to an evaluation column.
     pub quantity: Option<Decimal>,
     pub price: Option<Decimal>,
+    /// The unit the price is quoted per (1 when there is no price).
+    pub price_unit: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SkipReason {
+    /// The kind cell of the row matches none of the kind rules.
+    UnknownKind,
     /// The row is too short to have the chosen columns.
     MissingColumn,
     /// The name cell is empty.
@@ -147,7 +191,48 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
             start = record + 1;
             continue;
         };
-        let second = match mapping.price {
+        // How this row is read: by the kind rule when the table has a kind column.
+        let rule = match mapping.kind_column {
+            None => None,
+            Some(column) => {
+                let Some(cell) = name_cells.get(column) else {
+                    skip(&mut skipped, SkipReason::MissingColumn);
+                    start = record + 1;
+                    continue;
+                };
+                let kind = clean(cell);
+                match mapping.kind_rules.iter().find(|r| r.kind == kind) {
+                    Some(rule) => Some(rule.read),
+                    None => {
+                        skip(&mut skipped, SkipReason::UnknownKind);
+                        start = record + 1;
+                        continue;
+                    }
+                }
+            }
+        };
+        let (price_column, unit, evaluation) = match rule {
+            None => (mapping.price, unit, None),
+            Some(KindRead::QuantityTimesPrice { price_unit }) => {
+                (mapping.price, Decimal::from(price_unit.max(1)), None)
+            }
+            Some(KindRead::Evaluation { column, part }) => {
+                (None, Decimal::ONE, Some((column, part)))
+            }
+        };
+        // An evaluation rule reads the value from its own cell; `first` is then the quantity.
+        let evaluation = match evaluation {
+            None => None,
+            Some((column, part)) => match value_cells.get(column) {
+                Some(cell) => Some(pick(cell, part, false)),
+                None => {
+                    skip(&mut skipped, SkipReason::MissingColumn);
+                    start = record + 1;
+                    continue;
+                }
+            },
+        };
+        let second = match price_column {
             None => None,
             Some(column) => match value_cells.get(column) {
                 Some(cell) => Some(cell),
@@ -176,6 +261,7 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
         let recordable = |n: Decimal| (n >= Decimal::ZERO && n <= MAX_VALUE).then_some(n);
         // What is kept next to the value: quantity and price, or only a recorded quantity.
         let (quantity, price) = match &second {
+            None if evaluation.is_some() => (read(&first).and_then(recordable), None),
             None => (
                 mapping
                     .quantity
@@ -190,7 +276,10 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
             ),
         };
         let value = match second {
-            None => read(&first),
+            None => match &evaluation {
+                Some(text) => read(text),
+                None => read(&first),
+            },
             Some(price) => match (read(&first), read(&price)) {
                 (Some(quantity), Some(price)) => {
                     // An overflowing product is out of range, not a number.
@@ -223,6 +312,11 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 value,
                 quantity,
                 price,
+                price_unit: if price.is_some() {
+                    mapping.price_unit_of(rule)
+                } else {
+                    1
+                },
             }),
         }
     }

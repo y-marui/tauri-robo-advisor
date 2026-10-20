@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-use crate::{AccountId, Error, FetchLink, ImportMapping, Recipe};
+use crate::{AccountId, Error, FetchLink, ImportMapping, KindRead, KindRule, Recipe};
 
 /// How a preset reads its table: the columns and rows of a record. Counted from 0.
 struct Layout {
@@ -28,6 +28,10 @@ struct Layout {
     loose_numbers: bool,
     quantity_column: Option<usize>,
     max_records: Option<usize>,
+    /// For a table that lists several kinds of holding together: the cell of the row that says
+    /// the kind, and how each kind is read (a kind that is not listed is left out and reported).
+    kind_column: Option<usize>,
+    kinds: &'static [(&'static str, KindRead)],
 }
 
 /// The click on a menu entry that a preset makes (see `FetchLink::menu`).
@@ -95,6 +99,8 @@ const fn sbi_layout(price_unit: u64) -> Layout {
         loose_numbers: false,
         quantity_column: None,
         max_records: None,
+        kind_column: None,
+        kinds: &[],
     }
 }
 
@@ -162,6 +168,8 @@ const PRESETS: &[Preset] = &[
             loose_numbers: false,
             quantity_column: None,
             max_records: None,
+            kind_column: None,
+            kinds: &[],
         },
     },
     // Rakuten Securities, the page 保有商品一覧-すべて (all holdings): the top page after logging in
@@ -172,7 +180,9 @@ const PRESETS: &[Preset] = &[
     // and a cell with the evaluation (first line) and the profit. The page also has a summary
     // table by kind with hidden detail rows, which does not start with the same cells. Only the
     // units and the price are read, and the value is the units times the price per 10,000 units
-    // (investment trusts; a stock row would be valued wrongly, so only trusts are covered);
+    // for an investment trust row; a domestic stock row (its price is per share) reads the
+    // evaluation (the first line of the evaluation cell) and records the units. The rows are told
+    // apart by the kind cell, and a row of any other kind is left out and reported (#88);
     // "9,999円" and "9,999口" are numbers with a unit. The page shows amounts in yen; a holding in a
     // foreign currency is not covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
     // button), and the page shows no count to check them against (its total is in a hidden row,
@@ -180,7 +190,7 @@ const PRESETS: &[Preset] = &[
     Preset {
         id: "rakuten-all",
         label: "Rakuten Securities: all holdings",
-        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (units x price per 10,000 units). Only investment trusts in yen are covered, not stocks or holdings in a foreign currency.",
+        description: "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (units x price per 10,000 units). Investment trusts (units x price per 10,000 units) and domestic stocks (the evaluation) in yen are covered; other kinds are left out and reported, and so are holdings in a foreign currency.",
         links: &["保有商品一覧-すべて"],
         menu: None,
         table_starts_with: "種別 銘柄 口座",
@@ -194,7 +204,8 @@ const PRESETS: &[Preset] = &[
             name_column: 1,
             value_column: 3,
             price_column: Some(5),
-            price_unit: 10_000,
+            // Each kind sets its own unit (see `kinds`).
+            price_unit: 1,
             price_part: None,
             header_rows: 1,
             rows_per_record: 1,
@@ -203,6 +214,20 @@ const PRESETS: &[Preset] = &[
             loose_numbers: true,
             quantity_column: None,
             max_records: None,
+            kind_column: Some(0),
+            kinds: &[
+                (
+                    "投資信託",
+                    KindRead::QuantityTimesPrice { price_unit: 10_000 },
+                ),
+                (
+                    "国内株式",
+                    KindRead::Evaluation {
+                        column: 6,
+                        part: Some(0),
+                    },
+                ),
+            ],
         },
     },
     // Daiwa Connect Securities: its pages work by form posts and script links, so the menu entry
@@ -240,6 +265,8 @@ const PRESETS: &[Preset] = &[
             loose_numbers: true,
             quantity_column: Some(2),
             max_records: None,
+            kind_column: None,
+            kinds: &[],
         },
     },
     // Daiwa Connect Securities, the page 取引余力・預り資産 (the menu entry 資産照会 > 取引余力・預り資産
@@ -276,6 +303,8 @@ const PRESETS: &[Preset] = &[
             loose_numbers: false,
             quantity_column: None,
             max_records: Some(1),
+            kind_column: None,
+            kinds: &[],
         },
     },
 ];
@@ -361,6 +390,15 @@ impl Preset {
                 quantity_column: layout.quantity_column,
                 quantity_part: None,
                 max_records: layout.max_records,
+                kind_column: layout.kind_column,
+                kind_rules: layout
+                    .kinds
+                    .iter()
+                    .map(|(kind, read)| KindRule {
+                        kind: (*kind).to_owned(),
+                        read: *read,
+                    })
+                    .collect(),
             },
         }
     }
