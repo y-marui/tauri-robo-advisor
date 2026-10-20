@@ -25,6 +25,6 @@ ln -s /Applications "$staging/Applications"
 mkdir -p "$(dirname "$dmg")"
 rm -f "$dmg"
 hdiutil create -volname "$name" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null
-# Ad-hoc signature, like a Debug build of the swift-* apps (a Developer ID is not used here).
-codesign --sign "-" "$dmg"
+# Sign with SIGN_IDENTITY (a Developer ID Application certificate) when the Makefile found one, else ad-hoc.
+codesign --force --sign "${SIGN_IDENTITY:--}" "$dmg"
 echo "Built: $dmg"
