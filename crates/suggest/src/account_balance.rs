@@ -14,12 +14,15 @@ use crate::round::round_to_units;
 pub struct ProductBalance {
     pub product: ProductId,
     /// What the account holds of the product, in JPY.
+    #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
     /// What the weights ask for, in whole yen. `None` when the category does
     /// not ask for a split (free, keep-current) or has no usable weights.
+    #[serde(serialize_with = "crate::display::yen_option")]
     pub target: Option<Decimal>,
     /// `target` minus `current`, in whole yen: positive when the product is
     /// short, negative when there is too much. `None` when there is no target.
+    #[serde(serialize_with = "crate::display::yen_option")]
     pub shortfall: Option<Decimal>,
 }
 
@@ -28,6 +31,7 @@ pub struct ProductBalance {
 pub struct CategoryBalance {
     pub category: CategoryId,
     /// What the account holds in the category, in JPY.
+    #[serde(serialize_with = "crate::display::yen")]
     pub total: Decimal,
     pub products: Vec<ProductBalance>,
 }

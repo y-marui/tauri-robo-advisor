@@ -14,6 +14,7 @@
 //! know about Tauri, files, or brokerages.
 
 mod account_balance;
+mod display;
 mod engine;
 mod error;
 mod fill;

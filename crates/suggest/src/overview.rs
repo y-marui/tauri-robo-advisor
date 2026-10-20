@@ -15,6 +15,7 @@ const SHARE_PLACES: u32 = 4;
 pub struct CategoryOverview {
     pub category: CategoryId,
     /// The category's value in JPY.
+    #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
     /// `current` divided by the total, as a fraction.
     pub current_share: Decimal,
@@ -30,6 +31,7 @@ pub struct GroupOverview {
     /// `None`: the categories that belong to no group, shown together as "Ungrouped".
     pub group: Option<GroupId>,
     /// The value of the group's categories in JPY.
+    #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
     /// `current` divided by the total, as a fraction.
     pub current_share: Decimal,
@@ -45,6 +47,7 @@ pub struct HoldingOverview {
     pub account: AccountId,
     pub product: ProductId,
     /// The holding's value in JPY.
+    #[serde(serialize_with = "crate::display::yen")]
     pub value: Decimal,
     /// `value` divided by the portfolio total, as a fraction.
     pub share: Decimal,
@@ -55,6 +58,7 @@ pub struct HoldingOverview {
 pub struct AccountOverview {
     pub account: AccountId,
     /// The value of the account's holdings in JPY.
+    #[serde(serialize_with = "crate::display::yen")]
     pub value: Decimal,
     /// `value` divided by the portfolio total, as a fraction.
     pub share: Decimal,
@@ -63,6 +67,7 @@ pub struct AccountOverview {
 /// The whole portfolio valued in JPY, for the balance charts.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Overview {
+    #[serde(serialize_with = "crate::display::yen")]
     pub total: Decimal,
     /// Empty when no group exists. Otherwise one entry per group in order, then the ungrouped
     /// categories (only if there are any).
