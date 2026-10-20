@@ -3,6 +3,7 @@ import {
   fetchBitflyerHoldings,
   fetchBitflyerHoldingsWithPagePrices,
   hasBitflyerCredentials,
+  openBitflyerPricePage,
   planImport,
   saveBitflyerCredentials,
 } from "../api.ts";
@@ -21,7 +22,6 @@ import { importPlanView } from "./import-plan.ts";
 
 const SOURCE = "bitflyer";
 const CURRENCY = "JPY";
-const PRICE_PAGE = "https://bitflyer.com/ja-jp/virtual-currency-chart";
 
 export function bitflyerPanel(ctx: Context): Panel {
   const credentialStatus = h("p", { class: "note", role: "status" });
@@ -94,17 +94,38 @@ export function bitflyerPanel(ctx: Context): Panel {
     h("option", { value: "api" }, t("Prices: Lightning last price")),
     h("option", { value: "page" }, t("Prices: bitFlyer price page")),
   );
+  const openPageButton = h("button", { type: "button" }, t("Open the price page"));
+  const pageStatus = h("span", { class: "note", role: "status" });
   const pageNote = h(
-    "p",
-    { class: "note" },
-    t(
-      "Open {url} in the browser (Fetch with the browser), use its table, then fetch the balances. The app does not connect to the page itself.",
-      { url: PRICE_PAGE },
+    "div",
+    { class: "add-row" },
+    openPageButton,
+    h(
+      "p",
+      { class: "note" },
+      t(
+        "Open the price page, wait until the prices are shown, then fetch the balances: the prices are read from that page. The app only shows the page in the browser and reads it; it does not connect to it.",
+      ),
     ),
+    pageStatus,
   );
   pageNote.hidden = true;
   basisSelect.addEventListener("change", () => {
     pageNote.hidden = basisSelect.value !== "page";
+  });
+  openPageButton.addEventListener("click", () => {
+    openPageButton.disabled = true;
+    pageStatus.textContent = t("Opening…");
+    openBitflyerPricePage()
+      .then(() => {
+        pageStatus.textContent = t("Opened. Wait until the prices are shown, then fetch the balances.");
+      })
+      .catch((error) => {
+        pageStatus.textContent = t("Could not open the page: {reason}", { reason: String(error) });
+      })
+      .finally(() => {
+        openPageButton.disabled = false;
+      });
   });
   const result = h("div", { class: "bitflyer-result", "aria-live": "polite" });
 

@@ -555,16 +555,6 @@ impl AppState {
         Ok(preview)
     }
 
-    /// Reads the kept table as the bitFlyer price page. A table that is not that page is refused.
-    pub fn bitflyer_page_prices(&self) -> Result<bitflyer::PagePrices, String> {
-        let table = self.lock_table()?;
-        let table = table.as_ref().ok_or_else(|| {
-            "No table is loaded. Open the bitFlyer price page in the browser and use its table first."
-                .to_owned()
-        })?;
-        bitflyer::PagePrices::from_table(&table.rows).map_err(|e| e.to_string())
-    }
-
     pub fn clear_table(&self) -> Result<(), String> {
         *self.lock_table()? = None;
         Ok(())
@@ -1099,36 +1089,6 @@ mod tests {
         assert!(state.apply(add_account("Account 2")).is_err());
 
         assert_eq!(state.view().unwrap().portfolio.accounts.len(), 1);
-    }
-
-    #[test]
-    fn the_kept_table_is_read_as_the_bitflyer_price_page() {
-        let path = temp_path("pagetable");
-        let state = AppState::load(path);
-        assert!(state.bitflyer_page_prices().is_err());
-
-        let rows = |cells: &[[&str; 3]]| {
-            tabular::from_rows(
-                cells
-                    .iter()
-                    .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
-                    .collect(),
-            )
-            .unwrap()
-        };
-        state
-            .keep_table(rows(&[["銘柄", "評価額", ""], ["AAA", "1", ""]]))
-            .unwrap();
-        assert!(state.bitflyer_page_prices().is_err());
-
-        state
-            .keep_table(rows(&[
-                ["通貨ペア", "価格", "前日比"],
-                ["AAA/JPY", "1,200 円", "+1%"],
-            ]))
-            .unwrap();
-        let prices = state.bitflyer_page_prices().unwrap();
-        assert_eq!(prices.get("AAA"), Some(rust_decimal::Decimal::from(1200)));
     }
 
     #[test]

@@ -96,10 +96,15 @@ export function fetchBitflyerHoldings(): Promise<BitflyerHoldings> {
 
 /**
  * Fetches the balances (read-only) and values them with the prices of the bitFlyer price page,
- * read from the table that was loaded from the browser. The Lightning price is read for comparison.
+ * read from the page open in the browser. The Lightning price is read for comparison.
  */
 export function fetchBitflyerHoldingsWithPagePrices(): Promise<BitflyerHoldings> {
   return invoke<BitflyerHoldings>("fetch_bitflyer_holdings_with_page_prices");
+}
+
+/** Starts the browser and sends it to the bitFlyer price page (nothing is typed or clicked). */
+export function openBitflyerPricePage(): Promise<void> {
+  return invoke<void>("open_bitflyer_price_page");
 }
 
 /** Sends a CSV or text file's bytes to Rust, which decodes (UTF-8 or Shift-JIS) and parses them. */

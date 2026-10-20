@@ -12,6 +12,17 @@ use rust_decimal::Decimal;
 use crate::Error;
 use crate::model::validate_currency_code;
 
+/// The public price page. The app only sends the browser to this address and reads the table
+/// of the page that is open there; it never connects to it itself.
+pub const PRICE_PAGE_URL: &str = "https://bitflyer.com/ja-jp/virtual-currency-chart";
+
+/// Whether a browser tab's address is the price page (the address itself, optionally with a
+/// query or a fragment; not a longer path).
+pub fn is_price_page(url: &str) -> bool {
+    url.strip_prefix(PRICE_PAGE_URL)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(['?', '#']))
+}
+
 const PAIR_HEADING: &str = "通貨ペア";
 const PRICE_HEADING: &str = "価格";
 const JPY_SUFFIX: &str = "/JPY";
@@ -31,6 +42,21 @@ impl PagePrices {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Finds the price table among the tables of the page: the one with the price headings.
+    /// Without exactly one such table nothing is read, so a changed page is reported.
+    pub fn from_tables(tables: &[Vec<Vec<String>>]) -> Result<Self, Error> {
+        let mut found = tables.iter().filter_map(|t| Self::from_table(t).ok());
+        match (found.next(), found.next()) {
+            (Some(prices), None) => Ok(prices),
+            (None, _) => Err(Error::Format(
+                "the price table was not found on the page".to_owned(),
+            )),
+            (Some(_), Some(_)) => Err(Error::Format(
+                "the page has more than one price table".to_owned(),
+            )),
+        }
     }
 
     /// Reads the table of the price page: a heading row ("通貨ペア", "価格", ...), then one row
@@ -137,6 +163,29 @@ mod tests {
         assert!(PagePrices::from_table(&other).is_err());
         assert!(PagePrices::from_table(&empty).is_err());
         assert!(PagePrices::from_table(&[]).is_err());
+    }
+
+    #[test]
+    fn finds_the_one_price_table_among_the_tables_of_a_page() {
+        let prices = table(&[["通貨ペア", "価格", "前日比"], ["AAA/JPY", "3 円", ""]]);
+        let other = table(&[["ニュース", "日付", ""]]);
+
+        let found = PagePrices::from_tables(&[other.clone(), prices.clone()]).unwrap();
+        assert_eq!(found.get("AAA"), Some(dec!(3)));
+        assert!(PagePrices::from_tables(std::slice::from_ref(&other)).is_err());
+        assert!(PagePrices::from_tables(&[prices.clone(), prices]).is_err());
+    }
+
+    #[test]
+    fn only_the_price_page_address_is_the_price_page() {
+        assert!(is_price_page(PRICE_PAGE_URL));
+        assert!(is_price_page(&format!("{PRICE_PAGE_URL}?x=1")));
+        assert!(is_price_page(&format!("{PRICE_PAGE_URL}#top")));
+        assert!(!is_price_page(&format!("{PRICE_PAGE_URL}/other")));
+        assert!(!is_price_page(&format!("{PRICE_PAGE_URL}.evil.test/")));
+        assert!(!is_price_page(
+            "http://bitflyer.com/ja-jp/virtual-currency-chart"
+        ));
     }
 
     #[test]
