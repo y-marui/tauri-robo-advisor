@@ -1,4 +1,5 @@
 import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
+import { groupBySite, recipeDisplayName, sitesToLogIn } from "../recipe-groups.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -17,49 +18,33 @@ import { skippedText } from "./skipped.ts";
 // after a language change) while a batch is still running; a later run waits for the one before.
 let running: Promise<void> = Promise.resolve();
 
+/** The value of the account choice that makes a new account. */
+const NEW_ACCOUNT = "new";
+
 export function recipesPanel(ctx: Context): Panel {
   const list = h("div", { class: "recipe-list" });
   const pageSelect = h("select", { "aria-label": t("Page") });
   const refreshButton = h("button", { type: "button" }, t("Refresh pages"));
-  const runButton = h("button", { type: "button" }, t("Fetch"));
-  // What one press of the button fetches: everything, the recipes of one account, or of one site.
-  const scopeSelect = h("select", { "aria-label": t("What to fetch") });
-  const loginButton = h("button", { type: "button" }, t("Open the login pages"));
+  const runButton = h("button", { type: "button" }, t("Fetch all"));
+  // The page to read is chosen here only for recipes that name no site.
+  const pageRow = h("div", { class: "add-row" }, pageSelect, refreshButton);
   const message = h("p", { class: "note", role: "status" });
   const attention = h("div", { class: "recipe-attention" });
   const results = h("div", { class: "recipe-results", "aria-live": "polite" });
 
   // Recipes that ship with the app: pick one and an account, and a recipe that refers to the preset is added
-  // (its definition is the app's current one, so it is read-only; it can be detached to edit it).
-  const presetSelect = h("select", { "aria-label": t("Preset") });
+  // (its definition is the app's current one, so it is read-only). "New account..." makes the account first.
+  const presetSelect = h("select", { "aria-label": t("Recipe to add") });
   const presetAccount = h("select", { "aria-label": t("Account to update") });
-  const presetAdd = h("button", { type: "button" }, t("Add the preset"));
+  const presetAdd = h("button", { type: "button" }, t("Add"));
   const presetNote = h("p", { class: "note" });
-  const noAccountNote = h("p", { class: "note error" }, t("Add an account first (below), then add the preset."));
-  noAccountNote.hidden = true;
-  // A new account can be made here, so the preset need not wait for a trip to the Settings tab.
   const newAccountName = h("input", { type: "text", "aria-label": t("Name of a new account"), placeholder: t("New account name") });
-  const newAccountAdd = h("button", { type: "button" }, t("Add an account"));
-  newAccountAdd.addEventListener("click", () => {
-    const name = newAccountName.value.trim();
-    if (name === "") {
-      fail(t("Enter a name for the new account."));
-      return;
+  newAccountName.hidden = true;
+  presetAccount.addEventListener("change", () => {
+    newAccountName.hidden = presetAccount.value !== NEW_ACCOUNT;
+    if (!newAccountName.hidden) {
+      newAccountName.focus();
     }
-    newAccountAdd.disabled = true;
-    void ctx
-      .apply({ type: "add_account", name })
-      .then((ok) => {
-        if (ok && current) {
-          newAccountName.value = "";
-          // The newest account is the one just made: choose it for the preset.
-          const newest = Math.max(...current.portfolio.accounts.map((a) => a.id));
-          presetAccount.value = String(newest);
-        }
-      })
-      .finally(() => {
-        newAccountAdd.disabled = false;
-      });
   });
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
@@ -94,24 +79,52 @@ export function recipesPanel(ctx: Context): Panel {
     );
   };
   const showPresetNote = (): void => {
-    presetAccount.value = accountOfPreset();
+    if (presetAccount.value !== NEW_ACCOUNT) {
+      presetAccount.value = accountOfPreset();
+    }
     const description = presets.find((p) => p.id === presetSelect.value)?.description;
     presetNote.textContent = description === undefined ? "" : t(description as MessageKey);
   };
   presetSelect.addEventListener("change", showPresetNote);
-  presetAdd.addEventListener("click", () => {
-    const account = Number(presetAccount.value);
-    if (presetSelect.value === "" || presetAccount.value === "" || !Number.isFinite(account)) {
-      fail(t("Choose a preset and an account first."));
+  const addPreset = async (): Promise<void> => {
+    let account = Number(presetAccount.value);
+    if (presetSelect.value === "" || presetAccount.value === "") {
+      fail(t("Choose a recipe and an account first."));
       return;
     }
-    void ctx.apply({ type: "add_preset_recipe", preset: presetSelect.value, account });
+    if (presetAccount.value === NEW_ACCOUNT) {
+      const name = newAccountName.value.trim();
+      if (name === "") {
+        fail(t("Enter a name for the new account."));
+        return;
+      }
+      if (!(await ctx.apply({ type: "add_account", name })) || !current) {
+        return;
+      }
+      // The newest account is the one just made.
+      account = Math.max(...current.portfolio.accounts.map((a) => a.id));
+      newAccountName.value = "";
+      presetAccount.value = String(account);
+      newAccountName.hidden = true;
+    }
+    if (Number.isFinite(account)) {
+      await ctx.apply({ type: "add_preset_recipe", preset: presetSelect.value, account });
+    }
+  };
+  presetAdd.addEventListener("click", () => {
+    presetAdd.disabled = true;
+    void addPreset().finally(() => {
+      presetAdd.disabled = false;
+    });
   });
   void listPresets()
     .then((found) => {
       presets = found;
       presetSelect.replaceChildren(...found.map((p) => h("option", { value: p.id }, t(p.label as MessageKey))));
       showPresetNote();
+      if (current) {
+        renderList(current);
+      }
     })
     .catch(() => undefined);
 
@@ -209,7 +222,12 @@ export function recipesPanel(ctx: Context): Panel {
     if (!view) {
       return;
     }
-    const open: BrowserPage[] = await browserPages().catch(() => []);
+    let browserUp = true;
+    let pendingNote = "";
+    let open: BrowserPage[] = await browserPages().catch(() => {
+      browserUp = false;
+      return [];
+    });
     /**
      * The tabs a recipe may read, in the order to try: the open pages of its own site (the one
      * chosen on the screen first), or the one chosen on the screen when it has no site. A site
@@ -226,7 +244,41 @@ export function recipesPanel(ctx: Context): Panel {
       }
       return pageSelect.value === "" ? [] : [pageSelect.value];
     };
-    const wanted = view.recipes.filter((r) => !only || only.includes(r.name));
+    let wanted = view.recipes.filter((r) => !only || only.includes(r.name));
+    // A site with no open page is not fetched: its login page is opened (the browser too, if
+    // needed) and the person logs in by hand and presses Fetch again. The other sites go on.
+    const toLogIn = sitesToLogIn(
+      wanted.filter((r) => !r.preset_missing),
+      open.map((p) => p.host),
+    );
+    if (toLogIn.length > 0) {
+      try {
+        if (!browserUp && !(await browser.ensureOpen())) {
+          fail(t("No Chrome, Edge, or Brave was found on this computer."));
+          return;
+        }
+        const result = await openLoginPages(toLogIn);
+        await refreshPages();
+        open = await browserPages().catch(() => open);
+        const parts: string[] = [];
+        if (result.opened.length > 0) {
+          parts.push(t("Opened the login page of: {sites}. Log in by hand, then press Fetch again.", { sites: result.opened.join(", ") }));
+        }
+        if (result.unknown.length > 0) {
+          parts.push(t("No login page is known for: {sites}. Log in and open a page of the site by hand, then press Fetch again.", { sites: result.unknown.join(", ") }));
+        }
+        const opened = result.opened;
+        wanted = wanted.filter((r) => !opened.includes(r.start_site ?? ""));
+        if (wanted.length === 0) {
+          info(parts.join(" "));
+          return;
+        }
+        pendingNote = parts.join(" ");
+      } catch (error) {
+        fail(String(error));
+        return;
+      }
+    }
     if (wanted.every((r) => !r.start_site) && pageSelect.value === "") {
       fail(t("Open the browser, log in, and open a page of the site first."));
       return;
@@ -322,7 +374,7 @@ export function recipesPanel(ctx: Context): Panel {
         }
       }
       await showResults();
-      info("");
+      info(pendingNote);
       // Each recipe has its own result; the ones that worked are kept.
       const lines: string[] = [];
       if (outcome.worked.length > 0) {
@@ -416,45 +468,8 @@ export function recipesPanel(ctx: Context): Panel {
     );
   }
 
-  loginButton.addEventListener("click", () => {
-    loginButton.disabled = true;
-    openLoginPages()
-      .then(async (result) => {
-        await refreshPages();
-        const parts: string[] = [];
-        if (result.opened.length > 0) {
-          parts.push(t("Opened the login page of: {sites}. Log in by hand, then open the page you want.", { sites: result.opened.join(", ") }));
-        }
-        if (result.already_open.length > 0) {
-          parts.push(t("Already open: {sites}.", { sites: result.already_open.join(", ") }));
-        }
-        if (result.unknown.length > 0) {
-          parts.push(t("No login page is known for: {sites}.", { sites: result.unknown.join(", ") }));
-        }
-        if (parts.length === 0) {
-          parts.push(t("No recipe says which site it reads, so there is no login page to open."));
-        }
-        info(parts.join(" "));
-      })
-      .catch((error) => fail(String(error)))
-      .finally(() => {
-        loginButton.disabled = false;
-      });
-  });
   refreshButton.addEventListener("click", () => void refreshPages());
-  /** The names of the recipes the chosen scope covers; `undefined` is everything. */
-  const scopedNames = (): string[] | undefined => {
-    const scope = scopeSelect.value;
-    const recipes = current?.recipes ?? [];
-    if (scope.startsWith("account:")) {
-      return recipes.filter((r) => `account:${r.account}` === scope).map((r) => r.name);
-    }
-    if (scope.startsWith("site:")) {
-      return recipes.filter((r) => `site:${r.start_site ?? ""}` === scope).map((r) => r.name);
-    }
-    return undefined;
-  };
-  runButton.addEventListener("click", () => void runAll(scopedNames()));
+  runButton.addEventListener("click", () => void runAll());
 
   /** A button that fetches just this recipe (the others keep what they already read). */
   function fetchOne(recipe: Recipe): HTMLElement {
@@ -466,67 +481,111 @@ export function recipesPanel(ctx: Context): Panel {
   function renderList(view: PortfolioView): void {
     if (view.recipes.length === 0) {
       list.replaceChildren(
-        h("p", { class: "note" }, t("No recipes yet. Fetch a table once by hand in “Import a table”, then use “Save as a recipe”.")),
+        h("p", { class: "note" }, t("No recipes yet. Add a built-in recipe below, or fetch a table once by hand in “Import a table” and use “Save as a recipe”.")),
       );
       runButton.disabled = true;
+      pageRow.hidden = true;
       return;
     }
     runButton.disabled = false;
-    const previousScope = scopeSelect.value;
-    const accountIds = [...new Set(view.recipes.map((r) => r.account))];
-    const sites = [...new Set(view.recipes.map((r) => r.start_site ?? "").filter((x) => x !== ""))];
-    scopeSelect.replaceChildren(
-      h("option", { value: "" }, t("Everything")),
-      ...accountIds.map((id) =>
-        h("option", { value: `account:${id}` }, t("Account: {name}", { name: view.portfolio.accounts.find((a) => a.id === id)?.name ?? "?" })),
-      ),
-      ...sites.map((site) => h("option", { value: `site:${site}` }, t("Site: {name}", { name: site }))),
-    );
-    scopeSelect.value = [...scopeSelect.options].some((o) => o.value === previousScope) ? previousScope : "";
+    const groups = groupBySite(view.recipes, presets);
+    pageRow.hidden = !groups.some((g) => g.site === "");
     list.replaceChildren(
-      ...view.recipes.map((recipe) => recipeRow(view, recipe)),
+      ...groups.map((group) => {
+        const siteButton = h("button", { type: "button" }, t("Fetch this site"));
+        siteButton.addEventListener("click", () => void runAll(group.recipes.map((r) => r.name)));
+        return h(
+          "div",
+          { class: "recipe-group" },
+          group.site === ""
+            ? h("h3", {}, t("Other pages"))
+            : h("div", { class: "recipe-group-head" }, h("h3", {}, group.title), siteButton),
+          ...group.recipes.map((recipe) => recipeRow(view, recipe)),
+        );
+      }),
     );
   }
 
-  /** One recipe of the list. A preset recipe is read-only: it can be fetched, detached, or removed. */
+  /** A small "i" that shows `text` on hover and on keyboard focus (and to screen readers). */
+  function infoIcon(text: string): HTMLElement {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z");
+    path.setAttribute("fill", "currentColor");
+    svg.append(path);
+    const icon = h("span", { class: "info-icon", tabindex: 0, role: "img", "aria-label": text, "data-tip": text });
+    icon.append(svg);
+    return icon;
+  }
+
+  /** The route of a recipe in a sentence: where it starts, the links it follows, and the table it reads. */
+  function routeText(recipe: RecipeView): string {
+    const preset = presets.find((p) => p.id === recipe.preset);
+    if (preset) {
+      return t(preset.description as MessageKey);
+    }
+    const route = `${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.cards?.heading ?? recipe.table_starts_with}`;
+    return `${route} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`;
+  }
+
+  /** One compact row: name, account, and actions. A preset recipe is read-only (it can be fetched or removed). */
   function recipeRow(view: PortfolioView, recipe: RecipeView): HTMLElement {
-    const accountName = (id: number): string => view.portfolio.accounts.find((a) => a.id === id)?.name ?? "?";
     const remove = deleteButton(() => void ctx.apply({ type: "remove_recipe", name: recipe.name }));
     if (recipe.preset_missing) {
       return h(
         "div",
-        { class: "add-row" },
+        { class: "add-row recipe-row" },
         h("span", { class: "note error" }, t("“{recipe}” refers to a preset that this version of the app does not have. Remove the recipe.", { recipe: recipe.name })),
         remove,
       );
     }
-    const text = `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.cards?.heading ?? recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`;
-    if (!recipe.preset) {
-      return h("div", { class: "add-row" }, h("span", {}, text), fetchOne(recipe), remove);
-    }
-    const detach = h("button", { type: "button" }, t("Detach as a custom recipe"));
-    detach.title = t("Makes an ordinary recipe of it with the definition it has now. It no longer follows app updates, and can be edited.");
-    detach.addEventListener("click", () => void ctx.apply({ type: "detach_preset_recipe", name: recipe.name }));
-    return h("div", { class: "add-row" }, h("span", {}, `${text} [${t("built-in, read-only")}]`), fetchOne(recipe), detach, remove);
+    const account = h(
+      "select",
+      { "aria-label": t("Account of {recipe}", { recipe: recipeDisplayName(recipe, presets) }) },
+      ...view.portfolio.accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
+    );
+    account.value = String(recipe.account);
+    account.addEventListener("change", () => {
+      void ctx
+        .apply({ type: "set_recipe_account", name: recipe.name, account: Number(account.value) })
+        .then((ok) => {
+          if (!ok) {
+            account.value = String(recipe.account);
+          }
+        });
+    });
+    return h(
+      "div",
+      { class: "add-row recipe-row" },
+      h(
+        "span",
+        { class: "recipe-name" },
+        recipeDisplayName(recipe, presets),
+        recipe.preset ? h("span", { class: "badge" }, t("built-in")) : null,
+        infoIcon(routeText(recipe)),
+      ),
+      account,
+      fetchOne(recipe),
+      remove,
+    );
   }
 
   const el = h(
     "section",
     { class: "card recipes" },
-    h("h2", {}, t("Fetch recipes")),
+    h("div", { class: "recipe-title" }, h("h2", {}, t("Fetch recipes")), runButton),
     h(
       "p",
       { class: "note" },
-      t("After you log in to the browser opened by the app, “Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. Choose everything, one account, or one site, or fetch a single recipe. Nothing changes until you confirm."),
+      t("“Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. If a site has no open page, its login page is opened: log in by hand, then press Fetch again. Nothing changes until you confirm."),
     ),
     list,
-    h("div", { class: "add-row" }, presetSelect, presetAccount, presetAdd),
-    noAccountNote,
-    h("div", { class: "add-row" }, newAccountName, newAccountAdd),
+    h("div", { class: "add-row" }, presetSelect, presetAccount, newAccountName, presetAdd),
     presetNote,
-    h("div", { class: "add-row" }, loginButton),
     browser.el,
-    h("div", { class: "add-row" }, pageSelect, refreshButton, scopeSelect, runButton),
+    pageRow,
     message,
     attention,
     results,
@@ -542,8 +601,6 @@ export function recipesPanel(ctx: Context): Panel {
       renderList(view);
       // Without an account there is nothing to add a preset for: say so instead of leaving the
       // account choice empty.
-      noAccountNote.hidden = view.portfolio.accounts.length > 0;
-      presetAdd.disabled = view.portfolio.accounts.length === 0;
       // Recipes that were added, removed, or moved to another account change the default account
       // of the chosen preset.
       const recipesSignature = view.recipes.map((r) => `${r.name}:${r.account}:${r.preset ?? ""}`).join("|");
@@ -556,12 +613,14 @@ export function recipesPanel(ctx: Context): Panel {
         presetAccount.replaceChildren(
           h("option", { value: "" }, "---"),
           ...view.portfolio.accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
+          h("option", { value: NEW_ACCOUNT }, t("New account…")),
         );
-        presetAccount.value = view.portfolio.accounts.some((a) => String(a.id) === previous)
-          ? previous
-          : accountOfPreset();
+        presetAccount.value =
+          previous === NEW_ACCOUNT || view.portfolio.accounts.some((a) => String(a.id) === previous)
+            ? previous
+            : accountOfPreset();
       }
-      if (recipesChanged) {
+      if (recipesChanged && presetAccount.value !== NEW_ACCOUNT) {
         presetAccount.value = accountOfPreset();
       }
       // An alias was linked or removed, or a recipe changed: show the plans again.

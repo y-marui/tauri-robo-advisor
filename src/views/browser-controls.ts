@@ -30,6 +30,8 @@ interface Options {
 
 export interface BrowserControls {
   el: HTMLElement;
+  /** Starts the browser as chosen on the screen, unless it is running; false when none was found to start. */
+  ensureOpen(): Promise<boolean>;
 }
 
 export function browserControls(options: Options): BrowserControls {
@@ -59,13 +61,15 @@ export function browserControls(options: Options): BrowserControls {
     }
   };
 
+  const openNow = async (): Promise<void> => {
+    info(t("Opening the browser…"));
+    const folder = profileInput.value.trim();
+    await openBrowser(browserSelect.value as BrowserKind, folder === "" ? null : folder);
+    await onOpened();
+  };
+
   openButton.addEventListener("click", () => {
-    void run(openButton, async () => {
-      info(t("Opening the browser…"));
-      const folder = profileInput.value.trim();
-      await openBrowser(browserSelect.value as BrowserKind, folder === "" ? null : folder);
-      await onOpened();
-    });
+    void run(openButton, openNow);
   });
 
   closeButton.addEventListener("click", () => {
@@ -90,5 +94,15 @@ export function browserControls(options: Options): BrowserControls {
     })
     .catch((error) => fail(String(error)));
 
-  return { el: h("div", {}, none, row) };
+  return {
+    el: h("div", {}, none, row),
+    async ensureOpen() {
+      if (browserSelect.value === "") {
+        return false;
+      }
+      // Opening is a no-op for a browser the app already started.
+      await openNow();
+      return true;
+    },
+  };
 }

@@ -23,10 +23,26 @@ export const MESSAGES = {
   },
   "Groups (inner) and categories (outer)": { ja: "グループ（内側）とカテゴリ（外側）" },
   "Fetch": { ja: "取得" },
-  "What to fetch": { ja: "取得する対象" },
-  "Everything": { ja: "すべて" },
-  "Account: {name}": { ja: "口座: {name}" },
-  "Site: {name}": { ja: "サイト: {name}" },
+  "Fetch all": { ja: "すべて取得" },
+  "Recipe to add": { ja: "追加するレシピ" },
+  "Choose a recipe and an account first.": { ja: "先にレシピと口座を選んでください。" },
+  "Opened the login page of: {sites}. Log in by hand, then press Fetch again.": {
+    ja: "{sites} のログインのページを開きました。自分でログインしてから、もう一度「取得」を押してください。",
+  },
+  "No login page is known for: {sites}. Log in and open a page of the site by hand, then press Fetch again.": {
+    ja: "{sites} のログインのページは分かりません。自分でログインしてサイトのページを開いてから、もう一度「取得」を押してください。",
+  },
+  "No recipes yet. Add a built-in recipe below, or fetch a table once by hand in “Import a table” and use “Save as a recipe”.": {
+    ja: "レシピはまだありません。下の組み込みレシピを追加するか、「表を取り込む」で一度手で取得して「レシピとして保存」してください。",
+  },
+  "Fetch this site": { ja: "このサイトを取得" },
+  "Other pages": { ja: "そのほかのページ" },
+  "Account of {recipe}": { ja: "{recipe} の口座" },
+  "built-in": { ja: "組み込み" },
+  "“Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. If a site has no open page, its login page is opened: log in by hand, then press Fetch again. Nothing changes until you confirm.": {
+    ja: "「取得」は、各レシピのリンク（別のページを表示するだけのもの）をたどって表を読み、結果を表示します。サイトのページが開いていないときは、そのログインのページを開きます。自分でログインしてから、もう一度「取得」を押してください。確認するまで何も変わりません。",
+  },
+  "New account…": { ja: "新しい口座…" },
   "Fetch this recipe": { ja: "このレシピだけ取得" },
   "Fetch this recipe again": { ja: "このレシピをもう一度取得" },
   "Worked: {names}.": { ja: "取得できたもの: {names}。" },
@@ -39,9 +55,6 @@ export const MESSAGES = {
     ja: "「{recipe}」（{account}）には、{site} のページが開いている必要があります。ブラウザでログインして、ページを開いてください。",
   },
   "“{recipe}” ({account}) failed: {reason}": { ja: "「{recipe}」（{account}）が失敗しました: {reason}" },
-  "Add an account first (below), then add the preset.": {
-    ja: "先に口座を追加してください（下の欄）。そのあとでレシピを追加します。",
-  },
   "Name of a new account": { ja: "新しい口座の名前" },
   "New account name": { ja: "新しい口座の名前" },
   "Enter a name for the new account.": { ja: "新しい口座の名前を入力してください。" },
@@ -459,15 +472,7 @@ export const MESSAGES = {
   "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).": {
     ja: "ログイン後に、大和コネクト証券の「現物取引保有銘柄一覧」を開いてから取得します。保有の各行（評価額と数量・現在値）を読みます。",
   },
-  "Open the login pages": { ja: "ログインのページを開く" },
-  "Opened the login page of: {sites}. Log in by hand, then open the page you want.": {
-    ja: "{sites} のログインのページを開きました。自分でログインしてから、読みたいページを開いてください。",
-  },
-  "Already open: {sites}.": { ja: "すでに開いています: {sites}。" },
   "No login page is known for: {sites}.": { ja: "ログインのページが分かりません: {sites}。" },
-  "No recipe says which site it reads, so there is no login page to open.": {
-    ja: "どのサイトを読むかが決まったレシピがないので、開くログインのページがありません。",
-  },
   "Category of the new product": { ja: "新しい商品のカテゴリ" },
   "Currency of the new product": { ja: "新しい商品の通貨" },
   "Create a product and link": { ja: "商品を作って結びつける" },
@@ -487,17 +492,9 @@ export const MESSAGES = {
   "Move up": { ja: "上へ" },
   "Move down": { ja: "下へ" },
   "Drag to reorder": { ja: "ドラッグして並べ替え" },
-  "Preset": { ja: "組み込みのレシピ" },
-  "Add the preset": { ja: "追加する" },
-  "Detach as a custom recipe": { ja: "自分のレシピにする" },
-  "Makes an ordinary recipe of it with the definition it has now. It no longer follows app updates, and can be edited.": {
-    ja: "今の定義のまま、普通のレシピにします。以後はアプリの更新に追従せず、編集できます。",
-  },
-  "built-in, read-only": { ja: "組み込み・編集不可" },
   "“{recipe}” refers to a preset that this version of the app does not have. Remove the recipe.": {
     ja: "「{recipe}」は、このバージョンのアプリにない組み込みのレシピを指しています。レシピを削除してください。",
   },
-  "Choose a preset and an account first.": { ja: "先に、組み込みのレシピと口座を選んでください。" },
   "Fetch recipes": { ja: "取得レシピ" },
   "The recipe was changed or removed in the meantime. Fetch again.": {
     ja: "その間に、レシピが変更または削除されました。もう一度取得してください。",
@@ -524,13 +521,7 @@ export const MESSAGES = {
   "This replaces every holding of these accounts with the linked rows above: {accounts}. An account without any linked row is left as it is.": {
     ja: "次の口座の保有を、上の対応づけ済みの行ですべて置き換えます: {accounts}。対応づけ済みの行が1つもない口座は、そのままにします。",
   },
-  "No recipes yet. Fetch a table once by hand in “Import a table”, then use “Save as a recipe”.": {
-    ja: "レシピはまだありません。「表の取り込み」で一度手で表を取得してから、「レシピとして保存」を使ってください。",
-  },
   "(this page)": { ja: "（このページ）" },
-  "After you log in to the browser opened by the app, “Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. Choose everything, one account, or one site, or fetch a single recipe. Nothing changes until you confirm.": {
-    ja: "アプリが開いたブラウザにログインしたあと、「取得」を押すと、各レシピのリンク（別のページを表示するだけのもの）をたどって表を読み、結果を見せます。すべて、1 つの口座、1 つのサイトのどれかを選ぶか、レシピを 1 つだけ取得できます。確認するまで、何も変わりません。",
-  },
   "Save as a recipe": { ja: "レシピとして保存" },
   "Recipe name": { ja: "レシピの名前" },
   "Links to follow, one per line (empty: the open page)": { ja: "たどるリンク（1行に1つ。空なら今のページ）" },

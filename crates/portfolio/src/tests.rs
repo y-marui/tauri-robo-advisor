@@ -1349,6 +1349,60 @@ fn a_recipe_may_leave_its_currency_empty() {
 }
 
 #[test]
+fn a_recipe_can_be_moved_to_another_account_but_not_onto_a_duplicate() {
+    let (mut p, _, _, a) = sample();
+    let b = account(&mut p, "Account 2");
+    let add = |p: &mut Portfolio, account| {
+        apply(
+            p,
+            Edit::AddPresetRecipe {
+                preset: "sbi-funds".to_owned(),
+                account,
+            },
+        )
+    };
+    add(&mut p, a);
+    let name = p.recipes[0].name.clone();
+    apply(
+        &mut p,
+        Edit::SetRecipeAccount {
+            name: name.clone(),
+            account: b,
+        },
+    );
+    assert_eq!(p.recipes[0].account, b);
+    assert_eq!(p.recipes[0].preset.as_deref(), Some("sbi-funds"));
+
+    // The same preset for the account it already feeds would add the rows up twice.
+    add(&mut p, a);
+    assert_eq!(p.recipes.len(), 2);
+    let before = p.clone();
+    let second = p.recipes[1].name.clone();
+    assert!(
+        p.apply(Edit::SetRecipeAccount {
+            name: second,
+            account: b
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::SetRecipeAccount {
+            name: name.clone(),
+            account: AccountId(9999)
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::SetRecipeAccount {
+            name: "missing".to_owned(),
+            account: a
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+}
+
+#[test]
 fn a_preset_is_never_added_twice_for_one_account() {
     let (mut p, _, _, a) = sample();
     let b = account(&mut p, "Account 2");

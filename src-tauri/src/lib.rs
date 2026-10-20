@@ -394,9 +394,10 @@ fn icloud_data_folder() -> Option<String> {
 #[tauri::command]
 async fn open_login_pages(
     state: State<'_, Arc<AppState>>,
+    sites: Vec<String>,
 ) -> Result<browser_session::LoginPages, String> {
     let state = Arc::clone(&state);
-    tauri::async_runtime::spawn_blocking(move || state.open_login_pages())
+    tauri::async_runtime::spawn_blocking(move || state.open_login_pages(&sites))
         .await
         .map_err(|e| e.to_string())?
 }
