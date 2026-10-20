@@ -1062,3 +1062,28 @@ fn a_title_seen_only_in_the_last_read_is_not_taken_as_complete() {
 
     assert_eq!(result, Err(Error::Timeout));
 }
+
+#[test]
+fn cards_are_read_with_the_fixed_script_and_the_heading_as_a_string() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![json!({"items": [["Fund A", "1,000"], ["Fund B", "2,000", "x"]], "cut": false})],
+        false,
+        Some(log.clone()),
+    );
+    let (mut cdp, session) = attached(&endpoint);
+
+    let rows = cdp.read_cards(&session, "Hold\"ings", 2).unwrap();
+
+    assert_eq!(
+        rows,
+        vec![vec!["Fund A", "1,000"], vec!["Fund B", "2,000", "x"]]
+    );
+    let scripts = log.lock().unwrap();
+    assert!(
+        scripts
+            .last()
+            .unwrap()
+            .ends_with(r#"("read", "Hold\"ings", 2)"#)
+    );
+}

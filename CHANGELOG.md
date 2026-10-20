@@ -2,13 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Card reading, stage 1 (#76): a recipe can read repeated blocks ("cards") under a heading instead of a table (`Recipe::cards` = `CardSource { heading, item_depth }`, exclusive with the table title; presets can describe it as data). A fixed read-only script (`crates/browser/js/read_cards.js`, isolated world) finds exactly one visible heading that starts with the text, takes the blocks `item_depth` levels below the region after it, and returns one row per card with each text line as a cell, so the existing import mapping, aliases and replace flow are reused. A page cut at a limit (50 headings, 500 items, 20 lines, 1,000 characters) or with no card is refused; no class names, attributes or link targets are used and nothing is clicked. Schema version 12 (an older app refuses the file). The screen and the Tauri commands follow in stage 2; no preset uses it yet.
+
 ### Fixed
 
 - An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
 
 ### Added
 
-- A mapping can read the rows of a mixed table by kind (#88): `kind_column` names a cell of the name row, and `kind_rules` give each kind either quantity x price / unit (the unit per rule) or the value of a chosen column (the quantity is recorded, no price is kept). A row whose kind matches no rule is left out and reported as "kind not in the rules" (`unknown_kind`). A mapping without them is read as before. Schema version 12; an older app refuses such a file because it would ignore the rules and misvalue some rows.
+- A mapping can read the rows of a mixed table by kind (#88): `kind_column` names a cell of the name row, and `kind_rules` give each kind either quantity x price / unit (the unit per rule) or the value of a chosen column (the quantity is recorded, no price is kept). A row whose kind matches no rule is left out and reported as "kind not in the rules" (`unknown_kind`). A mapping without them is read as before. Schema version 13; an older app refuses such a file because it would ignore the rules and misvalue some rows.
 
 ### Changed
 

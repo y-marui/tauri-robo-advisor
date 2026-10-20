@@ -609,6 +609,44 @@ fn an_unreadable_first_record_counts_toward_the_limit() {
     assert_eq!(result.skipped.len(), 1);
 }
 
+#[test]
+fn card_rows_with_different_line_counts_are_read_and_the_bad_ones_are_reported() {
+    // One card per row, one text line per cell (made-up cards).
+    let table = from_rows(grid(&[
+        &["Fund A", "10 units", "1,200 yen", "+30 yen"],
+        &["Fund B", "5 units"],
+        &["Fund C", "7 units", "n/a", "+1 yen"],
+        &["Fund D", "2 units", "800 yen"],
+    ]))
+    .unwrap();
+    let mapping = ColumnMapping {
+        loose_numbers: true,
+        ..mapping(0, 2, 0)
+    };
+
+    let result = extract(&table.rows, &mapping);
+
+    let got: Vec<(&str, rust_decimal::Decimal)> = result
+        .rows
+        .iter()
+        .map(|r| (r.name.as_str(), r.value))
+        .collect();
+    assert_eq!(got, vec![("Fund A", dec!(1200)), ("Fund D", dec!(800))]);
+    assert_eq!(
+        result.skipped,
+        vec![
+            Skipped {
+                row: 2,
+                reason: SkipReason::MissingColumn
+            },
+            Skipped {
+                row: 3,
+                reason: SkipReason::NotANumber
+            }
+        ]
+    );
+}
+
 /// A made-up table that lists funds and stocks together: kind, name, units, price, evaluation.
 fn kinds_table() -> Vec<Vec<String>> {
     grid(&[
