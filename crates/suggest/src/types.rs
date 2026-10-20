@@ -36,11 +36,15 @@ pub enum ModeName {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CategoryLine {
     pub category: CategoryId,
+    #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
+    #[serde(serialize_with = "crate::display::yen")]
     pub delta: Decimal,
+    #[serde(serialize_with = "crate::display::yen")]
     pub after: Decimal,
     /// The value the category would have at its target weight once the
     /// suggestion is carried out.
+    #[serde(serialize_with = "crate::display::yen")]
     pub target_after: Decimal,
 }
 
@@ -48,6 +52,7 @@ pub struct CategoryLine {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ProductLine {
     pub product: ProductId,
+    #[serde(serialize_with = "crate::display::yen")]
     pub delta: Decimal,
 }
 
@@ -56,7 +61,9 @@ pub struct ProductLine {
 pub enum Note {
     /// The amount was lowered to a multiple of the account's rounding unit.
     AmountRounded {
+        #[serde(serialize_with = "crate::display::yen")]
         requested: Decimal,
+        #[serde(serialize_with = "crate::display::yen")]
         applied: Decimal,
     },
     /// This category could not be brought all the way to its target, for
@@ -67,6 +74,7 @@ pub enum Note {
     /// its target).
     CategoryNotFilled {
         category: CategoryId,
+        #[serde(serialize_with = "crate::display::yen")]
         shortfall: Decimal,
     },
     /// Every category is already within its tolerance, or too close to the
@@ -79,12 +87,16 @@ pub struct Suggestion {
     pub mode: ModeName,
     pub account: AccountId,
     /// The amount the user asked for, when the mode takes one.
+    #[serde(serialize_with = "crate::display::yen_option")]
     pub requested: Option<Decimal>,
     /// The total bought (or, for a sale, sold) after rounding.
+    #[serde(serialize_with = "crate::display::yen")]
     pub applied: Decimal,
     /// For the buy-only mode: the exact amount needed to reach the target.
+    #[serde(serialize_with = "crate::display::yen_option")]
     pub required_total: Option<Decimal>,
     /// The whole portfolio's value once the suggestion is carried out.
+    #[serde(serialize_with = "crate::display::yen")]
     pub total_after: Decimal,
     pub categories: Vec<CategoryLine>,
     pub products: Vec<ProductLine>,

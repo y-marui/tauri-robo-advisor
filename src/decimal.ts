@@ -63,7 +63,14 @@ export function formatAmount(amount: string, locale: string): string {
   if (clean === null) {
     return amount;
   }
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 20 }).format(
+  // Rust gives an amount with the digits it should show (such as "10.50"), so the digits of the
+  // string are kept, trailing zeros included.
+  // Capped at 20, the limit older engines accept for the digit options.
+  const digits = Math.min(amount.trim().split(".")[1]?.length ?? 0, 20);
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: 20,
+  }).format(
     clean as unknown as number,
   );
 }

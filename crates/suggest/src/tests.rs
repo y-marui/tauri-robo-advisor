@@ -1232,3 +1232,89 @@ fn overview_leaves_out_ungrouped_when_every_category_has_a_group_but_keeps_an_em
     assert_eq!(o.groups[0].current_share, dec!(1));
     assert_eq!(o.groups[1].current, dec!(0));
 }
+
+// ---- display rounding (the structs stay exact; only the wire form is whole yen) ----
+
+/// A USD fund worth 10.5 USD at 150.55 yen is 1,580.775 yen: a fraction below a yen.
+fn fractional_fixture() -> Fixture {
+    let mut f = fixture();
+    let usd = product(&mut f.portfolio, "US Fund", f.stocks, "USD");
+    hold(&mut f.portfolio, f.main, usd, dec!(10.5));
+    apply(
+        &mut f.portfolio,
+        Edit::SetExchangeRate {
+            usd_jpy: Some(dec!(150.55)),
+        },
+    );
+    f
+}
+
+#[test]
+fn the_overview_keeps_exact_values_and_serializes_whole_yen() {
+    let f = fractional_fixture();
+
+    let o = overview(&f.portfolio).unwrap();
+
+    assert_eq!(o.total, dec!(901580.775));
+    let json: serde_json::Value = serde_json::to_value(&o).unwrap();
+    assert_eq!(json["total"], "901581");
+    let stocks = json["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["category"] == f.stocks.0)
+        .unwrap();
+    assert_eq!(stocks["current"], "701581");
+    // Ratios are not amounts and keep their own precision.
+    assert_eq!(
+        json["categories"][0]["current_share"],
+        o.categories[0].current_share.to_string()
+    );
+}
+
+#[test]
+fn a_suggestion_keeps_exact_values_and_serializes_whole_yen() {
+    let f = fractional_fixture();
+
+    let s = run(
+        &f.portfolio,
+        f.main,
+        Mode::FixedAdd {
+            amount: dec!(100000),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(category_line(&s, f.stocks).current, dec!(701580.775));
+    let json: serde_json::Value = serde_json::to_value(&s).unwrap();
+    let stocks = json["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["category"] == f.stocks.0)
+        .unwrap();
+    assert_eq!(stocks["current"], "701581");
+}
+
+#[test]
+fn the_account_balance_serializes_whole_yen_and_keeps_exact_values() {
+    let f = fractional_fixture();
+
+    let b = account_balance(&f.portfolio, f.main).unwrap();
+
+    let exact = b
+        .categories
+        .iter()
+        .find(|c| c.category == f.stocks)
+        .unwrap()
+        .total;
+    assert_eq!(exact, dec!(701580.775));
+    let json: serde_json::Value = serde_json::to_value(&b).unwrap();
+    let totals: Vec<&serde_json::Value> = json["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| &c["total"])
+        .collect();
+    assert!(totals.contains(&&serde_json::Value::from("701581")));
+}

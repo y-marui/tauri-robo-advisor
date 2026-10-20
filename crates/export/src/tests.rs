@@ -547,3 +547,26 @@ fn groups_are_exported_with_the_sum_of_their_targets_and_ungrouped_categories_st
     );
     assert!(lines(&f["holdings.csv"])[1].contains(",1,Stocks,8,\"Risk, assets\",JPY,"));
 }
+
+#[test]
+fn exports_keep_the_exact_amounts_that_the_screen_rounds() {
+    let mut p = sample();
+    let (main, us_fund) = (p.accounts[0].id, p.products[1].id);
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account: main,
+            product: us_fund,
+            value: dec!(1000.456),
+            quantity: None,
+        },
+    );
+
+    let all = files(&p);
+    let rows = lines(&all["holdings.csv"]);
+
+    // 1,000.456 USD stays 1000.456 (the screen shows 1000.46), and its yen value stays
+    // 150068.4 rather than the 150068 the screen shows.
+    assert!(rows[2].contains(",USD,1000.456,"), "{}", rows[2]);
+    assert!(rows[2].contains(",150068.4"), "{}", rows[2]);
+}

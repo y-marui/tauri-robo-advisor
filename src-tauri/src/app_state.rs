@@ -10,7 +10,7 @@ use std::time::SystemTime;
 
 use portfolio::{
     AccountId, Edit, HoldingInput, ImportMapping, ImportPlan, ImportRow, Issue, Portfolio,
-    ProductId, Recipe,
+    ProductId, Recipe, ShownValue,
 };
 use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
@@ -40,6 +40,9 @@ pub struct DataInfo {
 #[derive(Debug, Serialize)]
 pub struct PortfolioView {
     pub portfolio: Portfolio,
+    /// Each holding's value rounded to the smallest unit of its currency, for display only
+    /// (`portfolio` keeps the exact values, which the edit fields show).
+    pub shown_values: Vec<ShownValue>,
     /// The recipes as they are run: a recipe made from a preset with the definition of the preset
     /// the app has now (the stored one only refers to it).
     pub recipes: Vec<RecipeView>,
@@ -76,6 +79,7 @@ impl PortfolioView {
     fn new(portfolio: &Portfolio, data: DataInfo) -> Self {
         Self {
             portfolio: portfolio.clone(),
+            shown_values: portfolio.shown_values(),
             recipes: portfolio.recipes.iter().map(RecipeView::new).collect(),
             issues: portfolio.issues(),
             data,
