@@ -8,7 +8,7 @@ import {
 } from "../api.ts";
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
-import type { BrowserKind, BrowserPage, FetchedTable, TablePreview } from "../types.ts";
+import type { BrowserKind, BrowserPage, CardSource, FetchedTable, TablePreview } from "../types.ts";
 
 // An optional way to get a table: the app opens Chrome, Edge, or Brave with a
 // profile of its own, the user logs in and opens the holdings page by hand,
@@ -47,7 +47,7 @@ function kindLabel(kind: BrowserKind): string {
 
 interface Options {
   /** Receives the preview of the table the user chose, and the text its first cell starts with. */
-  onTable(preview: TablePreview, label: string): void;
+  onTable(preview: TablePreview, label: string, card: CardSource | null): void;
   info(text: string): void;
   fail(text: string): void;
 }
@@ -141,7 +141,7 @@ export function browserFetch(options: Options): HTMLElement {
           h(
             "option",
             { value: String(table.index) },
-            t("{rows} rows × {columns} columns: {label}", {
+            t(table.card ? "{rows} cards × {columns} lines: {label}" : "{rows} rows × {columns} columns: {label}", {
               rows: String(table.rows),
               columns: String(table.columns),
               label: table.label,
@@ -166,8 +166,8 @@ export function browserFetch(options: Options): HTMLElement {
         return;
       }
       const index = Number(tableSelect.value);
-      const label = lastTables.find((table) => table.index === index)?.label ?? "";
-      onTable(await useFetchedTable(index), label);
+      const chosen = lastTables.find((table) => table.index === index);
+      onTable(await useFetchedTable(index), chosen?.label ?? "", chosen?.card ?? null);
     });
   });
 

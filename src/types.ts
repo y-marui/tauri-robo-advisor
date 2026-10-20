@@ -93,11 +93,20 @@ export interface FetchLink {
   heading?: string | null;
 }
 
+/** Where a recipe finds repeated blocks (cards) instead of a table. */
+export interface CardSource {
+  heading: string;
+  /** How many levels below the region after the heading the items are (1 to 3). */
+  item_depth: number;
+}
+
 /** A saved way to fetch one table after the login. */
 export interface Recipe {
   name: string;
   links: FetchLink[];
   table_starts_with: string;
+  /** Read the cards under a heading instead of a table (then `table_starts_with` is empty). */
+  cards?: CardSource | null;
   /** Read every table that starts with the title and put their rows together. */
   all_tables?: boolean;
   /** The matching table is a heading and each holding is a table of its own after it. */
@@ -472,6 +481,8 @@ export interface FetchedTable {
   rows: number;
   columns: number;
   label: string;
+  /** Set when the candidate is a card list (one row per card): where to find it again. */
+  card: CardSource | null;
 }
 
 /** One recipe's result. Mirrors `RecipeRunView` in Rust. */

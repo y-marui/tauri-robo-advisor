@@ -68,13 +68,36 @@ pub enum RecipeRead {
     LinkChanged { link: usize },
 }
 
-/// A table found on a page, described so the user can pick the right one.
+/// What a recipe reads from the page it reached.
+#[derive(Debug, Clone, Copy)]
+pub enum ReadSource<'a> {
+    /// The table whose first cell starts with `title` (see `pick_table`).
+    Table {
+        title: &'a str,
+        merge: Option<usize>,
+        follow: bool,
+    },
+    /// The cards under the one heading that starts with `heading`.
+    Cards { heading: &'a str, item_depth: u8 },
+}
+
+/// Where a candidate that is a card list was found, to save it as a recipe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CardCandidate {
+    pub heading: String,
+    pub item_depth: u8,
+}
+
+/// A table (or a list of cards, shown the same way: one row per card) found on a page, described
+/// so the user can pick the right one.
 #[derive(Debug, Serialize)]
 pub struct TableSummary {
     pub index: usize,
     pub rows: usize,
     pub columns: usize,
     pub label: String,
+    /// Set when the candidate is a card list; `None` for a table.
+    pub card: Option<CardCandidate>,
 }
 
 /// Starts an error message that means the browser tab is no longer where the recipes expect it:
@@ -152,7 +175,7 @@ impl BrowserSession {
             .into_iter()
             .filter_map(|rows| tabular::from_rows(rows).ok())
             .collect();
-        let summaries = tables
+        let summaries: Vec<TableSummary> = tables
             .iter()
             .enumerate()
             .map(|(index, table)| TableSummary {
@@ -174,8 +197,36 @@ impl BrowserSession {
                             .collect()
                     })
                     .unwrap_or_default(),
+                card: None,
             })
             .collect();
+        let mut tables = tables;
+        let mut summaries = summaries;
+        // The card lists of the page come after its tables. A failure to read the headings
+        // (a page without any) only means there are none.
+        if let Ok(headings) = cdp.read_headings(&session) {
+            for heading in headings.list {
+                // The first depth at which the heading gives cards; the others would give the
+                // same blocks again, split further.
+                let found = (1..=3u8).find_map(|depth| {
+                    let rows = cdp.read_cards(&session, &heading, depth).ok()?;
+                    Some((depth, tabular::from_rows(rows).ok()?))
+                });
+                if let Some((item_depth, table)) = found {
+                    summaries.push(TableSummary {
+                        index: tables.len(),
+                        rows: table.rows.len(),
+                        columns: table.columns(),
+                        label: heading.clone(),
+                        card: Some(CardCandidate {
+                            heading,
+                            item_depth,
+                        }),
+                    });
+                    tables.push(table);
+                }
+            }
+        }
         *lock(&self.fetched)? = tables;
         Ok(summaries)
     }
@@ -187,9 +238,7 @@ impl BrowserSession {
         &self,
         page_id: &str,
         links: &[FetchLink],
-        title: &str,
-        merge: Option<usize>,
-        follow: bool,
+        source: ReadSource,
         allowed_sites: &[String],
     ) -> Result<RecipeRead, String> {
         let mut cdp = self.connect()?;
@@ -299,19 +348,31 @@ impl BrowserSession {
             let now = cdp.current_href(&session).map_err(|e| e.to_string())?;
             lock(&self.pinned)?.insert(page_id.to_owned(), now);
         }
-        // The table with the recipe's title may appear after the page has been quiet for a while
-        // (a single-page app), so it is waited for, up to a limit; then the usual checks decide.
-        let title_words = squash(title);
-        let has_title = |page: &browser::PageTables| {
-            page.leaf
-                .iter()
-                .chain(page.outer.iter())
-                .any(|t| title_matches(t, &title_words))
+        let read = match source {
+            // The table with the recipe's title may appear after the page has been quiet for a
+            // while (a single-page app), so it is waited for, up to a limit; then the usual checks
+            // decide.
+            ReadSource::Table {
+                title,
+                merge,
+                follow,
+            } => {
+                let title_words = squash(title);
+                let has_title = |page: &browser::PageTables| {
+                    page.leaf
+                        .iter()
+                        .chain(page.outer.iter())
+                        .any(|t| title_matches(t, &title_words))
+                };
+                cdp.read_tables_until(&session, &has_title, TITLE_WAIT)
+                    .map_err(|e| e.to_string())
+                    .and_then(|page| pick_table_in_page(page, title, merge, follow))
+            }
+            ReadSource::Cards {
+                heading,
+                item_depth,
+            } => read_cards_settled(&mut cdp, &session, heading, item_depth),
         };
-        let read = cdp
-            .read_tables_until(&session, &has_title, TITLE_WAIT)
-            .map_err(|e| e.to_string())
-            .and_then(|page| pick_table_in_page(page, title, merge, follow));
         // Every run ends on the page it started from, so the next recipe starts there too. After a
         // click there is no way back, and the next recipe starts from the page that was reached.
         let restored = if clicked {
@@ -387,6 +448,39 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
 
 /// The longest a recipe waits for its table title to show up on the page it reached.
 const TITLE_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Reads the cards under a heading, waiting (bounded) for a page that fills in late: the heading
+/// or its cards may not be there yet, and the result is accepted only when a second read half a
+/// second later gives exactly the same cards. Only reads.
+fn read_cards_settled(
+    cdp: &mut Cdp,
+    session: &str,
+    heading: &str,
+    item_depth: u8,
+) -> Result<Table, String> {
+    let start = std::time::Instant::now();
+    let mut last: Option<Vec<Vec<String>>> = None;
+    loop {
+        match cdp.read_cards(session, heading, item_depth) {
+            Ok(rows) => {
+                if last.as_ref() == Some(&rows) {
+                    return tabular::from_rows(rows).map_err(|e| e.to_string());
+                }
+                last = Some(rows);
+            }
+            Err(browser::Error::CardsHeadingNotFound | browser::Error::CardsEmpty)
+                if start.elapsed() < TITLE_WAIT =>
+            {
+                last = None;
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+        if start.elapsed() >= TITLE_WAIT {
+            return Err(browser::Error::Timeout.to_string());
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
 
 /// Picks the table from the tables of a page. The tables that hold no other table are asked
 /// first; only when none of them starts with the title, the outer tables (those that hold small

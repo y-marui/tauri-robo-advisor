@@ -327,6 +327,7 @@ export const MESSAGES = {
   "Open the holdings page in the browser first.": { ja: "先に、ブラウザで保有一覧のページを開いてください。" },
   "Reading the page…": { ja: "ページを読み取り中…" },
   "{rows} rows × {columns} columns: {label}": { ja: "{rows} 行 × {columns} 列: {label}" },
+  "{rows} cards × {columns} lines: {label}": { ja: "カード {rows} 件 × {columns} 行: {label}" },
   "No table was found on that page.": { ja: "そのページには、表が見つかりませんでした。" },
   "Choose the table with the holdings, then use it.": { ja: "保有が載っている表を選んで、使ってください。" },
   "The browser was closed.": { ja: "ブラウザを閉じました。" },
