@@ -47,6 +47,7 @@
 - 価格: ほとんどが USDT・BUSD などの建て。円の評価は `USDTJPY` などの換算が要り、換算できない通貨は `unpriced`。bitFlyer の「同じ基準で全通貨を評価する」考え方から外れる。
 - 未確認: 日本居住者が使う Binance（国際版）と Binance Japan は別のサービスで、API の入口や権限の画面が違う。Binance Japan の公式 API 仕様は、今回の調査では確認できなかった。どちらを対象にするかは利用者が決める。
 - Binance Japan の再調査（#128、2026-10-20）: 対象は Binance Japan に決まったが、公式の API 仕様を確認できなかったため実装しない。確認できたこと: `developers.binance.com` の Spot API 文書は国際版の `api.binance.com` 系のホストだけを挙げ、Binance Japan も日本向けの制限も記載がない。Binance Japan のサイト（`binance.com/ja`、運営は Binance Japan 株式会社）のフッターに API 文書へのリンクはない。第三者のサポート記事（Cryptact）はアプリの API 管理でキーを作れると述べるが、これは公式ではない。確認できなかったこと: Binance Japan が使う API ホスト（国際版と同じか別か）、残高取得のエンドポイントと署名方式、権限名、日本居住者の個人利用の可否、JPY 建ての価格の取得方法。続行には、利用者が Binance Japan の画面または公式ヘルプで API 管理の有無とホストを確認するか、公式 API 文書の URL を示す必要がある。
+- 再々調査（同日）: 利用者が Binance Japan で API キーを発行できたことは確認された。ただし `api.binance.co.jp`・`www.binance.co.jp` はこの環境から接続できず（タイムアウト）、公式の API 文書は引き続き確認できない。`binance.com/ja` のヘルプ（API カテゴリ）は日本語表示の国際版の記事（キー作成、Ed25519・RSA の鍵ペア生成、テストネット、API FAQ）で、Binance Japan の記述ではない。国際版との互換を示す公式の記述は見つかっていない。
 
 ## Fit with the bitFlyer Design
 
