@@ -1858,7 +1858,8 @@ mod tests {
             .collect();
         assert_eq!(recipes.len(), portfolio::presets().len());
         for recipe in &recipes {
-            assert!(recipe.all_tables || recipe.following_tables);
+            // A recipe reads tables (every table, or those after a heading) or cards.
+            assert!(recipe.all_tables || recipe.following_tables || recipe.cards.is_some());
             for link in &recipe.links {
                 assert_eq!(
                     browser::link_text_allowed(&link.text),
