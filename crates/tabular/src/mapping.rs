@@ -200,7 +200,9 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                     start = record + 1;
                     continue;
                 };
-                let kind = clean(cell);
+                // Folded like the rule's kind is when it is saved: runs of whitespace (line breaks,
+                // no-break and full-width spaces) are one space.
+                let kind = cell.split_whitespace().collect::<Vec<_>>().join(" ");
                 match mapping.kind_rules.iter().find(|r| r.kind == kind) {
                     Some(rule) => Some(rule.read),
                     None => {

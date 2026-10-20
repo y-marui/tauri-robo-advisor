@@ -738,3 +738,22 @@ fn kind_rules_load_from_json_and_older_mappings_have_none() {
     assert_eq!(old.kind_column, None);
     assert!(old.kind_rules.is_empty());
 }
+
+#[test]
+fn a_kind_cell_is_matched_with_its_whitespace_folded() {
+    let table = grid(&[&["Stock\n  Fund", "Beta Corp", "100", "250", "25,100"]]);
+    let mapping = ColumnMapping {
+        header_rows: 0,
+        kind_rules: vec![KindRule {
+            kind: "Stock Fund".to_owned(),
+            read: KindRead::Evaluation {
+                column: 4,
+                part: None,
+            },
+        }],
+        ..kinds_mapping()
+    };
+    let result = extract(&table, &mapping);
+    assert_eq!(result.skipped, vec![]);
+    assert_eq!(result.rows[0].value, dec!(25100));
+}
