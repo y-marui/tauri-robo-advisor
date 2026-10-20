@@ -6,6 +6,12 @@ import {
   saveCoincheckCredentials,
 } from "../api.ts";
 import { h } from "../dom.ts";
+import {
+  loadExchangeAccount,
+  orderAccounts,
+  pickAccount,
+  saveExchangeAccount,
+} from "../exchange-account.ts";
 import { deleteButton } from "../fields.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
@@ -19,6 +25,8 @@ import { importPlanView } from "./import-plan.ts";
 
 const SOURCE = "coincheck";
 const CURRENCY = "JPY";
+
+const EXCHANGE = "coincheck";
 
 export function coincheckPanel(ctx: Context): Panel {
   const credentialStatus = h("p", { class: "note", role: "status" });
@@ -93,6 +101,7 @@ export function coincheckPanel(ctx: Context): Panel {
 
   // The confirmation and the note name the selected account, so redraw them.
   accountSelect.addEventListener("change", () => {
+    saveExchangeAccount(EXCHANGE, accountSelect.value);
     void showPlan().catch((error) =>
       result.replaceChildren(h("p", { class: "note error" }, String(error))),
     );
@@ -184,23 +193,21 @@ export function coincheckPanel(ctx: Context): Panel {
     render(view) {
       current = view;
       // Accounts that hold crypto assets come first: that is where exchange balances belong.
-      const cryptoAccounts = new Set(
-        view.portfolio.holdings.filter((r) => r.account_type === "crypto").map((r) => r.account),
-      );
-      const signature = view.portfolio.accounts
-        .map((a) => `${a.id}:${a.name}:${cryptoAccounts.has(a.id)}`)
-        .join(",");
+      const ordered = orderAccounts(view);
+      const signature = ordered.map((a) => `${a.id}:${a.name}`).join(",");
       if (signature !== accountSignature) {
         accountSignature = signature;
         const previous = accountSelect.value;
-        const ordered = [...view.portfolio.accounts].sort(
-          (a, b) => Number(cryptoAccounts.has(b.id)) - Number(cryptoAccounts.has(a.id)),
-        );
         accountSelect.replaceChildren(
           ...ordered.map((a) => h("option", { value: String(a.id) }, a.name)),
         );
-        if (ordered.some((a) => String(a.id) === previous)) {
-          accountSelect.value = previous;
+        const picked = pickAccount(
+          ordered.map((a) => String(a.id)),
+          previous,
+          loadExchangeAccount(EXCHANGE),
+        );
+        if (picked !== null) {
+          accountSelect.value = picked;
         }
       }
       if (rows) {

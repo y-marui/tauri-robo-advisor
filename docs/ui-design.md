@@ -73,6 +73,10 @@
 
 設定タブのカード（bitFlyer、Coincheck、GMO コイン、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups）と Settings Tab は [ui-design-settings.md](ui-design-settings.md) に分けてある。
 
+## Remembered Account on Exchange Cards
+
+bitFlyer、Coincheck、GMO コインのカードで「更新先の口座」に最後に選んだ口座を、取引所ごとに覚えて次回の初期値にする（再起動後も。詳細は [specification-import.md](specification-import.md) の Remembered Account for Exchange Cards）。覚えた口座が消えていれば、暗号資産の口座を先頭にした従来の並びの 1 番目になる。
+
 ## Import Link Step (#131)
 
 bitFlyer、Coincheck、ブラウザの取得、表の取り込みは、同じ部品（`src/views/import-plan.ts`）で、別名のない名前を商品に対応づける。
