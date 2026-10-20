@@ -475,7 +475,7 @@ export function recipesPanel(ctx: Context): Panel {
 
   /** A button that fetches just this recipe (the others keep what they already read). */
   function fetchOne(recipe: Recipe): HTMLElement {
-    const button = h("button", { type: "button" }, t("Fetch this recipe"));
+    const button = h("button", { type: "button", title: t("Fetch this recipe") }, t("Fetch"));
     button.addEventListener("click", () => void runAll([recipe.name]));
     return button;
   }
@@ -491,8 +491,10 @@ export function recipesPanel(ctx: Context): Panel {
     }
     runButton.disabled = false;
     const groups = groupBySite(view.recipes, presets);
+    const fetchAll = h("div", { class: "recipe-fetch-all" }, runButton);
     pageRow.hidden = !groups.some((g) => g.site === "");
     list.replaceChildren(
+      fetchAll,
       ...groups.map((group) => {
         const siteButton = h("button", { type: "button" }, t("Fetch this site"));
         siteButton.addEventListener("click", () => void runAll(group.recipes.map((r) => r.name)));
@@ -583,7 +585,6 @@ export function recipesPanel(ctx: Context): Panel {
       { class: "note" },
       t("“Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. If a site has no open page, its login page is opened: log in by hand, then press Fetch again. Nothing changes until you confirm."),
     ),
-    h("div", { class: "recipe-fetch-all" }, runButton),
     list,
     h("div", { class: "add-row" }, presetSelect, presetAccount, newAccountName, presetAdd),
     presetNote,

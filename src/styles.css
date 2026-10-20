@@ -464,45 +464,67 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
-/* The three fetch buttons (card, site, recipe) share the third column, so they start at the same x. */
-.recipe-fetch-all,
-.recipe-group-head,
-.recipe-row {
+/*
+ * One grid for the whole list, with content-sized columns kept close together at the left:
+ * name, account, fetch button, delete button. "Fetch all" and "Fetch this site" sit in the same
+ * button column as the per-recipe "Fetch", so the three start at the same x. The rows and group
+ * wrappers are transparent (display: contents) so every row uses the same columns.
+ */
+.recipe-list {
   display: grid;
-  grid-template-columns: minmax(12rem, 1fr) 10rem 8rem auto;
+  grid-template-columns: fit-content(24rem) max-content max-content max-content;
+  justify-content: start;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 4px;
+  overflow-x: auto;
 }
 
-.recipe-group-head h3 {
-  grid-column: 1 / 3;
+.recipe-list .recipe-group,
+.recipe-list .recipe-group-head,
+.recipe-list .recipe-row,
+.recipe-list .recipe-fetch-all {
+  display: contents;
 }
 
-.recipe-fetch-all button,
-.recipe-group-head button {
+.recipe-list > .note {
+  grid-column: 1 / -1;
+}
+
+.recipe-list button {
+  white-space: nowrap;
+}
+
+.recipe-list .recipe-fetch-all button,
+.recipe-list .recipe-group-head button,
+.recipe-list .recipe-row > button:not(.danger) {
   grid-column: 3;
-  justify-self: start;
+  justify-self: stretch;
 }
 
-.recipe-row select {
+.recipe-list .recipe-name,
+.recipe-list .recipe-group h3 {
+  grid-column: 1;
+}
+
+.recipe-list .recipe-group h3 {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+}
+
+.recipe-list .recipe-row select {
   width: 100%;
   min-width: 0;
 }
 
-.recipe-row > button:not(.danger) {
-  justify-self: start;
-}
-
-.recipe-group h3 {
-  margin: 12px 0 4px;
-  font-size: 1rem;
+.recipe-list .recipe-row > .note.error {
+  grid-column: 1 / 4;
 }
 
 .recipe-name {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 12rem;
 }
 
 .recipe-name .badge {
@@ -822,8 +844,4 @@ details.product-tools summary {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
-}
-
-.recipe-row > .note.error {
-  grid-column: 1 / 4;
 }
