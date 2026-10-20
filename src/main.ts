@@ -124,10 +124,10 @@ function renderAll(): void {
 let openRecords: () => void = () => {};
 
 const context: Context = {
-  async apply(edit) {
+  async apply(edit, at) {
     // The edit is tied to the data location of the view it was made from; Rust refuses it if
     // the data folder was switched meanwhile.
-    const location = view?.data.location;
+    const location = at ?? view?.data.location;
     try {
       if (location === undefined) {
         throw new Error("The data is not loaded yet.");

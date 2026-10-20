@@ -650,6 +650,7 @@ impl AppState {
     /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
     /// without a saved reference gets one now, so the same link is found next time.
     pub fn run_recipe(&self, name: &str, page: &str) -> Result<RecipeOutcome, String> {
+        let location = self.lock_disk()?.location;
         let mut recipe = self.recipe(name)?;
         // An earlier result of this recipe must never survive a run that fails or needs
         // attention: it would be applied together with the fresh ones.
@@ -705,6 +706,11 @@ impl AppState {
         };
         let view = self.run_view(&run)?;
         let mut runs = self.lock_runs()?;
+        // The rows were read for the recipe of the data location the run started in: after the
+        // data folder was switched they must not be kept for the new data.
+        if self.lock_disk()?.location != location {
+            return Err(LOCATION_CHANGED.to_owned());
+        }
         runs.retain(|r| r.name != run.name);
         runs.push(run);
         self.runs_generation.fetch_add(1, Ordering::SeqCst);
