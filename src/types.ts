@@ -435,7 +435,18 @@ export interface ImportPlan {
 
 /** What the bitFlyer command returns: balances in JPY, and what could not be valued. */
 export interface BitflyerHoldings {
-  holdings: { symbol: string; value: string; /** How much of the currency is held. */ amount: string }[];
+  holdings: {
+    symbol: string;
+    value: string;
+    /** How much of the currency is held. */
+    amount: string;
+    /** The yen price from the price page the value was worked out with (page prices only). */
+    price?: string | null;
+    /** The Lightning last price, for comparison only. */
+    api_price?: string | null;
+    /** (page price - API price) / API price in percent, for reference. */
+    difference_percent?: string | null;
+  }[];
   unpriced: string[];
 }
 

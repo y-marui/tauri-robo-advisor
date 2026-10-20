@@ -59,7 +59,7 @@ Built-in presets read the holdings tables of a logged-in browser page (you log i
 | Monex Securities | Investment trusts | Verified |
 | Rakuten Securities | Investment trusts in yen | Verified. Domestic stocks are read by the kind column (#88); they are covered by tests with made-up pages only, and the kind labels are not checked against a real page |
 | Daiwa Connect Securities | Domestic stocks, cash (yen) | Verified for the stock list; the cash page is not recorded as verified |
-| bitFlyer | Balances through the REST API (read-only key in the OS keychain) | Verified against the real service with a read-only key (authentication and balances). A currency without a yen market on bitFlyer Lightning is left out and reported; prices from the public price page are planned (#103) |
+| bitFlyer | Balances through the REST API (read-only key in the OS keychain) | Verified against the real service with a read-only key (authentication and balances). A currency without a yen market on bitFlyer Lightning is left out and reported; prices can be taken from the public price page instead (opened and read in the dedicated browser from the bitFlyer card; the Lightning price is shown for comparison) |
 | PayPay Securities | Holdings cards (evaluation only; the page shows no quantity or price). Provisional preset | Structure checked on the real page (two holdings). "More" and many holdings are not checked (#76) |
 
 Other sources: import a CSV or pasted table with your own column mapping, or enter holdings by hand.
