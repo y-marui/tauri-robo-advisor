@@ -1748,6 +1748,58 @@ fn an_account_moves_up_and_down_and_stops_at_the_ends() {
     assert_eq!(p, before);
 }
 
+#[test]
+fn groups_and_categories_move_up_and_down_and_stop_at_the_ends() {
+    let mut p = Portfolio::default();
+    let a = add_group(&mut p, "A");
+    let b = add_group(&mut p, "B");
+    let c = add_group(&mut p, "C");
+    let order = |p: &Portfolio| p.groups.iter().map(|x| x.id).collect::<Vec<_>>();
+    apply(&mut p, Edit::MoveGroup { id: c, up: true });
+    assert_eq!(order(&p), vec![a, c, b]);
+    apply(&mut p, Edit::MoveGroup { id: c, up: true });
+    apply(&mut p, Edit::MoveGroup { id: c, up: true });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveGroup { id: b, up: false });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveGroup { id: c, up: false });
+    assert_eq!(order(&p), vec![a, c, b]);
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::MoveGroup {
+            id: GroupId(9999),
+            up: true
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+
+    let x = category(&mut p, "X", rust_decimal::Decimal::ZERO);
+    let y = category(&mut p, "Y", rust_decimal::Decimal::ZERO);
+    let z = category(&mut p, "Z", rust_decimal::Decimal::ZERO);
+    let corder = |p: &Portfolio| p.categories.iter().map(|x| x.id).collect::<Vec<_>>();
+    apply(&mut p, Edit::MoveCategory { id: z, up: true });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    apply(&mut p, Edit::MoveCategory { id: x, up: true });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    apply(&mut p, Edit::MoveCategory { id: y, up: false });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    // The opposite move undoes a move.
+    apply(&mut p, Edit::MoveCategory { id: x, up: false });
+    apply(&mut p, Edit::MoveCategory { id: x, up: true });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::MoveCategory {
+            id: CategoryId(9999),
+            up: true
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+    p.validate_integrity().unwrap();
+}
+
 fn weight_edit(
     account: AccountId,
     product: ProductId,

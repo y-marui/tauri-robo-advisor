@@ -111,6 +111,25 @@ export function checkboxField(opts: CheckboxOptions): HTMLInputElement {
 }
 
 /**
+ * The up/down buttons of a list that has an order. At an end there is nothing to move, so that
+ * button is off (a move there would only save for nothing).
+ */
+export function orderButtons(
+  ctx: Context,
+  position: number,
+  count: number,
+  move: (up: boolean) => Edit,
+): HTMLElement {
+  const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
+  const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
+  up.addEventListener("click", () => void ctx.apply(move(true)));
+  down.addEventListener("click", () => void ctx.apply(move(false)));
+  up.disabled = position === 0;
+  down.disabled = position === count - 1;
+  return h("span", { class: "order" }, up, down);
+}
+
+/**
  * A delete button that asks twice: the first click arms it, the second within
  * a few seconds deletes. (`window.confirm` is not reliable in the Tauri webview.)
  */

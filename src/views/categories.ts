@@ -1,6 +1,6 @@
 import { percentToFraction } from "../decimal.ts";
 import { h } from "../dom.ts";
-import { deleteButton, percentField, selectField, textField } from "../fields.ts";
+import { deleteButton, orderButtons, percentField, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { ProductTargeting } from "../types.ts";
@@ -14,7 +14,7 @@ export function categoriesPanel(ctx: Context): Panel {
       "|" +
       view.portfolio.groups.map((g) => `${g.id}:${g.name}`).join(","),
     (view, bind) => {
-      const rows = view.portfolio.categories.map((category) => {
+      const rows = view.portfolio.categories.map((category, position) => {
         const id = category.id;
         const find = (v: typeof view) => v.portfolio.categories.find((c) => c.id === id);
         return h(
@@ -81,7 +81,16 @@ export function categoriesPanel(ctx: Context): Panel {
               }),
             }),
           ),
-          h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_category", id }))),
+          h(
+            "td",
+            {},
+            orderButtons(ctx, position, view.portfolio.categories.length, (up) => ({
+              type: "move_category",
+              id,
+              up,
+            })),
+            deleteButton(() => void ctx.apply({ type: "remove_category", id })),
+          ),
         );
       });
 
