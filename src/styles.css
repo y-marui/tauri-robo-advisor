@@ -528,9 +528,24 @@ textarea {
 }
 
 .recipe-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The badge and the info icon sit flush right in the name column. */
+.recipe-name .recipe-tags {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-left: auto;
+}
+
+/* The profile folder shows its whole placeholder; it grows up to a sensible width. */
+.profile-input {
+  flex: 1 1 28rem;
+  min-width: 20rem;
+  max-width: 40rem;
 }
 
 .recipe-name .badge {

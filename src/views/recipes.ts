@@ -559,9 +559,8 @@ export function recipesPanel(ctx: Context): Panel {
       h(
         "span",
         { class: "recipe-name" },
-        recipeDisplayName(recipe, presets),
-        recipe.preset ? h("span", { class: "badge" }, t("built-in")) : null,
-        infoIcon(routeText(recipe)),
+        h("span", {}, recipeDisplayName(recipe, presets)),
+        h("span", { class: "recipe-tags" }, recipe.preset ? h("span", { class: "badge" }, t("built-in")) : null, infoIcon(routeText(recipe))),
       ),
       account,
       fetchOne(recipe),

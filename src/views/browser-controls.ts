@@ -41,6 +41,7 @@ export function browserControls(options: Options): BrowserControls {
   const browserSelect = h("select", { "aria-label": t("Browser") });
   const profileInput = h("input", {
     type: "text",
+    class: "profile-input",
     autocomplete: "off",
     "aria-label": t("Profile folder"),
     placeholder: t("Profile folder (empty: inside the app's data folder)"),
