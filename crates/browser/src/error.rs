@@ -26,6 +26,16 @@ pub enum Error {
     LinkChanged,
     #[error("the browser is not on the expected page")]
     WrongPage,
+    #[error("no visible heading starts with that text")]
+    CardsHeadingNotFound,
+    #[error("several visible headings start with that text; use a longer start")]
+    CardsHeadingAmbiguous,
+    #[error("the blocks under the heading hold more blocks; use a deeper item depth")]
+    CardsTooShallow,
+    #[error("no blocks were found under the heading")]
+    CardsEmpty,
+    #[error("the page has more than the app reads, so it was not accepted")]
+    CardsCut,
     #[error("several different links have that text; choose one")]
     LinkAmbiguous(Vec<LinkChoice>),
 }

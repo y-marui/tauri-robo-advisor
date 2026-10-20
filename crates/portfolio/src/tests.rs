@@ -866,6 +866,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         mapping: mapping_for(" SBI "),
         all_tables: false,
         following_tables: false,
+        cards: None,
         start_site: String::new(),
         allowed_sites: Vec::new(),
         preset: None,
@@ -1370,7 +1371,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 11);
+    assert_eq!(SCHEMA_VERSION, 12);
 }
 
 #[test]
@@ -2125,4 +2126,73 @@ fn every_preset_text_has_a_japanese_translation() {
             assert!(dictionary.contains(&key), "no translation for: {text}");
         }
     }
+}
+
+fn cards_recipe_for(account: AccountId) -> Recipe {
+    Recipe {
+        table_starts_with: String::new(),
+        all_tables: false,
+        following_tables: false,
+        cards: Some(Box::new(CardSource {
+            heading: " Holdings ".to_owned(),
+            item_depth: 2,
+        })),
+        ..recipe_for(account)
+    }
+}
+
+#[test]
+fn a_cards_recipe_is_saved_trimmed_and_survives_a_round_trip() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: cards_recipe_for(acc),
+        },
+    );
+    let cards = p.recipes[0].cards.clone().unwrap();
+    assert_eq!((cards.heading.as_str(), cards.item_depth), ("Holdings", 2));
+    let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+    assert_eq!(back, p);
+    back.validate_integrity().unwrap();
+}
+
+#[test]
+fn a_cards_recipe_is_exclusive_with_a_table_title_and_needs_a_valid_source() {
+    let (mut p, _, _, acc) = sample();
+    let bad = |change: &dyn Fn(&mut Recipe)| {
+        let mut recipe = cards_recipe_for(acc);
+        change(&mut recipe);
+        recipe
+    };
+    for recipe in [
+        bad(&|r| r.table_starts_with = "Stocks".to_owned()),
+        bad(&|r| r.all_tables = true),
+        bad(&|r| r.following_tables = true),
+        bad(&|r| r.cards.as_mut().unwrap().heading = "  ".to_owned()),
+        bad(&|r| r.cards.as_mut().unwrap().heading = "a\nb".to_owned()),
+        bad(&|r| r.cards.as_mut().unwrap().heading = "x".repeat(61)),
+        bad(&|r| r.cards.as_mut().unwrap().item_depth = 0),
+        bad(&|r| r.cards.as_mut().unwrap().item_depth = 4),
+    ] {
+        assert!(p.apply(Edit::SetRecipe { recipe }).is_err());
+    }
+    assert!(p.recipes.is_empty());
+}
+
+#[test]
+fn a_file_of_the_previous_schema_without_cards_still_loads() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe_for(acc),
+        },
+    );
+    let mut value = serde_json::to_value(&p).unwrap();
+    value["schema_version"] = serde_json::json!(SCHEMA_VERSION - 1);
+    assert!(value["recipes"][0].get("cards").is_none());
+    let old: Portfolio = serde_json::from_value(value).unwrap();
+    old.validate_integrity().unwrap();
+    assert_eq!(old.recipes[0].cards, None);
 }

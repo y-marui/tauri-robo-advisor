@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-use crate::{AccountId, Error, FetchLink, ImportMapping, Recipe};
+use crate::{AccountId, CardSource, Error, FetchLink, ImportMapping, Recipe};
 
 /// How a preset reads its table: the columns and rows of a record. Counted from 0.
 struct Layout {
@@ -36,6 +36,12 @@ struct Menu {
     heading: &'static str,
 }
 
+/// The card source of a preset (see `CardSource`).
+struct PresetCards {
+    heading: &'static str,
+    item_depth: u8,
+}
+
 /// A recipe for a known page, waiting for an account.
 pub struct Preset {
     pub id: &'static str,
@@ -54,6 +60,8 @@ pub struct Preset {
     /// heading table (otherwise every table that starts with the title is read).
     start_site: &'static str,
     following_tables: bool,
+    /// Repeated blocks under a heading instead of a table (`table_starts_with` is then empty).
+    cards: Option<PresetCards>,
     /// The page where the person logs in (the app only opens it; nothing is typed). One per
     /// company: it belongs to the preset of the company's first entry.
     login_url: &'static str,
@@ -109,6 +117,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
         following_tables: false,
+        cards: None,
         login_url: "https://www.sbisec.co.jp/ETGate",
         currency: "",
         layout: sbi_layout(1),
@@ -123,6 +132,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
         following_tables: false,
+        cards: None,
         login_url: "https://www.sbisec.co.jp/ETGate",
         currency: "",
         layout: sbi_layout(10_000),
@@ -146,6 +156,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["monex.co.jp"],
         start_site: "monex.co.jp",
         following_tables: false,
+        cards: None,
         login_url: "https://www.monex.co.jp/",
         currency: "",
         layout: Layout {
@@ -187,6 +198,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["rakuten-sec.co.jp"],
         start_site: "rakuten-sec.co.jp",
         following_tables: false,
+        cards: None,
         login_url: "https://www.rakuten-sec.co.jp/",
         currency: "JPY",
         layout: Layout {
@@ -224,6 +236,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["connect-sec.co.jp"],
         start_site: "connect-sec.co.jp",
         following_tables: true,
+        cards: None,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
         currency: "",
         layout: Layout {
@@ -260,6 +273,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["connect-sec.co.jp"],
         start_site: "connect-sec.co.jp",
         following_tables: false,
+        cards: None,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
         currency: "",
         layout: Layout {
@@ -336,7 +350,13 @@ impl Preset {
                 })
                 .collect(),
             table_starts_with: self.table_starts_with.to_owned(),
-            all_tables: !self.following_tables,
+            cards: self.cards.as_ref().map(|c| {
+                Box::new(CardSource {
+                    heading: c.heading.to_owned(),
+                    item_depth: c.item_depth,
+                })
+            }),
+            all_tables: !self.following_tables && self.cards.is_none(),
             following_tables: self.following_tables,
             start_site: self.start_site.to_owned(),
             allowed_sites: self.allowed_sites.iter().map(|s| (*s).to_owned()).collect(),
@@ -407,6 +427,7 @@ impl Recipe {
                 })
                 .collect(),
             table_starts_with: String::new(),
+            cards: None,
             all_tables: false,
             following_tables: false,
             start_site: String::new(),
@@ -416,5 +437,48 @@ impl Recipe {
             mapping: ImportMapping::default(),
             preset: self.preset,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cards_preset() -> Preset {
+        Preset {
+            id: "made-up-cards",
+            label: "Made up",
+            description: "",
+            links: &[],
+            menu: None,
+            table_starts_with: "",
+            allowed_sites: &[],
+            start_site: "example.test",
+            following_tables: false,
+            cards: Some(PresetCards {
+                heading: "Holdings",
+                item_depth: 2,
+            }),
+            login_url: "",
+            currency: "JPY",
+            layout: sbi_layout(1),
+        }
+    }
+
+    #[test]
+    fn a_cards_preset_makes_a_cards_recipe_and_its_reference_does_not_copy_it() {
+        let recipe = cards_preset().recipe(AccountId(1));
+        assert_eq!(
+            recipe.cards,
+            Some(Box::new(CardSource {
+                heading: "Holdings".to_owned(),
+                item_depth: 2
+            }))
+        );
+        assert!(recipe.table_starts_with.is_empty());
+        assert!(!recipe.all_tables && !recipe.following_tables);
+
+        let reference = recipe.into_preset_reference();
+        assert_eq!(reference.cards, None);
     }
 }

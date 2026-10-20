@@ -9,12 +9,14 @@
 //! submits anything. The connection is on this computer
 //! only, and no driver program (chromedriver) is needed.
 
+mod cards;
 mod cdp;
 mod detect;
 mod error;
 mod launch;
 mod links;
 
+pub use cards::{Headings, MAX_CARD_ITEMS, MAX_HEADINGS};
 pub use cdp::{Cdp, Followed, MAX_TABLES, Page, PageTables};
 pub use detect::{Found, Kind, Os, candidate_paths, find_browsers, find_with};
 pub use error::{Error, LinkChoice};

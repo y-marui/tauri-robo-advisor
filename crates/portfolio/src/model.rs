@@ -15,10 +15,11 @@ use serde::{Deserialize, Serialize};
 /// the preset id of a recipe (`preset`: a recipe made from a preset carries only its account, and an
 /// older app would read it as an empty custom recipe, so it refuses). Version 11 added the groups
 /// of categories (`groups`, and the `group` of a category: an older app would drop the grouping on
-/// its next save, so it refuses).
+/// its next save, so it refuses). Version 12 added the card source of a recipe (`cards`:
+/// an older app would read a recipe that reads cards as an empty ordinary recipe, so it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 11;
+pub const SCHEMA_VERSION: u32 = 12;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -230,6 +231,17 @@ pub struct FetchLink {
     pub heading: Option<String>,
 }
 
+/// Where a recipe finds repeated blocks ("cards") instead of a table: under the one visible
+/// heading that starts with `heading`, each block `item_depth` levels below the region after it
+/// is one item. An item's text lines are its cells, so `ImportMapping` names the parts as for a
+/// table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CardSource {
+    pub heading: String,
+    /// How many levels below the region the items are (1 to 3).
+    pub item_depth: u8,
+}
+
 /// A saved way to fetch one table after the user has logged in: follow these
 /// links, find the table whose first cell starts with `table_starts_with`, read
 /// it with `mapping`, and put the result into `account`.
@@ -249,6 +261,10 @@ pub struct Recipe {
     /// read as its rows.
     #[serde(default)]
     pub following_tables: bool,
+    /// Read repeated blocks under a heading instead of a table. Exclusive with
+    /// `table_starts_with`; `all_tables` and `following_tables` are then off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cards: Option<Box<CardSource>>,
     /// The site (like `example.co.jp`) of the page the recipe reads: with several brokerages open,
     /// "fetch everything" reads each recipe from the open page of its own site. Empty: the page
     /// that was chosen on the screen.
