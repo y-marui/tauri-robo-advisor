@@ -18,10 +18,9 @@ _最終更新: 2026-10-19_
 | `src/views/records.ts` | 設定タブの「全レコード」カード。商品とレコード（口座・商品・種別）の編集、レコードと商品の追加、商品名の絞り込み | `src/panel.ts`, `src/fields.ts`, `src/views/holdings-table.ts`（`priceText`） |
 | `src/views/groups.ts` | グループのカード（追加・名前の変更・削除）と、グループの表示の順序・名前の補助 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
-| `src/views/suggestions.ts` | 保有タブの副タブ「提案」。対象口座の選択と全体の提案 | `src/views/suggestion.ts` |
 | `src/subtabs.ts` | 保有タブの副タブの名前、保存した選択の検証、矢印キーの移動（テストあり） | — |
-| `src/views/account-tabs.ts` | 保有タブの副タブ「口座ごと」。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
-| `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「提案」の副タブと口座のタブで共有） | `src/api.ts` |
+| `src/views/rebalance.ts` | 保有タブの副タブ「リバランス」。先頭の「すべて」（対象口座の選択と全体の提案）と口座ごとのタブ（口座内の商品バランス、口座への追加の提案） | `src/views/suggestion.ts` |
+| `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「すべて」のタブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/browser-controls.ts` | ブラウザの選択・プロファイルのフォルダ・開く・閉じる（「ブラウザで取得」と取得レシピで共有。最後の選択を初期値にする） | `src/api.ts`, `src/browser-defaults.ts` |
 | `src/views/browser-fetch.ts` | 「ブラウザで取得」。ページと表の選択（ブラウザの起動は `browser-controls.ts`） | `src/api.ts` |

@@ -1,10 +1,16 @@
 /** The sub-tabs of the Holdings tab. Only the visible area changes; the data stays the same. */
-export const HOLDINGS_SUBTABS = ["holdings", "suggestions", "accounts"] as const;
+export const HOLDINGS_SUBTABS = ["holdings", "rebalance"] as const;
 export type HoldingsSubTab = (typeof HOLDINGS_SUBTABS)[number];
 
-/** The saved choice if it is one of the sub-tabs, else the first one. */
+/** Sub-tabs that no longer exist, and the one that took over their content. */
+const RETIRED = new Map<string, HoldingsSubTab>([
+  ["suggestions", "rebalance"],
+  ["accounts", "rebalance"],
+]);
+
+/** The saved choice if it is one of the sub-tabs (a retired one maps to its successor), else the first one. */
 export function pickSubTab(saved: string | null): HoldingsSubTab {
-  return HOLDINGS_SUBTABS.find((name) => name === saved) ?? "holdings";
+  return HOLDINGS_SUBTABS.find((name) => name === saved) ?? (saved === null ? undefined : RETIRED.get(saved)) ?? "holdings";
 }
 
 /** The sub-tab next to `current` in the direction of an arrow key, wrapping around; `null` for other keys. */

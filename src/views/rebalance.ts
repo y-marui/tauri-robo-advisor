@@ -5,35 +5,65 @@ import type { Context, Panel } from "../panel.ts";
 import type { AccountBalance, PortfolioView } from "../types.ts";
 import { categoryName, deltaClass, signed, suggestionBox, yen } from "./suggestion.ts";
 
-// The right panel: one tab per account. The upper part compares the products
-// inside the account with their weights; the lower part suggests how to spend
-// an addition in this account. Every figure comes from Rust.
+// The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". "All" is the
+// overall suggestion for the rebalancing account (its choice included). An account tab compares
+// the products the account holds with their weights and suggests how to spend an addition there;
+// products the account does not hold are left out of both. Every figure comes from Rust.
 
-export function accountTabsPanel(_ctx: Context): Panel {
-  const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("By account") });
+type Selection = number | "all";
+
+export function rebalancePanel(ctx: Context): Panel {
+  const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("Rebalance") });
   const balance = h("div", { class: "account-balance" });
-  const body = h(
+  const accountPart = h(
     "div",
-    { role: "tabpanel", class: "tab-body" },
+    {},
     h("h3", {}, t("Balance inside the account")),
     balance,
     h("h3", {}, t("Add to this account")),
   );
+  const body = h("div", { role: "tabpanel", class: "tab-body" });
 
   let current: PortfolioView | null = null;
-  let selected: number | null = null;
+  let selected: Selection = "all";
   let tabSignature: string | null = null;
   let sequence = 0;
   let shownAccount: number | null = null;
 
   const box = suggestionBox({
     modes: ["fixed_add", "buy_only_to_target"],
-    account: () => selected,
+    account: () => (selected === "all" ? null : selected),
+    heldOnly: true,
     noAccountMessage: () => t("Choose an account first."),
   });
-  body.append(box.el);
+  accountPart.append(box.el);
 
-  const el = h("section", { class: "card account-tabs" }, h("h2", {}, t("By account")), tabs, body);
+  const allBox = suggestionBox({
+    modes: ["fixed_add", "buy_only_to_target", "full_rebalance", "fixed_sell"],
+    account: () => current?.portfolio.settings.target_account ?? null,
+    noAccountMessage: () => t("Choose the rebalancing account first."),
+  });
+  const targetSelect = h("select", { "aria-label": t("Rebalancing account") });
+  // The suggestion must use the saved account, so it waits while the choice is being saved.
+  targetSelect.addEventListener("change", () => {
+    allBox.setBusy(true);
+    void ctx
+      .apply({
+        type: "set_target_account",
+        account: targetSelect.value === "" ? null : Number(targetSelect.value),
+      })
+      .finally(() => allBox.setBusy(false));
+  });
+  let targetSignature: string | null = null;
+  const allPart = h(
+    "div",
+    {},
+    h("label", { class: "field" }, h("span", {}, t("Rebalancing account")), targetSelect),
+    allBox.el,
+  );
+  body.append(allPart, accountPart);
+
+  const el = h("section", { class: "card rebalance" }, h("h2", {}, t("Rebalance")), tabs, body);
 
   const productName = (view: PortfolioView, id: number): string =>
     view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
@@ -72,7 +102,7 @@ export function accountTabsPanel(_ctx: Context): Panel {
       }
     }
     if (rows.length === 0) {
-      return h("p", { class: "note" }, t("Nothing held or buyable in this account."));
+      return h("p", { class: "note" }, t("This account holds nothing yet. Use the All tab, or add a record in Settings."));
     }
     return h(
       "div",
@@ -98,7 +128,7 @@ export function accountTabsPanel(_ctx: Context): Panel {
   }
 
   function refreshBalance(view: PortfolioView): void {
-    const account = selected;
+    const account = selected === "all" ? null : selected;
     if (account === null) {
       shownAccount = null;
       balance.replaceChildren();
@@ -126,28 +156,35 @@ export function accountTabsPanel(_ctx: Context): Panel {
       });
   }
 
-  function select(id: number): void {
+  function select(id: Selection): void {
     selected = id;
     for (const tab of tabs.querySelectorAll<HTMLButtonElement>("[role=tab]")) {
       const active = tab.dataset["account"] === String(id);
       tab.setAttribute("aria-selected", String(active));
       tab.tabIndex = active ? 0 : -1;
     }
+    allPart.hidden = id !== "all";
+    accountPart.hidden = id === "all";
     if (current) {
       box.update(current);
+      allBox.update(current);
       refreshBalance(current);
     }
   }
 
   function buildTabs(view: PortfolioView): void {
+    const entries: { id: Selection; name: string }[] = [
+      { id: "all", name: t("All") },
+      ...view.portfolio.accounts.map((a) => ({ id: a.id, name: a.name })),
+    ];
     tabs.replaceChildren(
-      ...view.portfolio.accounts.map((account) => {
+      ...entries.map((entry) => {
         const tab = h(
           "button",
-          { type: "button", role: "tab", "data-account": String(account.id), class: "tab" },
-          account.name,
+          { type: "button", role: "tab", "data-account": String(entry.id), class: "tab" },
+          entry.name,
         );
-        tab.addEventListener("click", () => select(account.id));
+        tab.addEventListener("click", () => select(entry.id));
         tab.addEventListener("keydown", (event) => {
           const all = [...tabs.querySelectorAll<HTMLButtonElement>("[role=tab]")];
           const index = all.indexOf(tab);
@@ -169,21 +206,25 @@ export function accountTabsPanel(_ctx: Context): Panel {
     render(view) {
       current = view;
       const accounts = view.portfolio.accounts;
-      body.hidden = accounts.length === 0;
       const signature = accounts.map((a) => `${a.id}:${a.name}`).join(",");
       if (signature !== tabSignature) {
         tabSignature = signature;
         buildTabs(view);
-        if (selected === null || !accounts.some((a) => a.id === selected)) {
-          selected = accounts[0]?.id ?? null;
-        }
-        if (accounts.length === 0) {
-          tabs.replaceChildren(h("p", { class: "note" }, t("No accounts yet.")));
+        if (selected !== "all" && !accounts.some((a) => a.id === selected)) {
+          selected = "all";
         }
       }
-      if (selected !== null) {
-        select(selected);
+      if (signature !== targetSignature) {
+        targetSignature = signature;
+        targetSelect.replaceChildren(
+          h("option", { value: "" }, t("None")),
+          ...accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
+        );
       }
+      if (document.activeElement !== targetSelect) {
+        targetSelect.value = String(view.portfolio.settings.target_account ?? "");
+      }
+      select(selected);
     },
   };
 }

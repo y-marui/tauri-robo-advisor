@@ -13,10 +13,9 @@ import { categoriesPanel } from "./views/categories.ts";
 import { groupsPanel } from "./views/groups.ts";
 import { dataFolderPanel } from "./views/data-folder.ts";
 import { importStepsPanel } from "./views/import-steps.ts";
-import { accountTabsPanel } from "./views/account-tabs.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
 import { overviewPanel } from "./views/overview.ts";
-import { suggestionsPanel } from "./views/suggestions.ts";
+import { rebalancePanel } from "./views/rebalance.ts";
 import { HOLDINGS_SUBTABS, pickSubTab, stepSubTab, type HoldingsSubTab } from "./subtabs.ts";
 import { dataNotes } from "./views/data-folder.ts";
 import { issuesList } from "./views/issues.ts";
@@ -210,8 +209,7 @@ function build(): void {
   issues = h("div");
   const overview = overviewPanel(context);
   const holdingsTable = holdingsTablePanel(context);
-  const suggestions = suggestionsPanel(context);
-  const accountTabs = accountTabsPanel(context);
+  const rebalance = rebalancePanel(context);
   const importSteps = importStepsPanel(context);
   const tableImport = tableImportPanel(context);
   const recipes = recipesPanel(context);
@@ -229,8 +227,7 @@ function build(): void {
   panels = [
     overview,
     holdingsTable,
-    suggestions,
-    accountTabs,
+    rebalance,
     importSteps,
     tableImport,
     recipes,
@@ -247,17 +244,14 @@ function build(): void {
     dataFolder,
   ];
 
-  // The wide area beside the balance: the holdings table, the overall suggestion, and the
-  // accounts. They only show and hide, like the main tabs; the choice is remembered.
+  // The wide area beside the balance: the holdings table and the rebalance tabs. They only show and hide, like the main tabs; the choice is remembered.
   const subPanes: Record<HoldingsSubTab, HTMLElement> = {
     holdings: h("div", { class: "subpane", role: "tabpanel" }, holdingsTable.el),
-    suggestions: h("div", { class: "subpane", role: "tabpanel" }, suggestions.el),
-    accounts: h("div", { class: "subpane", role: "tabpanel" }, accountTabs.el),
+    rebalance: h("div", { class: "subpane", role: "tabpanel" }, rebalance.el),
   };
   const subLabels: Record<HoldingsSubTab, string> = {
     holdings: t("Holdings"),
-    suggestions: t("Suggestions"),
-    accounts: t("By account"),
+    rebalance: t("Rebalance"),
   };
   const subButtons = new Map<HoldingsSubTab, HTMLButtonElement>();
   const selectSub = (tab: HoldingsSubTab): void => {
