@@ -21,6 +21,9 @@ struct Layout {
     /// Which value of the price cell to read when the cell holds several (the price, then its
     /// change); the whole cell when `None`.
     price_part: Option<usize>,
+    /// The evaluation column, read as the value when the quantity and the price are read too
+    /// (quantity x price then only checks it).
+    evaluation_column: Option<usize>,
     header_rows: usize,
     rows_per_record: usize,
     name_row: usize,
@@ -100,6 +103,7 @@ const fn sbi_layout(price_unit: u64) -> Layout {
         price_column: Some(2),
         price_unit,
         price_part: None,
+        evaluation_column: None,
         header_rows: 2,
         rows_per_record: 2,
         name_row: 0,
@@ -172,6 +176,7 @@ const PRESETS: &[Preset] = &[
             price_column: Some(2),
             price_unit: 10_000,
             price_part: Some(0),
+            evaluation_column: None,
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
@@ -193,7 +198,8 @@ const PRESETS: &[Preset] = &[
     // table by kind with hidden detail rows, which does not start with the same cells. Only the
     // units and the price are read, and the value is the units times the price per 10,000 units
     // for an investment trust row; a domestic stock row (its price is per share) reads the
-    // evaluation (the first line of the evaluation cell) and records the units. The rows are told
+    // evaluation (the first line of the evaluation cell) and records the units and the price (per
+    // share; units x price checks the evaluation, #100). The rows are told
     // apart by the kind cell, and a row of any other kind is left out and reported (#88);
     // "9,999円" and "9,999口" are numbers with a unit. The page shows amounts in yen; a holding in a
     // foreign currency is not covered. The holdings are all on the page when it loads (no paging, scrolling, or "more"
@@ -220,6 +226,7 @@ const PRESETS: &[Preset] = &[
             // Each kind sets its own unit (see `kinds`).
             price_unit: 1,
             price_part: None,
+            evaluation_column: None,
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
@@ -247,12 +254,13 @@ const PRESETS: &[Preset] = &[
     // 国内株式 > 保有銘柄一覧 is clicked (the site is vetted) and the page must then show the heading
     // 現物取引保有銘柄一覧. The page is a heading
     // table (code / name, account, quantity, sellable quantity, cost, price, evaluation, profit,
-    // trade) and then one one-row table per holding. The evaluation is read from its column and
-    // the quantity is recorded next to it ("10株", "1,234円": numbers with a unit).
+    // trade) and then one one-row table per holding. The evaluation is the value; the quantity and the
+    // current price are recorded next to it, and quantity x price checks the evaluation (#100)
+    // ("10株", "1,234円": numbers with a unit).
     Preset {
         id: "daiwa-connect-stocks",
         label: "Daiwa Connect Securities: domestic stocks",
-        description: "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (evaluation and quantity).",
+        description: "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (the evaluation, with the quantity and price, which are checked against it).",
         links: &["保有銘柄一覧"],
         menu: Some(Menu {
             group: "国内株式",
@@ -268,16 +276,17 @@ const PRESETS: &[Preset] = &[
         layout: Layout {
             source: "Daiwa Connect",
             name_column: 0,
-            value_column: 6,
-            price_column: None,
+            value_column: 2,
+            price_column: Some(5),
             price_unit: 1,
             price_part: None,
+            evaluation_column: Some(6),
             header_rows: 1,
             rows_per_record: 1,
             name_row: 0,
             value_row: 0,
             loose_numbers: true,
-            quantity_column: Some(2),
+            quantity_column: None,
             max_records: None,
             kind_column: None,
             kinds: &[],
@@ -311,6 +320,7 @@ const PRESETS: &[Preset] = &[
             price_column: None,
             price_unit: 1,
             price_part: None,
+            evaluation_column: None,
             header_rows: 0,
             rows_per_record: 1,
             name_row: 0,
@@ -349,6 +359,7 @@ const PRESETS: &[Preset] = &[
             price_column: None,
             price_unit: 1,
             price_part: None,
+            evaluation_column: None,
             header_rows: 0,
             rows_per_record: 1,
             name_row: 0,
@@ -445,6 +456,8 @@ impl Preset {
                 name_part: None,
                 value_part: None,
                 price_part: layout.price_part,
+                evaluation_column: layout.evaluation_column,
+                evaluation_part: None,
                 loose_numbers: layout.loose_numbers,
                 quantity_column: layout.quantity_column,
                 quantity_part: None,

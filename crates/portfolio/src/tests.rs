@@ -638,6 +638,7 @@ fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
         quantity: None,
         price: None,
         price_unit: 1,
+        computed: None,
     };
 
     let plan = p.plan_import("bitflyer", "JPY", &[row("BTC"), row("ETH"), row("USDT")]);
@@ -673,6 +674,7 @@ fn plan_import_adds_up_names_linked_to_the_same_product() {
         quantity: None,
         price: None,
         price_unit: 1,
+        computed: None,
     };
 
     let plan = p.plan_import(
@@ -702,6 +704,8 @@ fn import_mappings_are_saved_per_source_and_replaced() {
         name_part: None,
         value_part: None,
         price_part: None,
+        evaluation_column: None,
+        evaluation_part: None,
         loose_numbers: false,
         quantity_column: None,
         quantity_part: None,
@@ -752,6 +756,8 @@ fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
         name_part: None,
         value_part: None,
         price_part: None,
+        evaluation_column: None,
+        evaluation_part: None,
         loose_numbers: false,
         quantity_column: None,
         quantity_part: None,
@@ -798,6 +804,8 @@ fn a_two_row_record_may_keep_the_name_and_the_value_in_one_column() {
             name_part: None,
             value_part: None,
             price_part: None,
+            evaluation_column: None,
+            evaluation_part: None,
             loose_numbers: false,
             quantity_column: None,
             quantity_part: None,
@@ -840,6 +848,8 @@ fn mapping_for(source: &str) -> ImportMapping {
         name_part: None,
         value_part: None,
         price_part: None,
+        evaluation_column: None,
+        evaluation_part: None,
         loose_numbers: false,
         quantity_column: None,
         quantity_part: None,
@@ -1038,6 +1048,8 @@ fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
             name_part: None,
             value_part: None,
             price_part: None,
+            evaluation_column: None,
+            evaluation_part: None,
             loose_numbers: false,
             quantity_column: None,
             quantity_part: None,
@@ -1132,6 +1144,8 @@ fn set_mapping(m: ImportMapping) -> Edit {
         name_part: m.name_part,
         value_part: m.value_part,
         price_part: m.price_part,
+        evaluation_column: None,
+        evaluation_part: None,
         loose_numbers: m.loose_numbers,
         quantity_column: None,
         quantity_part: None,
@@ -1160,6 +1174,7 @@ fn quantity_and_price_follow_the_rows_linked_to_one_product() {
         quantity,
         price,
         price_unit: 1,
+        computed: None,
     };
 
     // Same price: the quantities add up and the price stays.
@@ -1224,6 +1239,7 @@ fn an_empty_import_currency_takes_the_products_own_currency() {
         quantity: None,
         price: None,
         price_unit: 1,
+        computed: None,
     }];
 
     assert_eq!(p.plan_import("src", "", &rows).matched.len(), 1);
@@ -1382,7 +1398,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 14);
+    assert_eq!(SCHEMA_VERSION, 15);
 }
 
 #[test]
@@ -2960,11 +2976,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 15, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 16, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 15 })
+        Err(Error::UnsupportedVersion { found: 16 })
     ));
 }
 
@@ -3040,4 +3056,95 @@ fn setting_the_category_refuses_bad_input_and_changes_nothing() {
         );
         assert_eq!(p, before);
     }
+}
+
+fn checked_row(
+    name: &str,
+    value: rust_decimal::Decimal,
+    computed: Option<rust_decimal::Decimal>,
+) -> ImportRow {
+    ImportRow {
+        name: name.to_owned(),
+        value,
+        quantity: Some(dec!(10)),
+        price: Some(dec!(100)),
+        price_unit: 1,
+        computed,
+    }
+}
+
+#[test]
+fn a_difference_beyond_the_smallest_unit_is_listed_and_the_value_is_kept() {
+    let p = Portfolio::default();
+    let plan = p.plan_import(
+        "page",
+        "JPY",
+        &[
+            // Within one yen: accepted.
+            checked_row("Same", dec!(1000), Some(dec!(1000.6))),
+            checked_row("OneOff", dec!(1000), Some(dec!(1001))),
+            // More than a yen: listed.
+            checked_row("Off", dec!(1000), Some(dec!(1002))),
+            // Not checked: no computed value.
+            checked_row("Unchecked", dec!(5), None),
+        ],
+    );
+    assert_eq!(
+        plan.differences,
+        vec![ValueDifference {
+            name: "Off".to_owned(),
+            value: dec!(1000),
+            computed: dec!(1002),
+        }]
+    );
+    // The row itself is untouched: the evaluation is the value of record.
+    assert!(
+        plan.unmatched
+            .iter()
+            .any(|r| r.name == "Off" && r.value == dec!(1000))
+    );
+}
+
+#[test]
+fn the_tolerance_follows_the_currency_of_the_values() {
+    let p = Portfolio::default();
+    let rows = [
+        checked_row("A", dec!(10.00), Some(dec!(10.01))),
+        checked_row("B", dec!(10.00), Some(dec!(10.02))),
+    ];
+    let plan = p.plan_import("page", "USD", &rows);
+    assert_eq!(plan.differences.len(), 1);
+    assert_eq!(plan.differences[0].name, "B");
+    // With no currency named and no product linked, a whole unit is the tolerance.
+    assert!(p.plan_import("page", "", &rows).differences.is_empty());
+}
+
+#[test]
+fn an_evaluation_column_needs_a_price_column_and_its_own_cells() {
+    let mapping = |price_column, evaluation_column, evaluation_part| ImportMapping {
+        source: "page".to_owned(),
+        name_column: 0,
+        value_column: 1,
+        price_column,
+        evaluation_column,
+        evaluation_part,
+        ..ImportMapping::default()
+    };
+    assert!(mapping(Some(2), Some(3), Some(0)).validated().is_ok());
+    assert!(mapping(None, Some(3), None).validated().is_err());
+    assert!(mapping(Some(2), Some(1), None).validated().is_err());
+    assert!(mapping(Some(2), Some(2), None).validated().is_err());
+    assert!(mapping(Some(2), None, Some(0)).validated().is_err());
+    assert!(mapping(Some(2), Some(100_000), None).validated().is_err());
+}
+
+#[test]
+fn a_file_of_the_previous_version_loads_and_a_mapping_without_the_check_stays_as_it_is() {
+    let json = r#"{"schema_version":14,"next_id":1,"import_mappings":[{"source":"page","name_column":0,"value_column":1}]}"#;
+    let p = parse(json.as_bytes()).unwrap();
+    assert_eq!(p.import_mappings[0].evaluation_column, None);
+    assert_eq!(p.import_mappings[0].evaluation_part, None);
+    // Saved again without the new fields.
+    let text = serde_json::to_string(&p.import_mappings[0]).unwrap();
+    assert!(!text.contains("evaluation"));
 }

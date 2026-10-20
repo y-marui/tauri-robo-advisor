@@ -2,6 +2,7 @@ import { formatAmount } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { getLanguage, t } from "../i18n.ts";
 import type { Context } from "../panel.ts";
+import { differenceLines } from "./differences.ts";
 import type { Edit, ImportPlan, PortfolioView } from "../types.ts";
 
 // The result of an import, shared by every source (bitFlyer, a table file or
@@ -185,6 +186,19 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
         );
         return owner ? h("div", { class: "add-row" }, h("span", {}, row.name), unlink(owner.id, row.name)) : null;
       }),
+    );
+  }
+  if (plan.differences.length > 0) {
+    // The page's evaluation stays the value; the person looks before applying.
+    parts.push(
+      h(
+        "p",
+        { class: "note error" },
+        t("{count} rows have an evaluation that differs from quantity x price (the evaluation is used):", {
+          count: String(plan.differences.length),
+        }),
+      ),
+      h("ul", { class: "note" }, ...differenceLines(plan.differences).map((line) => h("li", {}, line))),
     );
   }
   parts.push(...(notes ?? []));

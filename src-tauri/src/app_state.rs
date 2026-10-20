@@ -226,6 +226,8 @@ fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
         name_part: mapping.name_part,
         value_part: mapping.value_part,
         price_part: mapping.price_part,
+        evaluation: mapping.evaluation_column,
+        evaluation_part: mapping.evaluation_part,
         loose_numbers: mapping.loose_numbers,
         quantity: mapping.quantity_column,
         quantity_part: mapping.quantity_part,
@@ -260,6 +262,7 @@ fn import_rows(extraction: &tabular::Extraction) -> Vec<ImportRow> {
             quantity: r.quantity,
             price: r.price,
             price_unit: r.price_unit,
+            computed: r.computed,
         })
         .collect()
 }
@@ -1144,6 +1147,8 @@ mod tests {
             name_part: None,
             value_part: None,
             price_part: None,
+            evaluation: None,
+            evaluation_part: None,
             loose_numbers: false,
             quantity: None,
             quantity_part: None,
@@ -1410,6 +1415,7 @@ mod tests {
                     quantity: None,
                     price: None,
                     price_unit: 1,
+                    computed: None,
                 })
                 .collect(),
             skipped: Vec::new(),
@@ -1542,6 +1548,8 @@ mod tests {
                         name_part: None,
                         value_part: None,
                         price_part: None,
+                        evaluation_column: None,
+                        evaluation_part: None,
                         loose_numbers: false,
                         quantity_column: None,
                         quantity_part: None,
@@ -1615,6 +1623,8 @@ mod tests {
                 name_part: None,
                 value_part: None,
                 price_part: None,
+                evaluation_column: None,
+                evaluation_part: None,
                 loose_numbers: false,
                 quantity_column: None,
                 quantity_part: None,
@@ -2080,6 +2090,22 @@ mod tests {
                 ),
             ]
         );
+        // The price is kept too, and quantity x price checks the evaluation: it agrees for both
+        // stocks (made-up data).
+        let checks: Vec<_> = result.rows.iter().map(|r| (r.price, r.computed)).collect();
+        assert_eq!(
+            checks,
+            vec![
+                (
+                    Some(rust_decimal::dec!(1250)),
+                    Some(rust_decimal::dec!(12500))
+                ),
+                (
+                    Some(rust_decimal::dec!(2100)),
+                    Some(rust_decimal::dec!(6300))
+                ),
+            ]
+        );
     }
 
     #[test]
@@ -2339,6 +2365,13 @@ mod tests {
                 ("Gamma Corp".to_owned(), "1250".to_owned(), "100".to_owned()),
             ]
         );
+        // A stock keeps its price too; here the made-up price disagrees with the evaluation, so
+        // the check has a computed value to differ with, while the value stays the evaluation.
+        let gamma = &result.rows[2];
+        assert_eq!(gamma.price, Some(rust_decimal::dec!(12000)));
+        assert_eq!(gamma.price_unit, 1);
+        assert_eq!(gamma.computed, Some(rust_decimal::dec!(1200000)));
+        assert_eq!(result.rows[0].computed, None);
     }
 
     #[test]
