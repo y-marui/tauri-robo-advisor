@@ -1357,9 +1357,19 @@ fn a_stored_recipe_without_a_site_still_loads_and_can_be_removed_or_moved() {
     // What an older version could have stored.
     recipe.name = "Old".to_owned();
     p.recipes.push(recipe);
-    assert!(p.issues().iter().all(|i| !format!("{i:?}").contains("recipe")));
+    assert!(
+        p.issues()
+            .iter()
+            .all(|i| !format!("{i:?}").contains("recipe"))
+    );
     let name = "Old".to_owned();
-    apply(&mut p, Edit::SetRecipeAccount { name: name.clone(), account: b });
+    apply(
+        &mut p,
+        Edit::SetRecipeAccount {
+            name: name.clone(),
+            account: b,
+        },
+    );
     apply(&mut p, Edit::RemoveRecipe { name });
     assert!(p.recipes.is_empty());
 }
