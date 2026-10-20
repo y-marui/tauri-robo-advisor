@@ -1048,3 +1048,17 @@ fn a_title_that_never_shows_ends_the_wait_with_what_was_read() {
 
     assert!(page.is_empty());
 }
+
+#[test]
+fn a_title_seen_only_in_the_last_read_is_not_taken_as_complete() {
+    let with = json!({"leaf": [[["Holdings", "x"]]], "outer": []});
+    let endpoint = fake_browser(with);
+    let mut cdp = Cdp::connect(&endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+
+    // The table is there from the first read; with no time to confirm it, it is not accepted.
+    let result = cdp.read_tables_until(&session, &|p| !p.is_empty(), std::time::Duration::ZERO);
+
+    assert_eq!(result, Err(Error::Timeout));
+}

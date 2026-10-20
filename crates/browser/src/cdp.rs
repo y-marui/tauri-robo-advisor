@@ -281,8 +281,9 @@ impl Cdp {
     /// Like `read_tables`, but waits (bounded by `max`) for the page to be complete: the tables
     /// are read again until `ready` accepts them and one more read, half a second later, gives
     /// exactly the same tables. This is for a page that fills in after a long silence, which the
-    /// settle wait cannot see. When the time is up the last read is returned as it is, and the
-    /// caller reports what is missing. Only reads; nothing is clicked or typed.
+    /// settle wait cannot see. When the time is up and the title never showed, the last read is returned as it is
+    /// and the caller reports what is missing; a title seen only in the last read, without a
+    /// confirming equal read, is a `Timeout`. Only reads; nothing is clicked or typed.
     pub fn read_tables_until(
         &mut self,
         session: &str,
@@ -299,6 +300,11 @@ impl Cdp {
                 return Ok(now);
             }
             last = now;
+        }
+        // A title that showed up only in the last read was never confirmed by a second, equal
+        // read: the table may still be filling in, so it is not handed on as complete.
+        if ready(&last) {
+            return Err(Error::Timeout);
         }
         Ok(last)
     }
