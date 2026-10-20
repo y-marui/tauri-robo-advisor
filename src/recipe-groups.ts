@@ -73,3 +73,16 @@ export function withLoginHint(reason: string): string {
     ? `${reason} ${t("You may not be logged in: log in in the browser, then press Fetch again.")}`
     : reason;
 }
+
+/** The presets that no recipe refers to yet (for any account), in the order given. */
+export function availablePresets(presets: PresetInfo[], recipes: { preset?: string | null }[]): PresetInfo[] {
+  return presets.filter((p) => !recipes.some((r) => r.preset === p.id));
+}
+
+/** Whether "Add" may be pressed: a preset and an account are chosen, or a new account has a name. */
+export function canAddPreset(preset: string, account: string, newAccountName: string): boolean {
+  if (preset === "" || account === "") {
+    return false;
+  }
+  return account !== "new" || newAccountName.trim() !== "";
+}

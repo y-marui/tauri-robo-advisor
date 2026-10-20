@@ -1,5 +1,5 @@
 import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
-import { groupBySite, recipeDisplayName, recipesAfterLogin, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
+import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -37,7 +37,7 @@ export function recipesPanel(ctx: Context): Panel {
   // (its definition is the app's current one, so it is read-only). "New account..." makes the account first.
   const presetSelect = h("select", { "aria-label": t("Recipe to add") });
   const presetAccount = h("select", { "aria-label": t("Account to update") });
-  const presetAdd = h("button", { type: "button" }, t("Add"));
+  const presetAdd = h("button", { type: "button", disabled: true }, t("Add"));
   const presetNote = h("p", { class: "note" });
   const newAccountName = h("input", { type: "text", "aria-label": t("Name of a new account"), placeholder: t("New account name") });
   newAccountName.hidden = true;
@@ -59,13 +59,6 @@ export function recipesPanel(ctx: Context): Panel {
   );
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
-  let presetRecipesSignature = "";
-  /** The account to start from for a preset: the one its recipe already has, else none ("---"). */
-  const accountOfPreset = (): string => {
-    const preset = presets.find((p) => p.id === presetSelect.value);
-    const existing = current?.recipes.find((r) => preset !== undefined && r.preset === preset.id);
-    return existing === undefined ? "" : String(existing.account);
-  };
   /** What to do when a recipe could not read its table: the page to open, as its preset says. */
   const whatToOpen = (recipe: Recipe): string => {
     const preset = presets.find((p) => p.id === recipe.preset);
@@ -89,13 +82,29 @@ export function recipesPanel(ctx: Context): Panel {
       again,
     );
   };
+  /** Add stays disabled until a preset and an account (or a new account's name) are chosen. */
+  const updateAdd = (): void => {
+    presetAdd.disabled = !canAddPreset(presetSelect.value, presetAccount.value, newAccountName.value);
+  };
   const showPresetNote = (): void => {
-    if (presetAccount.value !== NEW_ACCOUNT) {
-      presetAccount.value = accountOfPreset();
-    }
     const description = presets.find((p) => p.id === presetSelect.value)?.description;
     presetNote.textContent = description === undefined ? "" : t(description as MessageKey);
+    updateAdd();
   };
+  /** The presets not yet added as a recipe (for any account); "---" first, and only that (disabled) when none is left. */
+  const showPresetChoices = (): void => {
+    const previous = presetSelect.value;
+    const left = availablePresets(presets, current?.recipes ?? []);
+    presetSelect.replaceChildren(
+      h("option", { value: "" }, "---"),
+      ...left.map((p) => h("option", { value: p.id }, t(p.label as MessageKey))),
+    );
+    presetSelect.disabled = left.length === 0;
+    presetSelect.value = left.some((p) => p.id === previous) ? previous : "";
+    showPresetNote();
+  };
+  newAccountName.addEventListener("input", updateAdd);
+  presetAccount.addEventListener("change", updateAdd);
   presetSelect.addEventListener("change", showPresetNote);
   const addPreset = async (): Promise<void> => {
     let account = Number(presetAccount.value);
@@ -125,14 +134,13 @@ export function recipesPanel(ctx: Context): Panel {
   presetAdd.addEventListener("click", () => {
     presetAdd.disabled = true;
     void addPreset().finally(() => {
-      presetAdd.disabled = false;
+      updateAdd();
     });
   });
   void listPresets()
     .then((found) => {
       presets = found;
-      presetSelect.replaceChildren(...found.map((p) => h("option", { value: p.id }, t(p.label as MessageKey))));
-      showPresetNote();
+      showPresetChoices();
       if (current) {
         renderList(current);
       }
@@ -613,13 +621,7 @@ export function recipesPanel(ctx: Context): Panel {
     render(view) {
       current = view;
       renderList(view);
-      // Without an account there is nothing to add a preset for: say so instead of leaving the
-      // account choice empty.
-      // Recipes that were added, removed, or moved to another account change the default account
-      // of the chosen preset.
-      const recipesSignature = view.recipes.map((r) => `${r.name}:${r.account}:${r.preset ?? ""}`).join("|");
-      const recipesChanged = recipesSignature !== presetRecipesSignature;
-      presetRecipesSignature = recipesSignature;
+      showPresetChoices();
       const accountsSignature = view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join("|");
       if (accountsSignature !== presetAccountsSignature) {
         presetAccountsSignature = accountsSignature;
@@ -630,12 +632,8 @@ export function recipesPanel(ctx: Context): Panel {
           h("option", { value: NEW_ACCOUNT }, t("New account…")),
         );
         presetAccount.value =
-          previous === NEW_ACCOUNT || view.portfolio.accounts.some((a) => String(a.id) === previous)
-            ? previous
-            : accountOfPreset();
-      }
-      if (recipesChanged && presetAccount.value !== NEW_ACCOUNT) {
-        presetAccount.value = accountOfPreset();
+          previous === NEW_ACCOUNT || view.portfolio.accounts.some((a) => String(a.id) === previous) ? previous : "";
+        updateAdd();
       }
       // An alias was linked or removed, or a recipe changed: show the plans again.
       if (hasRuns) {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { setLanguage } from "./i18n.ts";
-import { groupBySite, recipeDisplayName, recipesAfterLogin, siteIsOpen, sitesToLogIn, withLoginHint } from "./recipe-groups.ts";
+import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, siteIsOpen, sitesToLogIn, withLoginHint } from "./recipe-groups.ts";
 import type { PresetInfo, RecipeView } from "./types.ts";
 
 const preset = (id: string, label: string, site: string, company: string): PresetInfo => ({
@@ -63,4 +63,18 @@ test("a missing first link gets a not-logged-in hint and other failures are left
   assert.ok(withLoginHint(missing).startsWith(missing));
   assert.ok(withLoginHint(missing).includes("not be logged in"));
   assert.equal(withLoginHint("Network error"), "Network error");
+});
+
+test("presets already added for any account are not offered again", () => {
+  const two = [...presets, preset("b", "Beta: funds", "beta.example", "Beta")];
+  assert.deepEqual(availablePresets(two, [{ preset: "a" }, { preset: null }]).map((p) => p.id), ["b"]);
+  assert.deepEqual(availablePresets(two, [{ preset: "a" }, { preset: "b" }]), []);
+});
+
+test("Add needs a preset and an account, and a name for a new account", () => {
+  assert.ok(!canAddPreset("", "1", ""));
+  assert.ok(!canAddPreset("a", "", ""));
+  assert.ok(canAddPreset("a", "1", ""));
+  assert.ok(!canAddPreset("a", "new", "  "));
+  assert.ok(canAddPreset("a", "new", "Main"));
 });
