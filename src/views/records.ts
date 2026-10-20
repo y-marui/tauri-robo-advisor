@@ -4,6 +4,7 @@ import { deleteButton, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Holding, PortfolioView } from "../types.ts";
+import { productTools } from "./merge-split.ts";
 import { priceText } from "./holdings-table.ts";
 
 const upper = (text: string): string => text.trim().toUpperCase();
@@ -54,7 +55,9 @@ export function recordsPanel(ctx: Context): Panel {
     (view) =>
       [
         view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.targeting}`).join(","),
-        view.portfolio.products.map((p) => `${p.id}:${p.category}:${p.currency}`).join(","),
+        view.portfolio.products
+          .map((p) => `${p.id}:${p.category}:${p.currency}:${p.aliases.map((a) => `${a.source}/${a.name}`).join(";")}`)
+          .join(","),
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
         view.portfolio.holdings.map((r) => `${r.account}:${r.product}`).join(","),
       ].join("|"),
@@ -279,6 +282,7 @@ export function recordsPanel(ctx: Context): Panel {
             }),
             deleteButton(() => void ctx.apply({ type: "remove_product", id }), t("Delete product")),
             addRecordForm(product, weighted),
+            productTools(ctx, view, product),
           );
           const own = view.portfolio.holdings.filter((r) => r.product === id);
           const rows = accounts

@@ -653,3 +653,12 @@ table.records td.clip {
 .step.done .step-state {
   font-weight: 600;
 }
+
+details.product-tools {
+  flex-basis: 100%;
+}
+
+details.product-tools summary {
+  cursor: pointer;
+  color: var(--muted);
+}
