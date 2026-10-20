@@ -81,3 +81,18 @@ _最終更新: 2026-10-19_
 | `crates/export/src/csv.rs` | CSV の書き出し（BOM、CRLF、引用、数式の無効化） | — |
 | `src-tauri/src/exporter.rs` | 新しいフォルダへの書き込み、UTC の日時の文字列 | `crates/export` |
 | `crates/portfolio/src/valuation.rs` | 金額の JPY への換算（JPY と USD） | — |
+
+## Docs
+
+| ファイル | 役割 |
+|---|---|
+| `docs/specification.md` | 仕様の索引（状態・範囲・データフロー・制約）。詳細は次のファイル |
+| `docs/specification-import.md` | 取得方法、表の取り込み、証券会社の出力、bitFlyer の残高 |
+| `docs/specification-browser.md` | ブラウザで取得（Browser Fetch） |
+| `docs/specification-recipes.md` | 取得レシピ（リンクのたどり方、メニューのクリック、表の選び方） |
+| `docs/specification-presets.md` | 組み込みのレシピ（プリセット）、ログインのページ、結果の反映 |
+| `docs/specification-suggestions.md` | リバランスの計算、提案モード、口座タブ |
+| `docs/specification-data.md` | ポートフォリオのモデル、口座、保存、エクスポート |
+| `docs/ui-design.md` | UI 設計（レイアウトと各パネル） |
+| `docs/ui-design-settings.md` | 設定タブのカード（bitFlyer、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups） |
+| `docs/design-constraints.md` | Design Constraints・Tauri Notes・CI コマンド・ライセンス・技術スタックの全文（`AI_CONTEXT.md` に要点） |

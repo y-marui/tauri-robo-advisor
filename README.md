@@ -75,8 +75,9 @@ Other sources: import a CSV or pasted table with your own column mapping, or ent
 - [DEVELOPING.md](DEVELOPING.md): build, test, and coding conventions
 - [CONTRIBUTING.md](CONTRIBUTING.md): pull request and issue rules
 - [docs/architecture.md](docs/architecture.md): module and component structure
-- [docs/specification.md](docs/specification.md): specification and data flow
-- [docs/ui-design.md](docs/ui-design.md): UI design
+- [docs/specification.md](docs/specification.md): specification and data flow (index; the details are in `docs/specification-*.md`)
+- [docs/ui-design.md](docs/ui-design.md): UI design (the settings tab is in `docs/ui-design-settings.md`)
+- [docs/design-constraints.md](docs/design-constraints.md): design constraints and project rules in full
 
 ## Disclaimer
 
