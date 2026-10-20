@@ -299,8 +299,17 @@ impl BrowserSession {
             let now = cdp.current_href(&session).map_err(|e| e.to_string())?;
             lock(&self.pinned)?.insert(page_id.to_owned(), now);
         }
+        // The table with the recipe's title may appear after the page has been quiet for a while
+        // (a single-page app), so it is waited for, up to a limit; then the usual checks decide.
+        let title_words = squash(title);
+        let has_title = |page: &browser::PageTables| {
+            page.leaf
+                .iter()
+                .chain(page.outer.iter())
+                .any(|t| title_matches(t, &title_words))
+        };
         let read = cdp
-            .read_tables(&session)
+            .read_tables_until(&session, &has_title, TITLE_WAIT)
             .map_err(|e| e.to_string())
             .and_then(|page| pick_table_in_page(page, title, merge, follow));
         // Every run ends on the page it started from, so the next recipe starts there too. After a
@@ -375,6 +384,9 @@ fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
         .lock()
         .map_err(|_| "The data is temporarily unavailable.".to_owned())
 }
+
+/// The longest a recipe waits for its table title to show up on the page it reached.
+const TITLE_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Picks the table from the tables of a page. The tables that hold no other table are asked
 /// first; only when none of them starts with the title, the outer tables (those that hold small

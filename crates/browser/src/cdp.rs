@@ -154,6 +154,9 @@ pub struct Page {
 pub struct Cdp {
     socket: WebSocket<TcpStream>,
     next_id: u64,
+    /// The isolated world the fixed scripts run in: the session it belongs to and its context id.
+    /// It is dropped when the browser says the context is gone (a new document replaced it).
+    world: Option<(String, i64)>,
 }
 
 impl Cdp {
@@ -171,7 +174,11 @@ impl Cdp {
         let (socket, _) =
             tungstenite::client::client_with_config(endpoint.url(), stream, Some(config))
                 .map_err(|e| Error::Connection(e.to_string()))?;
-        Ok(Self { socket, next_id: 1 })
+        Ok(Self {
+            socket,
+            next_id: 1,
+            world: None,
+        })
     }
 
     /// Sends one request and waits for its answer. Events the browser sends in
@@ -269,6 +276,31 @@ impl Cdp {
     pub fn read_tables(&mut self, session: &str) -> Result<PageTables, Error> {
         let value = self.evaluate(session, READ_TABLES)?;
         parse_tables(&value)
+    }
+
+    /// Like `read_tables`, but waits (bounded by `max`) for the page to be complete: the tables
+    /// are read again until `ready` accepts them and one more read, half a second later, gives
+    /// exactly the same tables. This is for a page that fills in after a long silence, which the
+    /// settle wait cannot see. When the time is up the last read is returned as it is, and the
+    /// caller reports what is missing. Only reads; nothing is clicked or typed.
+    pub fn read_tables_until(
+        &mut self,
+        session: &str,
+        ready: &dyn Fn(&PageTables) -> bool,
+        max: Duration,
+    ) -> Result<PageTables, Error> {
+        let start = std::time::Instant::now();
+        let mut last = self.read_tables(session)?;
+        while start.elapsed() < max {
+            let was_ready = ready(&last);
+            std::thread::sleep(Duration::from_millis(500));
+            let now = self.read_tables(session)?;
+            if was_ready && now == last {
+                return Ok(now);
+            }
+            last = now;
+        }
+        Ok(last)
     }
 
     /// Follows the link with exactly this visible text, to show another page,
@@ -518,12 +550,47 @@ impl Cdp {
         Err(Error::Timeout)
     }
 
-    fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
-        let result = self.call(
+    /// The context of an isolated world of the page's main frame, made when needed. The fixed
+    /// scripts run there: it sees the same document, but not the page's own scripts or what they
+    /// changed, so a page cannot replace `URL`, `querySelectorAll`, `getComputedStyle`, or the like
+    /// before the app reads it. A new document gets a new world.
+    fn world_for(&mut self, session: &str) -> Result<i64, Error> {
+        if let Some((owner, id)) = &self.world
+            && owner == session
+        {
+            return Ok(*id);
+        }
+        let tree = self.call(Some(session), "Page.getFrameTree", json!({}))?;
+        let frame = tree
+            .get("frameTree")
+            .and_then(|t| t.get("frame"))
+            .and_then(|f| f.get("id"))
+            .and_then(Value::as_str)
+            .ok_or(Error::Script)?
+            .to_owned();
+        let created = self.call(
             Some(session),
-            "Runtime.evaluate",
-            json!({ "expression": expression, "returnByValue": true, "awaitPromise": true }),
+            "Page.createIsolatedWorld",
+            json!({ "frameId": frame, "worldName": "robo-advisor" }),
         )?;
+        let id = created
+            .get("executionContextId")
+            .and_then(Value::as_i64)
+            .ok_or(Error::Script)?;
+        self.world = Some((session.to_owned(), id));
+        Ok(id)
+    }
+
+    fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
+        // A context that was destroyed by a navigation is made again, once. A mark left in the
+        // old world is gone with it, which is what a new document means.
+        let result = match self.evaluate_in_world(session, expression) {
+            Err(Error::Protocol(message)) if message.contains("context") => {
+                self.world = None;
+                self.evaluate_in_world(session, expression)?
+            }
+            other => other?,
+        };
         if result.get("exceptionDetails").is_some() {
             return Err(Error::Script);
         }
@@ -532,6 +599,20 @@ impl Cdp {
             .and_then(|r| r.get("value"))
             .cloned()
             .unwrap_or(Value::Null))
+    }
+
+    fn evaluate_in_world(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
+        let context = self.world_for(session)?;
+        self.call(
+            Some(session),
+            "Runtime.evaluate",
+            json!({
+                "expression": expression,
+                "contextId": context,
+                "returnByValue": true,
+                "awaitPromise": true
+            }),
+        )
     }
 
     /// Asks the browser to quit, so no extra instance is left open.
