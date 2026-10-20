@@ -280,13 +280,18 @@ export function bitflyerPanel(ctx: Context): Panel {
     el,
     render(view) {
       current = view;
-      const signature = view.portfolio.accounts.map((a) => `${a.id}:${a.name}:${a.kind}`).join(",");
+      // Accounts that hold crypto assets come first: that is where bitFlyer balances belong.
+      const cryptoAccounts = new Set(
+        view.portfolio.holdings.filter((r) => r.account_type === "crypto").map((r) => r.account),
+      );
+      const signature = view.portfolio.accounts
+        .map((a) => `${a.id}:${a.name}:${cryptoAccounts.has(a.id)}`)
+        .join(",");
       if (signature !== accountSignature) {
         accountSignature = signature;
         const previous = accountSelect.value;
-        // Crypto accounts first: that is where bitFlyer balances belong.
         const ordered = [...view.portfolio.accounts].sort(
-          (a, b) => Number(b.kind === "crypto") - Number(a.kind === "crypto"),
+          (a, b) => Number(cryptoAccounts.has(b.id)) - Number(cryptoAccounts.has(a.id)),
         );
         accountSelect.replaceChildren(
           ...ordered.map((a) => h("option", { value: String(a.id) }, a.name)),

@@ -31,12 +31,11 @@ fn product(portfolio: &mut Portfolio, name: &str, category: CategoryId) -> Produ
     portfolio.products.last().unwrap().id
 }
 
-fn account(portfolio: &mut Portfolio, name: &str, kind: AccountKind) -> AccountId {
+fn account(portfolio: &mut Portfolio, name: &str) -> AccountId {
     apply(
         portfolio,
         Edit::AddAccount {
             name: name.to_owned(),
-            kind,
         },
     );
     portfolio.accounts.last().unwrap().id
@@ -46,10 +45,11 @@ fn sample() -> (Portfolio, CategoryId, ProductId, AccountId) {
     let mut p = Portfolio::default();
     let c = category(&mut p, "Category A", dec!(1));
     let prod = product(&mut p, "Fund X", c);
-    let acc = account(&mut p, "Account 1", AccountKind::Taxable);
+    let acc = account(&mut p, "Account 1");
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(1000),
@@ -202,25 +202,13 @@ fn aliases_are_idempotent_per_product_and_exclusive_across_products() {
 }
 
 #[test]
-fn nisa_accounts_default_to_no_selling_and_points_accounts_to_points() {
-    let mut p = Portfolio::default();
-    let nisa = account(&mut p, "Tax-free", AccountKind::Nisa);
-    account(&mut p, "Points", AccountKind::Points);
-    let taxable = account(&mut p, "Taxable", AccountKind::Taxable);
-
-    let find = |id| p.accounts.iter().find(|a| a.id == id).unwrap();
-    assert!(!find(nisa).sellable);
-    assert!(find(taxable).sellable);
-    assert_eq!(find(taxable).rounding_unit, dec!(1));
-}
-
-#[test]
 fn set_holding_updates_in_place_and_rejects_negative_values() {
     let (mut p, _, prod, acc) = sample();
 
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(2500),
@@ -232,6 +220,7 @@ fn set_holding_updates_in_place_and_rejects_negative_values() {
     assert_eq!(p.holdings[0].value, dec!(2500));
     assert!(
         p.apply(Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(-1),
@@ -242,6 +231,7 @@ fn set_holding_updates_in_place_and_rejects_negative_values() {
     apply(
         &mut p,
         Edit::RemoveHolding {
+            account_type: None,
             account: acc,
             product: prod,
         },
@@ -334,7 +324,7 @@ fn issues_report_weighted_categories_with_missing_weights_or_no_products() {
     let c = category(&mut p, "A", dec!(0.5));
     let empty = category(&mut p, "B", dec!(0.5));
     let prod = product(&mut p, "Fund X", c);
-    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    let acc = account(&mut p, "Main");
     for id in [c, empty] {
         apply(
             &mut p,
@@ -354,6 +344,7 @@ fn issues_report_weighted_categories_with_missing_weights_or_no_products() {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: prod,
             weight: Some(dec!(10)),
@@ -382,6 +373,7 @@ fn issues_report_a_missing_exchange_rate_only_for_held_foreign_products() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: usd,
             value: dec!(10),
@@ -502,6 +494,7 @@ fn edits_deserialize_from_the_tagged_json_the_frontend_sends() {
     assert_eq!(
         edit,
         Edit::SetHolding {
+            account_type: None,
             account: AccountId(3),
             product: ProductId(2),
             value: dec!(1500.5),
@@ -514,11 +507,12 @@ fn edits_deserialize_from_the_tagged_json_the_frontend_sends() {
 #[test]
 fn replace_holdings_overwrites_only_that_account() {
     let (mut p, cat, prod, acc) = sample();
-    let other = account(&mut p, "Other", AccountKind::Taxable);
+    let other = account(&mut p, "Other");
     let second = product(&mut p, "Second", cat);
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(100),
@@ -528,6 +522,7 @@ fn replace_holdings_overwrites_only_that_account() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: other,
             product: prod,
             value: dec!(7),
@@ -540,6 +535,7 @@ fn replace_holdings_overwrites_only_that_account() {
         Edit::ReplaceHoldings {
             account: acc,
             holdings: vec![HoldingInput {
+                account_type: None,
                 product: second,
                 value: dec!(55),
                 quantity: None,
@@ -567,6 +563,7 @@ fn replace_holdings_rejects_bad_input_and_changes_nothing() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(100),
@@ -575,6 +572,7 @@ fn replace_holdings_rejects_bad_input_and_changes_nothing() {
     );
     let before = p.clone();
     let input = |value| HoldingInput {
+        account_type: None,
         product: prod,
         value,
         quantity: None,
@@ -1067,14 +1065,12 @@ fn every_accepted_edit_raises_the_revision_and_a_rejected_one_does_not() {
         &mut p,
         Edit::AddAccount {
             name: "A".to_owned(),
-            kind: AccountKind::Taxable,
         },
     );
     apply(
         &mut p,
         Edit::AddAccount {
             name: "B".to_owned(),
-            kind: AccountKind::Taxable,
         },
     );
     assert_eq!(p.revision, 2);
@@ -1082,7 +1078,6 @@ fn every_accepted_edit_raises_the_revision_and_a_rejected_one_does_not() {
     assert!(
         p.apply(Edit::AddAccount {
             name: "A".to_owned(),
-            kind: AccountKind::Taxable
         })
         .is_err()
     );
@@ -1244,6 +1239,7 @@ fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_pri
         Edit::ReplaceHoldings {
             account: acc,
             holdings: vec![HoldingInput {
+                account_type: None,
                 product: prod,
                 value: dec!(125),
                 quantity: Some(dec!(10)),
@@ -1262,6 +1258,7 @@ fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_pri
     let before = p.clone();
     for bad in [
         HoldingInput {
+            account_type: None,
             product: prod,
             value: dec!(1),
             quantity: None,
@@ -1269,6 +1266,7 @@ fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_pri
             price_unit: 0,
         },
         HoldingInput {
+            account_type: None,
             product: prod,
             value: dec!(1),
             quantity: None,
@@ -1290,6 +1288,7 @@ fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_pri
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: prod,
             value: dec!(200),
@@ -1325,7 +1324,7 @@ fn a_recipe_may_leave_its_currency_empty() {
 #[test]
 fn a_preset_is_never_added_twice_for_one_account() {
     let (mut p, _, _, a) = sample();
-    let b = account(&mut p, "Account 2", AccountKind::Taxable);
+    let b = account(&mut p, "Account 2");
     let add = |p: &mut Portfolio, account| {
         apply(
             p,
@@ -1383,7 +1382,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 13);
+    assert_eq!(SCHEMA_VERSION, 14);
 }
 
 #[test]
@@ -1718,9 +1717,9 @@ fn every_preset_makes_a_valid_effective_recipe_that_follows_its_data() {
 #[test]
 fn an_account_moves_up_and_down_and_stops_at_the_ends() {
     let mut p = Portfolio::default();
-    let a = account(&mut p, "A", AccountKind::Taxable);
-    let b = account(&mut p, "B", AccountKind::Taxable);
-    let c = account(&mut p, "C", AccountKind::Taxable);
+    let a = account(&mut p, "A");
+    let b = account(&mut p, "B");
+    let c = account(&mut p, "C");
     let order = |p: &Portfolio| p.accounts.iter().map(|x| x.id).collect::<Vec<_>>();
     assert_eq!(order(&p), vec![a, b, c]);
 
@@ -1803,9 +1802,9 @@ fn groups_and_categories_move_up_and_down_and_stop_at_the_ends() {
 #[test]
 fn rows_move_to_a_given_position() {
     let mut p = Portfolio::default();
-    let a = account(&mut p, "A", AccountKind::Taxable);
-    let b = account(&mut p, "B", AccountKind::Taxable);
-    let c = account(&mut p, "C", AccountKind::Taxable);
+    let a = account(&mut p, "A");
+    let b = account(&mut p, "B");
+    let c = account(&mut p, "C");
     let order = |p: &Portfolio| p.accounts.iter().map(|x| x.id).collect::<Vec<_>>();
     apply(&mut p, Edit::MoveAccountTo { id: c, index: 0 });
     assert_eq!(order(&p), vec![c, a, b]);
@@ -1856,6 +1855,7 @@ fn weight_edit(
     weight: Option<rust_decimal::Decimal>,
 ) -> Edit {
     Edit::SetHoldingWeight {
+        account_type: None,
         account,
         product,
         weight,
@@ -1865,7 +1865,7 @@ fn weight_edit(
 #[test]
 fn a_weight_belongs_to_the_record_of_a_product_in_an_account() {
     let (mut p, _, prod, acc) = sample();
-    let other = account(&mut p, "Account 2", AccountKind::Nisa);
+    let other = account(&mut p, "Account 2");
 
     apply(&mut p, weight_edit(acc, prod, Some(dec!(3))));
     // The same product in another account has its own weight; none of it is held yet.
@@ -1894,7 +1894,7 @@ fn a_weight_belongs_to_the_record_of_a_product_in_an_account() {
     assert_eq!(p, before);
 
     // Clearing the weight of a record that does not exist makes nothing.
-    let third = account(&mut p, "Account 3", AccountKind::Taxable);
+    let third = account(&mut p, "Account 3");
     let count = p.holdings.len();
     apply(&mut p, weight_edit(third, prod, None));
     assert_eq!(p.holdings.len(), count);
@@ -1911,6 +1911,7 @@ fn an_import_keeps_the_weights_of_the_records_it_replaces() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: sold,
             value: dec!(700),
@@ -1920,6 +1921,7 @@ fn an_import_keeps_the_weights_of_the_records_it_replaces() {
     apply(
         &mut p,
         Edit::SetHolding {
+            account_type: None,
             account: acc,
             product: gone,
             value: dec!(300),
@@ -1932,6 +1934,7 @@ fn an_import_keeps_the_weights_of_the_records_it_replaces() {
         Edit::ReplaceHoldings {
             account: acc,
             holdings: vec![HoldingInput {
+                account_type: None,
                 product: prod,
                 value: dec!(1500),
                 quantity: None,
@@ -1963,6 +1966,7 @@ fn removing_a_record_removes_its_weight() {
     apply(
         &mut p,
         Edit::RemoveHolding {
+            account_type: None,
             account: acc,
             product: prod,
         },
@@ -1988,7 +1992,7 @@ fn only_the_supported_schema_versions_are_opened() {
 #[test]
 fn the_weight_of_a_product_does_not_overflow_when_its_records_add_up() {
     let (mut p, _, prod, acc) = sample();
-    let other = account(&mut p, "Account 2", AccountKind::Nisa);
+    let other = account(&mut p, "Account 2");
     apply(
         &mut p,
         weight_edit(acc, prod, Some(rust_decimal::Decimal::MAX)),
@@ -2456,6 +2460,7 @@ fn hold(p: &mut Portfolio, account: AccountId, product: ProductId, value: rust_d
     apply(
         p,
         Edit::SetHolding {
+            account_type: None,
             account,
             product,
             value,
@@ -2479,7 +2484,7 @@ fn alias(p: &mut Portfolio, product: ProductId, name: &str) {
 fn merging_moves_aliases_and_records_and_removes_the_product() {
     let (mut p, c, a, acc1) = sample();
     let b = product(&mut p, "Fund X dup", c);
-    let acc2 = account(&mut p, "Account 2", AccountKind::Taxable);
+    let acc2 = account(&mut p, "Account 2");
     alias(&mut p, b, "FUND X");
     hold(&mut p, acc2, b, dec!(300));
     apply(
@@ -2581,7 +2586,7 @@ fn merging_refuses_different_currencies_and_the_same_product() {
 #[test]
 fn splitting_cuts_out_an_alias_with_the_picked_records() {
     let (mut p, _, a, acc1) = sample();
-    let acc2 = account(&mut p, "Account 2", AccountKind::Taxable);
+    let acc2 = account(&mut p, "Account 2");
     hold(&mut p, acc2, a, dec!(200));
     alias(&mut p, a, "Name 1");
     alias(&mut p, a, "Name 2");
@@ -2675,6 +2680,292 @@ fn a_split_with_an_unknown_alias_taken_name_or_account_is_refused() {
             .is_err()
     );
     assert_eq!(p, before);
+}
+
+fn typed(
+    account: AccountId,
+    product: ProductId,
+    t: Option<&str>,
+    value: rust_decimal::Decimal,
+) -> Edit {
+    Edit::SetHolding {
+        account,
+        product,
+        account_type: t.map(str::to_owned),
+        value,
+        quantity: None,
+    }
+}
+
+#[test]
+fn one_account_holds_the_same_product_under_several_types() {
+    let (mut p, _, prod, acc) = sample();
+    apply(&mut p, typed(acc, prod, Some("specific"), dec!(100)));
+    apply(&mut p, typed(acc, prod, Some("nisa"), dec!(50)));
+    apply(&mut p, typed(acc, prod, Some("nisa"), dec!(70)));
+    // `sample` already holds an untyped record of the product.
+    assert_eq!(p.holdings.len(), 3);
+    assert_eq!(
+        p.holdings
+            .iter()
+            .find(|h| h.account_type.as_deref() == Some("nisa"))
+            .unwrap()
+            .value,
+        dec!(70)
+    );
+    p.validate_integrity().unwrap();
+
+    apply(
+        &mut p,
+        Edit::RemoveHolding {
+            account: acc,
+            product: prod,
+            account_type: Some("nisa".to_owned()),
+        },
+    );
+    assert_eq!(p.holdings.len(), 2);
+    assert!(
+        p.apply(typed(acc, prod, Some("no-such-type"), dec!(1)))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_record_type_can_be_changed_unless_the_target_exists() {
+    let (mut p, _, prod, acc) = sample();
+    apply(&mut p, typed(acc, prod, Some("nisa"), dec!(50)));
+    let change = |from: Option<&str>, to: Option<&str>| Edit::SetRecordType {
+        account: acc,
+        product: prod,
+        from: from.map(str::to_owned),
+        to: to.map(str::to_owned),
+    };
+    // The untyped record of `sample` is there: moving the NISA record onto it is refused.
+    assert!(matches!(
+        p.apply(change(Some("nisa"), None)),
+        Err(Error::Conflict(_))
+    ));
+    apply(&mut p, change(Some("nisa"), Some("old_nisa")));
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account_type.as_deref() == Some("old_nisa"))
+    );
+    assert!(p.apply(change(Some("nisa"), Some("general"))).is_err());
+    assert!(p.apply(change(None, Some("custom-99"))).is_err());
+}
+
+#[test]
+fn custom_types_are_added_renamed_and_removed() {
+    let (mut p, _, prod, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddAccountType {
+            name: "iDeCo".to_owned(),
+            sellable: false,
+        },
+    );
+    let id = p.custom_types[0].id.clone();
+    assert!(id.starts_with("custom-"));
+    assert!(!p.type_sellable(Some(&id)));
+    assert!(p.type_sellable(Some("general")) && !p.type_sellable(Some("old_nisa")));
+    for nisa in ["nisa", "nisa_growth", "nisa_tsumitate", "old_nisa"] {
+        assert!(
+            p.has_account_type(nisa) && !p.type_sellable(Some(nisa)),
+            "{nisa}"
+        );
+    }
+    assert!(p.type_sellable(Some("deposit")) && p.type_sellable(Some("crypto")));
+    assert!(p.type_sellable(None));
+    assert!(
+        p.apply(Edit::AddAccountType {
+            name: "iDeCo".to_owned(),
+            sellable: true,
+        })
+        .is_err()
+    );
+    apply(
+        &mut p,
+        Edit::UpdateAccountType {
+            id: id.clone(),
+            name: Some("Pension".to_owned()),
+            sellable: Some(true),
+        },
+    );
+    assert!(p.type_sellable(Some(&id)));
+
+    apply(&mut p, typed(acc, prod, Some(&id), dec!(10)));
+    p.validate_integrity().unwrap();
+    apply(&mut p, Edit::RemoveAccountType { id: id.clone() });
+    // The typed record is folded into the untyped one of the same product.
+    assert!(p.custom_types.is_empty());
+    assert_eq!(p.holdings.len(), 1);
+    assert!(p.holdings[0].account_type.is_none());
+    assert!(p.apply(Edit::RemoveAccountType { id }).is_err());
+}
+
+#[test]
+fn an_import_keeps_the_type_of_the_only_existing_record() {
+    let (mut p, _, prod, acc) = sample();
+    apply(
+        &mut p,
+        Edit::RemoveHolding {
+            account: acc,
+            product: prod,
+            account_type: None,
+        },
+    );
+    apply(&mut p, typed(acc, prod, Some("nisa"), dec!(50)));
+    let input = |t: Option<&str>| HoldingInput {
+        product: prod,
+        account_type: t.map(str::to_owned),
+        value: dec!(80),
+        quantity: None,
+        price: None,
+        price_unit: 1,
+    };
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![input(None)],
+        },
+    );
+    assert_eq!(p.holdings[0].account_type.as_deref(), Some("nisa"));
+    assert_eq!(p.holdings[0].value, dec!(80));
+
+    // A read type wins, and the same product under two types is two records.
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![input(Some("specific")), input(Some("old_nisa"))],
+        },
+    );
+    assert_eq!(p.holdings.len(), 2);
+    assert!(
+        p.apply(Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![input(Some("nisa")), input(Some("nisa"))],
+        })
+        .is_err()
+    );
+}
+
+#[test]
+fn the_integrity_check_rejects_unknown_types_and_duplicates() {
+    let (mut p, _, prod, acc) = sample();
+    apply(&mut p, typed(acc, prod, Some("nisa"), dec!(5)));
+    p.validate_integrity().unwrap();
+
+    let mut bad = p.clone();
+    bad.holdings[0].account_type = Some("custom-9".to_owned());
+    assert!(bad.validate_integrity().is_err());
+
+    let mut twice = p.clone();
+    twice.holdings[1].account_type = twice.holdings[0].account_type.clone();
+    assert!(twice.validate_integrity().is_err());
+
+    let mut types = p.clone();
+    types.custom_types = vec![CustomType {
+        id: "custom-1".to_owned(),
+        name: "X".to_owned(),
+        sellable: true,
+    }];
+    types.validate_integrity().unwrap();
+    types.custom_types.push(CustomType {
+        id: "custom-1".to_owned(),
+        name: "Y".to_owned(),
+        sellable: true,
+    });
+    assert!(types.validate_integrity().is_err());
+}
+
+// Made-up version 13 data: five accounts of different kinds, each with one record.
+const V13: &str = r#"{
+  "schema_version": 13, "next_id": 20,
+  "categories": [{"id": 1, "name": "Cat", "target_weight": "1"}],
+  "products": [{"id": 2, "name": "Fund X", "category": 1, "currency": "JPY"}],
+  "accounts": [
+    {"id": 3, "name": "A", "kind": "taxable", "sellable": true, "rounding_unit": "1"},
+    {"id": 4, "name": "B", "kind": "nisa", "sellable": false, "rounding_unit": "1"},
+    {"id": 5, "name": "C", "kind": "ideco", "sellable": true, "rounding_unit": "1"},
+    {"id": 6, "name": "D", "kind": "points", "sellable": true, "rounding_unit": "1"},
+    {"id": 7, "name": "E", "kind": "other", "sellable": true, "rounding_unit": "1"},
+    {"id": 8, "name": "F", "kind": "ideco", "sellable": true, "rounding_unit": "1"}
+  ],
+  "holdings": [
+    {"account": 3, "product": 2, "value": "10"},
+    {"account": 4, "product": 2, "value": "20"},
+    {"account": 5, "product": 2, "value": "30"},
+    {"account": 6, "product": 2, "value": "40"},
+    {"account": 7, "product": 2, "value": "50"},
+    {"account": 8, "product": 2, "value": "60"}
+  ]
+}"#;
+
+#[test]
+fn a_version_13_file_gets_the_record_types_of_its_account_kinds() {
+    let p = parse(V13.as_bytes()).unwrap();
+    p.validate_integrity().unwrap();
+    let t = |account: u64| {
+        p.holdings
+            .iter()
+            .find(|h| h.account == AccountId(account))
+            .unwrap()
+            .account_type
+            .clone()
+    };
+    assert_eq!(t(3).as_deref(), Some("specific"));
+    assert_eq!(t(4).as_deref(), Some("nisa"));
+    assert!(p.has_account_type("nisa") && !p.type_sellable(t(4).as_deref()));
+    assert_eq!(t(7), None);
+    // iDeCo and Points become custom types, one each, from the id counter.
+    assert_eq!(p.custom_types.len(), 2);
+    assert_eq!(t(5), t(8));
+    assert_ne!(t(5), t(6));
+    let ideco = p
+        .custom_types
+        .iter()
+        .find(|c| Some(&c.id) == t(5).as_ref())
+        .unwrap();
+    assert_eq!(ideco.name, "iDeCo");
+    assert_eq!(p.next_id, 22);
+    // The accounts keep their selling switch.
+    assert!(!p.accounts[1].sellable);
+}
+
+#[test]
+fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouched() {
+    let simple = r#"{"schema_version": 13, "next_id": 5,
+      "categories": [{"id": 1, "name": "Cat", "target_weight": "1"}],
+      "products": [{"id": 2, "name": "Fund X", "category": 1, "currency": "JPY"}],
+      "accounts": [{"id": 3, "name": "A", "kind": "deposit", "sellable": true, "rounding_unit": "1"}],
+      "holdings": [{"account": 3, "product": 2, "value": "10"}]}"#;
+    let p = parse(simple.as_bytes()).unwrap();
+    assert!(p.custom_types.is_empty());
+    assert_eq!(p.next_id, 5);
+    assert_eq!(p.holdings[0].account_type.as_deref(), Some("deposit"));
+
+    // A current file is read as it is (a stray `kind` is not converted).
+    let current = simple.replace("13", "14");
+    let q = parse(current.as_bytes()).unwrap();
+    assert_eq!(q.holdings[0].account_type, None);
+    // The migrated data round-trips as a current file.
+    let mut p = p;
+    p.schema_version = SCHEMA_VERSION;
+    let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+    assert_eq!(back, p);
+}
+
+#[test]
+fn a_newer_file_is_refused() {
+    let newer = r#"{"schema_version": 15, "next_id": 1}"#;
+    let p = parse(newer.as_bytes()).unwrap();
+    assert!(matches!(
+        p.validate_integrity(),
+        Err(Error::UnsupportedVersion { found: 15 })
+    ));
 }
 
 #[test]

@@ -2,14 +2,15 @@
 // decimal strings: they are never converted to numbers, so nothing is rounded.
 
 export type ProductTargeting = "free" | "equal" | "keep_current" | "weighted";
-export type AccountKind =
-  | "taxable"
-  | "nisa"
-  | "ideco"
-  | "points"
-  | "crypto"
-  | "deposit"
-  | "other";
+/** A built-in account type id, or the id of a custom type (`custom-<n>`). */
+export type AccountTypeId = string;
+
+/** An account type the user added. */
+export interface CustomType {
+  id: string;
+  name: string;
+  sellable: boolean;
+}
 
 /** A main category above the categories. It has no target of its own. */
 export interface Group {
@@ -37,7 +38,6 @@ export interface Product {
 export interface Account {
   id: number;
   name: string;
-  kind: AccountKind;
   sellable: boolean;
   /** `null` means the account can buy any product. */
   tradable: number[] | null;
@@ -54,6 +54,8 @@ export interface Holding {
   price_unit: number;
   /** Relative weight of this record inside its category; null when none is set. */
   weight: string | null;
+  /** The type of the record; absent when not set. A record is (account, product, type). */
+  account_type?: AccountTypeId | null;
 }
 
 /** Which columns of a source's table hold the name and the value (counted from 0). */
@@ -174,6 +176,8 @@ export interface Portfolio {
   /** Counts the accepted edits; a copy with a lower number is stale. */
   revision: number;
   recipes: Recipe[];
+  /** Absent when there is none. */
+  custom_types?: CustomType[];
 }
 
 export type Issue =
@@ -203,7 +207,7 @@ export interface PortfolioView {
    * Each holding's value rounded to the smallest unit of its currency, for display only. The
    * holding's own `value` stays exact (edit fields show it as it is).
    */
-  shown_values: { account: number; product: number; value: string }[];
+  shown_values: { account: number; product: number; account_type: AccountTypeId | null; value: string }[];
   /** The recipes as they are run (`portfolio.recipes` holds what is stored). */
   recipes: RecipeView[];
   issues: Issue[];
@@ -232,14 +236,29 @@ export type Edit =
       category?: number;
       currency?: string;
     }
-  | { type: "set_holding_weight"; account: number; product: number; weight: string | null }
+  | {
+      type: "set_holding_weight";
+      account: number;
+      product: number;
+      account_type?: AccountTypeId | null;
+      weight: string | null;
+    }
+  | { type: "add_account_type"; name: string; sellable: boolean }
+  | { type: "update_account_type"; id: string; name?: string; sellable?: boolean }
+  | { type: "remove_account_type"; id: string }
+  | {
+      type: "set_record_type";
+      account: number;
+      product: number;
+      from: AccountTypeId | null;
+      to: AccountTypeId | null;
+    }
   | { type: "remove_product"; id: number }
-  | { type: "add_account"; name: string; kind: AccountKind }
+  | { type: "add_account"; name: string }
   | {
       type: "update_account";
       id: number;
       name?: string;
-      kind?: AccountKind;
       sellable?: boolean;
       rounding_unit?: string;
     }
@@ -255,11 +274,12 @@ export type Edit =
       type: "set_holding";
       account: number;
       product: number;
+      account_type?: AccountTypeId | null;
       value: string;
       quantity: string | null;
     }
-  | { type: "remove_holding"; account: number; product: number }
-  | { type: "replace_holdings"; account: number; holdings: { product: number; value: string; quantity?: string | null; price?: string | null; price_unit?: number }[] }
+  | { type: "remove_holding"; account: number; product: number; account_type?: AccountTypeId | null }
+  | { type: "replace_holdings"; account: number; holdings: { product: number; account_type?: AccountTypeId | null; value: string; quantity?: string | null; price?: string | null; price_unit?: number }[] }
   | {
       type: "set_import_mapping";
       source: string;
@@ -324,6 +344,7 @@ export interface GroupOverview {
 export interface HoldingOverview {
   account: number;
   product: number;
+  account_type: AccountTypeId | null;
   value: string;
   share: string;
 }

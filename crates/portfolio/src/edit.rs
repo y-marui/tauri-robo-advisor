@@ -1,12 +1,13 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
+use crate::CustomType;
 use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
-    Account, AccountId, AccountKind, Alias, CardSource, Category, CategoryId, Error, FetchLink,
-    Group, GroupId, Holding, ImportMapping, KindRead, KindRule, Portfolio, Product, ProductId,
-    ProductTargeting, Recipe,
+    Account, AccountId, Alias, CardSource, Category, CategoryId, Error, FetchLink, Group, GroupId,
+    Holding, ImportMapping, KindRead, KindRule, Portfolio, Product, ProductId, ProductTargeting,
+    Recipe,
 };
 
 /// Which record stays when a merge finds a record of both products in one account.
@@ -140,12 +141,10 @@ pub enum Edit {
     },
     AddAccount {
         name: String,
-        kind: AccountKind,
     },
     UpdateAccount {
         id: AccountId,
         name: Option<String>,
-        kind: Option<AccountKind>,
         sellable: Option<bool>,
         rounding_unit: Option<Decimal>,
     },
@@ -168,15 +167,44 @@ pub enum Edit {
         id: AccountId,
         up: bool,
     },
+    /// Adds an account type of the user's own (a custody type the built-in ones lack).
+    AddAccountType {
+        name: String,
+        sellable: bool,
+    },
+    UpdateAccountType {
+        id: String,
+        name: Option<String>,
+        sellable: Option<bool>,
+    },
+    /// Removes a custom type; the records that had it are left without a type (merged into the
+    /// untyped record of the same product in the same account, when there is one).
+    RemoveAccountType {
+        id: String,
+    },
+    /// Changes the type of a record (`None`: not set). Where the account already has a record of
+    /// the product with the new type, the edit is refused.
+    SetRecordType {
+        account: AccountId,
+        product: ProductId,
+        #[serde(default)]
+        from: Option<String>,
+        #[serde(default)]
+        to: Option<String>,
+    },
     SetHolding {
         account: AccountId,
         product: ProductId,
+        #[serde(default)]
+        account_type: Option<String>,
         value: Decimal,
         quantity: Option<Decimal>,
     },
     RemoveHolding {
         account: AccountId,
         product: ProductId,
+        #[serde(default)]
+        account_type: Option<String>,
     },
     /// Sets (or clears) the relative weight of the record of a product in an account. A record
     /// that does not exist yet is made with a value of zero, so a product can be given a weight
@@ -184,6 +212,8 @@ pub enum Edit {
     SetHoldingWeight {
         account: AccountId,
         product: ProductId,
+        #[serde(default)]
+        account_type: Option<String>,
         weight: Option<Decimal>,
     },
     /// Makes the account hold exactly these products, as an import does. The
@@ -269,6 +299,10 @@ pub enum Edit {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct HoldingInput {
     pub product: ProductId,
+    /// The type the import read for the record; `None`: not read (the record keeps the type of the
+    /// existing record of the product in the account, when there is exactly one).
+    #[serde(default)]
+    pub account_type: Option<String>,
     pub value: Decimal,
     /// What the value was worked out from, when the import knows it.
     #[serde(default)]
@@ -920,17 +954,19 @@ impl Portfolio {
                 for h in std::mem::take(&mut self.holdings) {
                     let mut h = h;
                     if h.product == remove {
-                        let clash = self
-                            .holdings
-                            .iter()
-                            .any(|o| kept(o) && o.account == h.account);
+                        let clash = self.holdings.iter().any(|o| {
+                            kept(o) && o.account == h.account && o.account_type == h.account_type
+                        });
                         h.product = keep;
                         if clash {
                             if on_conflict == MergeConflict::Keep {
                                 continue;
                             }
-                            self.holdings
-                                .retain(|o| !(kept(o) && o.account == h.account));
+                            self.holdings.retain(|o| {
+                                !(kept(o)
+                                    && o.account == h.account
+                                    && o.account_type == h.account_type)
+                            });
                         }
                     }
                     self.holdings.push(h);
@@ -1004,10 +1040,7 @@ impl Portfolio {
                     .aliases
                     .retain(|a| !(a.source == source.trim() && a.name == alias_name.trim()));
             }
-            Edit::AddAccount {
-                name: new_name,
-                kind,
-            } => {
+            Edit::AddAccount { name: new_name } => {
                 self.check_capacity(self.accounts.len())?;
                 let new_name = name(&new_name, "account")?;
                 self.ensure_account_name_free(&new_name, None)?;
@@ -1015,10 +1048,7 @@ impl Portfolio {
                 self.accounts.push(Account {
                     id,
                     name: new_name,
-                    kind,
-                    // NISA accounts default to no selling: selling would
-                    // forfeit tax-free room.
-                    sellable: kind != AccountKind::Nisa,
+                    sellable: true,
                     tradable: None,
                     rounding_unit: Decimal::ONE,
                 });
@@ -1026,7 +1056,6 @@ impl Portfolio {
             Edit::UpdateAccount {
                 id,
                 name: new_name,
-                kind,
                 sellable,
                 rounding_unit,
             } => {
@@ -1041,9 +1070,6 @@ impl Portfolio {
                 let account = self.account_mut(id)?;
                 if let Some(n) = new_name {
                     account.name = n;
-                }
-                if let Some(k) = kind {
-                    account.kind = k;
                 }
                 if let Some(s) = sellable {
                     account.sellable = s;
@@ -1079,21 +1105,102 @@ impl Portfolio {
                     self.settings.target_account = None;
                 }
             }
+            Edit::AddAccountType {
+                name: new_name,
+                sellable,
+            } => {
+                self.check_capacity(self.custom_types.len())?;
+                let new_name = name(&new_name, "account type")?;
+                self.ensure_type_name_free(&new_name, None)?;
+                let id = format!("custom-{}", self.take_id());
+                self.custom_types.push(CustomType {
+                    id,
+                    name: new_name,
+                    sellable,
+                });
+            }
+            Edit::UpdateAccountType {
+                id,
+                name: new_name,
+                sellable,
+            } => {
+                let new_name = new_name.map(|n| name(&n, "account type")).transpose()?;
+                if !self.custom_types.iter().any(|t| t.id == id) {
+                    return Err(Error::NotFound("account type"));
+                }
+                if let Some(n) = &new_name {
+                    self.ensure_type_name_free(n, Some(&id))?;
+                }
+                if let Some(t) = self.custom_types.iter_mut().find(|t| t.id == id) {
+                    if let Some(n) = new_name {
+                        t.name = n;
+                    }
+                    if let Some(s) = sellable {
+                        t.sellable = s;
+                    }
+                }
+            }
+            Edit::RemoveAccountType { id } => {
+                if !self.custom_types.iter().any(|t| t.id == id) {
+                    return Err(Error::NotFound("account type"));
+                }
+                self.custom_types.retain(|t| t.id != id);
+                for h in std::mem::take(&mut self.holdings) {
+                    let mut h = h;
+                    if h.account_type.as_deref() == Some(id.as_str()) {
+                        h.account_type = None;
+                        // Where an untyped record of the product is there already, the typed
+                        // record is dropped (nothing is added up: the page sets the value).
+                        if self.holdings.iter().any(|o| {
+                            o.account == h.account
+                                && o.product == h.product
+                                && o.account_type.is_none()
+                        }) {
+                            continue;
+                        }
+                    }
+                    self.holdings.push(h);
+                }
+            }
+            Edit::SetRecordType {
+                account,
+                product,
+                from,
+                to,
+            } => {
+                self.check_type(to.as_deref())?;
+                let at = |h: &Holding, t: &Option<String>| {
+                    h.account == account && h.product == product && &h.account_type == t
+                };
+                if from != to && self.holdings.iter().any(|h| at(h, &to)) {
+                    return Err(Error::Conflict(
+                        "the account already has a record of the product with that type".to_owned(),
+                    ));
+                }
+                let holding = self
+                    .holdings
+                    .iter_mut()
+                    .find(|h| {
+                        h.account == account && h.product == product && h.account_type == from
+                    })
+                    .ok_or(Error::NotFound("record"))?;
+                holding.account_type = to;
+            }
             Edit::SetHolding {
                 account,
                 product,
+                account_type,
                 value,
                 quantity,
             } => {
+                self.check_type(account_type.as_deref())?;
                 let value = non_negative(value, "holding value")?;
                 let quantity = quantity.map(|q| non_negative(q, "quantity")).transpose()?;
                 self.account(account)?;
                 self.product(product)?;
-                match self
-                    .holdings
-                    .iter_mut()
-                    .find(|h| h.account == account && h.product == product)
-                {
+                match self.holdings.iter_mut().find(|h| {
+                    h.account == account && h.product == product && h.account_type == account_type
+                }) {
                     Some(holding) => {
                         holding.value = value;
                         holding.quantity = quantity;
@@ -1111,6 +1218,7 @@ impl Portfolio {
                             price: None,
                             price_unit: 1,
                             weight: None,
+                            account_type,
                         });
                     }
                 }
@@ -1118,16 +1226,16 @@ impl Portfolio {
             Edit::SetHoldingWeight {
                 account,
                 product,
+                account_type,
                 weight,
             } => {
                 let weight = weight.map(|w| positive(w, "weight")).transpose()?;
+                self.check_type(account_type.as_deref())?;
                 self.account(account)?;
                 self.product(product)?;
-                match self
-                    .holdings
-                    .iter_mut()
-                    .find(|h| h.account == account && h.product == product)
-                {
+                match self.holdings.iter_mut().find(|h| {
+                    h.account == account && h.product == product && h.account_type == account_type
+                }) {
                     Some(holding) => holding.weight = weight,
                     None if weight.is_none() => {}
                     None => {
@@ -1140,13 +1248,21 @@ impl Portfolio {
                             price: None,
                             price_unit: 1,
                             weight,
+                            account_type,
                         });
                     }
                 }
             }
-            Edit::RemoveHolding { account, product } => {
-                self.holdings
-                    .retain(|h| !(h.account == account && h.product == product));
+            Edit::RemoveHolding {
+                account,
+                product,
+                account_type,
+            } => {
+                self.holdings.retain(|h| {
+                    !(h.account == account
+                        && h.product == product
+                        && h.account_type == account_type)
+                });
             }
             Edit::ReplaceHoldings { account, holdings } => {
                 self.account(account)?;
@@ -1154,7 +1270,20 @@ impl Portfolio {
                 let mut next = Vec::with_capacity(holdings.len());
                 for input in holdings {
                     self.product(input.product)?;
-                    if !seen.insert(input.product) {
+                    self.check_type(input.account_type.as_deref())?;
+                    // A record the page does not give a type for keeps the type of the existing
+                    // record of the product in the account (when it is the only one).
+                    let account_type = input.account_type.clone().or_else(|| {
+                        let mut existing = self
+                            .holdings
+                            .iter()
+                            .filter(|h| h.account == account && h.product == input.product);
+                        match (existing.next(), existing.next()) {
+                            (Some(h), None) => h.account_type.clone(),
+                            _ => None,
+                        }
+                    });
+                    if !seen.insert((input.product, account_type.clone())) {
                         return Err(Error::Invalid(
                             "a product appears twice in the import".to_owned(),
                         ));
@@ -1165,6 +1294,7 @@ impl Portfolio {
                     next.push(Holding {
                         account,
                         product: input.product,
+                        account_type: account_type.clone(),
                         value: non_negative(input.value, "holding value")?,
                         quantity: input
                             .quantity
@@ -1176,7 +1306,11 @@ impl Portfolio {
                         weight: self
                             .holdings
                             .iter()
-                            .find(|h| h.account == account && h.product == input.product)
+                            .find(|h| {
+                                h.account == account
+                                    && h.product == input.product
+                                    && h.account_type == account_type
+                            })
                             .and_then(|h| h.weight),
                     });
                 }
@@ -1186,7 +1320,7 @@ impl Portfolio {
                     .holdings
                     .iter()
                     .filter(|h| h.account == account && h.weight.is_some())
-                    .filter(|h| !seen.contains(&h.product))
+                    .filter(|h| !seen.contains(&(h.product, h.account_type.clone())))
                     .map(|h| Holding {
                         value: Decimal::ZERO,
                         quantity: None,
@@ -1460,6 +1594,26 @@ impl Portfolio {
         {
             return Err(Error::Conflict(
                 "a product with this name exists".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_type(&self, id: Option<&str>) -> Result<(), Error> {
+        match id {
+            Some(id) if !self.has_account_type(id) => Err(Error::NotFound("account type")),
+            _ => Ok(()),
+        }
+    }
+
+    fn ensure_type_name_free(&self, name: &str, except: Option<&str>) -> Result<(), Error> {
+        if self
+            .custom_types
+            .iter()
+            .any(|t| t.name == name && Some(t.id.as_str()) != except)
+        {
+            return Err(Error::Conflict(
+                "an account type with this name exists".to_owned(),
             ));
         }
         Ok(())

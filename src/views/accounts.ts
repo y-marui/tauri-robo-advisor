@@ -1,10 +1,8 @@
 import { h } from "../dom.ts";
-import { amountField, checkboxField, deleteButton, orderButtons, selectField, textField } from "../fields.ts";
+import { amountField, checkboxField, deleteButton, orderButtons, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
-import type { AccountKind } from "../types.ts";
-import { KINDS, kindLabel } from "./labels.ts";
 
 export function accountsPanel(ctx: Context): Panel {
   return panel(
@@ -85,18 +83,6 @@ export function accountsPanel(ctx: Context): Panel {
           ),
           h(
             "td",
-            {},
-            selectField({
-              ctx,
-              bind,
-              label: t("Type"),
-              options: KINDS.map((value) => ({ value, label: kindLabel(value) })),
-              get: (v) => find(v)?.kind ?? "other",
-              edit: (value) => ({ type: "update_account", id, kind: value as AccountKind }),
-            }),
-          ),
-          h(
-            "td",
             { class: "center" },
             checkboxField({
               ctx,
@@ -131,22 +117,16 @@ export function accountsPanel(ctx: Context): Panel {
       });
 
       const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off" });
-      const kind = h(
-        "select",
-        { "aria-label": t("Type") },
-        ...KINDS.map((value) => h("option", { value }, kindLabel(value))),
-      );
       const form = h(
         "form",
         { class: "add-row" },
         name,
-        kind,
         h("button", { type: "submit" }, t("Add an account")),
       );
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         void ctx
-          .apply({ type: "add_account", name: name.value, kind: kind.value as AccountKind })
+          .apply({ type: "add_account", name: name.value })
           .then((ok) => {
             if (ok) {
               name.value = "";
@@ -170,7 +150,6 @@ export function accountsPanel(ctx: Context): Panel {
                 {},
                 h("th", {}),
                 h("th", {}, t("Name")),
-                h("th", {}, t("Type")),
                 h("th", {}, t("Sellable")),
                 h("th", {}, t("Rounding unit")),
                 h("th", {}, t("Can buy")),

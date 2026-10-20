@@ -36,7 +36,7 @@ pub fn load_hashed(path: &Path) -> Result<(Portfolio, Option<u64>), String> {
     let bytes =
         fs::read(path).map_err(|e| format!("Could not read the data file ({}).", e.kind()))?;
     let hash = hash_bytes(&bytes);
-    let mut portfolio: Portfolio = serde_json::from_slice(&bytes)
+    let mut portfolio = portfolio::parse(&bytes)
         .map_err(|_| "The data file is not valid; it was left untouched.".to_owned())?;
     portfolio
         .validate_integrity()
@@ -202,7 +202,7 @@ fn sync_directory(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use portfolio::{AccountKind, Edit};
+    use portfolio::Edit;
 
     /// A fresh empty directory under the system temp directory.
     fn temp_dir(label: &str) -> std::path::PathBuf {
@@ -222,7 +222,6 @@ mod tests {
         let mut p = Portfolio::default();
         p.apply(Edit::AddAccount {
             name: "Account 1".to_owned(),
-            kind: AccountKind::Taxable,
         })
         .unwrap();
         p

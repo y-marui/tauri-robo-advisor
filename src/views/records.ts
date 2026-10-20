@@ -7,11 +7,12 @@ import type { Holding, PortfolioView } from "../types.ts";
 import { bulkCategoryBar } from "./bulk-category.ts";
 import { productTools } from "./merge-split.ts";
 import { priceText } from "./holdings-table.ts";
+import { recordKey, typeOptions } from "./labels.ts";
 
 const upper = (text: string): string => text.trim().toUpperCase();
 
 /** The number of columns of the records table; the heading rows span them all. */
-const COLUMNS = 6;
+const COLUMNS = 7;
 
 /** What to focus once the card has been rebuilt: the rebuild drops the focus of the old controls. */
 type FocusTarget = { kind: "add-record"; product: number } | { kind: "add-product" };
@@ -63,7 +64,8 @@ export function recordsPanel(ctx: Context): Panel {
           .map((p) => `${p.id}:${p.category}:${p.currency}:${p.aliases.map((a) => `${a.source}/${a.name}`).join(";")}`)
           .join(","),
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
-        view.portfolio.holdings.map((r) => `${r.account}:${r.product}`).join(","),
+        view.portfolio.holdings.map((r) => recordKey(r.account, r.product, r.account_type)).join(","),
+        (view.portfolio.custom_types ?? []).map((c) => `${c.id}:${c.name}`).join(","),
       ].join("|"),
     (view, bind) => {
       const { categories, accounts, products } = view.portfolio;
@@ -84,18 +86,27 @@ export function recordsPanel(ctx: Context): Panel {
       const categoryOptions = categories.map((c) => ({ value: String(c.id), label: c.name }));
       const focusers = new Map<string, HTMLElement>();
 
-      const holdingOf = (v: PortfolioView, account: number, product: number): Holding | undefined =>
-        v.portfolio.holdings.find((r) => r.account === account && r.product === product);
+      const typeChoices = typeOptions(view.portfolio.custom_types);
+      const holdingOf = (
+        v: PortfolioView,
+        account: number,
+        product: number,
+        type: string | null,
+      ): Holding | undefined =>
+        v.portfolio.holdings.find(
+          (r) => r.account === account && r.product === product && (r.account_type ?? null) === type,
+        );
 
       const recordRow = (
         product: (typeof products)[number],
         account: (typeof accounts)[number],
+        type: string | null,
         weighted: boolean,
       ): HTMLElement => {
         const quantity = h("td", { class: "num" });
         const price = h("td", { class: "num" });
         bind((v) => {
-          const held = holdingOf(v, account.id, product.id);
+          const held = holdingOf(v, account.id, product.id, type);
           quantity.textContent = held?.quantity ?? "";
           price.textContent = priceText(held);
         });
@@ -103,13 +114,13 @@ export function recordsPanel(ctx: Context): Panel {
           ctx,
           bind,
           label: `${product.name} / ${account.name}: ${t("Amount")}`,
-          get: (v) => holdingOf(v, account.id, product.id)?.value ?? "",
+          get: (v) => holdingOf(v, account.id, product.id, type)?.value ?? "",
           edit: (text) => {
             const value = cleanDecimal(text);
             if (value === null) {
               // An empty amount does not delete the record; put the saved amount back.
               if (text === "" && current) {
-                amount.value = holdingOf(current, account.id, product.id)?.value ?? "";
+                amount.value = holdingOf(current, account.id, product.id, type)?.value ?? "";
               }
               return null;
             }
@@ -117,8 +128,9 @@ export function recordsPanel(ctx: Context): Panel {
               type: "set_holding",
               account: account.id,
               product: product.id,
+              account_type: type,
               value,
-              quantity: current ? (holdingOf(current, account.id, product.id)?.quantity ?? null) : null,
+              quantity: current ? (holdingOf(current, account.id, product.id, type)?.quantity ?? null) : null,
             };
           },
           invalid: t("Enter an amount (0 is allowed). To remove a record, use its Delete button."),
@@ -129,7 +141,7 @@ export function recordsPanel(ctx: Context): Panel {
               ctx,
               bind,
               label: t("Relative weight inside the category: {account}", { account: account.name }),
-              get: (v) => holdingOf(v, account.id, product.id)?.weight ?? "",
+              get: (v) => holdingOf(v, account.id, product.id, type)?.weight ?? "",
               edit: (text) => {
                 const value = text === "" ? null : cleanDecimal(text);
                 return text !== "" && value === null
@@ -138,6 +150,7 @@ export function recordsPanel(ctx: Context): Panel {
                       type: "set_holding_weight",
                       account: account.id,
                       product: product.id,
+                      account_type: type,
                       weight: value,
                     };
               },
@@ -148,6 +161,24 @@ export function recordsPanel(ctx: Context): Panel {
           "tr",
           {},
           h("td", { class: "clip", title: account.name }, account.name),
+          h(
+            "td",
+            {},
+            selectField({
+              ctx,
+              bind,
+              label: `${product.name} / ${account.name}: ${t("Type")}`,
+              options: typeChoices,
+              get: () => type ?? "",
+              edit: (value) => ({
+                type: "set_record_type",
+                account: account.id,
+                product: product.id,
+                from: type,
+                to: value === "" ? null : value,
+              }),
+            }),
+          ),
           h("td", {}, weight),
           quantity,
           price,
@@ -161,6 +192,7 @@ export function recordsPanel(ctx: Context): Panel {
                   type: "remove_holding",
                   account: account.id,
                   product: product.id,
+                  account_type: type,
                 }),
             ),
           ),
@@ -171,16 +203,18 @@ export function recordsPanel(ctx: Context): Panel {
         product: (typeof products)[number],
         weighted: boolean,
       ): HTMLElement | null => {
-        const free = accounts.filter(
-          (a) => !view.portfolio.holdings.some((r) => r.account === a.id && r.product === product.id),
-        );
-        if (free.length === 0) {
+        if (accounts.length === 0) {
           return null;
         }
         const account = h(
           "select",
           { "aria-label": `${product.name}: ${t("Account")}` },
-          ...free.map((a) => h("option", { value: String(a.id) }, a.name)),
+          ...accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
+        );
+        const type = h(
+          "select",
+          { "aria-label": `${product.name}: ${t("Type")}` },
+          ...typeChoices.map((o) => h("option", { value: o.value }, o.label)),
         );
         const amount = h("input", {
           type: "text",
@@ -204,6 +238,7 @@ export function recordsPanel(ctx: Context): Panel {
           "form",
           { class: "record-add" },
           account,
+          type,
           amount,
           weight,
           h("button", { type: "submit" }, t("Add a record")),
@@ -212,6 +247,7 @@ export function recordsPanel(ctx: Context): Panel {
         form.addEventListener("submit", (event) => {
           event.preventDefault();
           const accountId = Number(account.value);
+          const accountType = type.value === "" ? null : type.value;
           const amountText = amount.value.trim();
           const weightText = weight?.value.trim() ?? "";
           const value = amountText === "" ? null : cleanDecimal(amountText);
@@ -228,6 +264,7 @@ export function recordsPanel(ctx: Context): Panel {
                 type: "set_holding",
                 account: accountId,
                 product: product.id,
+                account_type: accountType,
                 value,
                 quantity: null,
               });
@@ -237,6 +274,7 @@ export function recordsPanel(ctx: Context): Panel {
                 type: "set_holding_weight",
                 account: accountId,
                 product: product.id,
+                account_type: accountType,
                 weight: share,
               });
             }
@@ -331,9 +369,11 @@ export function recordsPanel(ctx: Context): Panel {
             productTools(ctx, view, product),
           );
           const own = view.portfolio.holdings.filter((r) => r.product === id);
-          const rows = accounts
-            .filter((a) => own.some((r) => r.account === a.id))
-            .map((a) => recordRow(product, a, weighted));
+          const rows = accounts.flatMap((a) =>
+            own
+              .filter((r) => r.account === a.id)
+              .map((r) => recordRow(product, a, r.account_type ?? null, weighted)),
+          );
           const block = h(
             "tbody",
             { class: "record-product" },
@@ -410,6 +450,7 @@ export function recordsPanel(ctx: Context): Panel {
                 "tr",
                 {},
                 h("th", {}, t("Account")),
+                h("th", {}, t("Type")),
                 h("th", {}, t("Weight")),
                 h("th", {}, t("Quantity")),
                 h("th", {}, t("Price")),

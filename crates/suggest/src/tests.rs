@@ -1,6 +1,6 @@
 // Every name and amount in these tests is made up.
 
-use portfolio::{AccountId, AccountKind, CategoryId, Edit, Portfolio, ProductId, ProductTargeting};
+use portfolio::{AccountId, CategoryId, Edit, Portfolio, ProductId, ProductTargeting};
 use rust_decimal::{Decimal, dec};
 
 use crate::engine::{MAX_AMOUNT, MAX_WEIGHT};
@@ -43,12 +43,11 @@ fn product(p: &mut Portfolio, name: &str, category: CategoryId, currency: &str) 
     p.products.last().unwrap().id
 }
 
-fn account(p: &mut Portfolio, name: &str, kind: AccountKind) -> AccountId {
+fn account(p: &mut Portfolio, name: &str) -> AccountId {
     apply(
         p,
         Edit::AddAccount {
             name: name.to_owned(),
-            kind,
         },
     );
     let id = p.accounts.last().unwrap().id;
@@ -59,7 +58,6 @@ fn account(p: &mut Portfolio, name: &str, kind: AccountKind) -> AccountId {
         Edit::UpdateAccount {
             id,
             name: None,
-            kind: None,
             sellable: None,
             rounding_unit: Some(dec!(1000)),
         },
@@ -71,6 +69,7 @@ fn hold(p: &mut Portfolio, account: AccountId, product: ProductId, value: Decima
     apply(
         p,
         Edit::SetHolding {
+            account_type: None,
             account,
             product,
             value,
@@ -88,14 +87,13 @@ fn fixture() -> Fixture {
     let bonds = category(&mut p, "Bonds", dec!(0.4));
     let s1 = product(&mut p, "Stock Fund", stocks, "JPY");
     let b1 = product(&mut p, "Bond Fund", bonds, "JPY");
-    let main = account(&mut p, "Main", AccountKind::Taxable);
-    let sub = account(&mut p, "Sub", AccountKind::Points);
+    let main = account(&mut p, "Main");
+    let sub = account(&mut p, "Sub");
     apply(
         &mut p,
         Edit::UpdateAccount {
             id: sub,
             name: None,
-            kind: None,
             sellable: Some(false),
             rounding_unit: None,
         },
@@ -276,7 +274,6 @@ fn a_rounding_unit_of_one_hundred_gives_finer_lines() {
         Edit::UpdateAccount {
             id: f.main,
             name: None,
-            kind: None,
             sellable: None,
             rounding_unit: Some(dec!(100)),
         },
@@ -304,7 +301,7 @@ fn weighted_products_fill_toward_their_relative_weights() {
     let c = category(&mut p, "All", dec!(1));
     let a = product(&mut p, "A", c, "JPY");
     let b = product(&mut p, "B", c, "JPY");
-    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    let acc = account(&mut p, "Main");
     hold(&mut p, acc, a, dec!(100000));
     hold(&mut p, acc, b, dec!(100000));
     apply(
@@ -319,6 +316,7 @@ fn weighted_products_fill_toward_their_relative_weights() {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: a,
             weight: Some(dec!(3)),
@@ -327,6 +325,7 @@ fn weighted_products_fill_toward_their_relative_weights() {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: b,
             weight: Some(dec!(1)),
@@ -362,7 +361,7 @@ fn equal_and_keep_current_products_split_new_money_sensibly() {
     let c = category(&mut p, "All", dec!(1));
     let a = product(&mut p, "A", c, "JPY");
     let b = product(&mut p, "B", c, "JPY");
-    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    let acc = account(&mut p, "Main");
     hold(&mut p, acc, a, dec!(300000));
     hold(&mut p, acc, b, dec!(100000));
 
@@ -539,6 +538,41 @@ fn an_account_that_may_not_sell_cannot_get_a_sell_suggestion() {
 }
 
 #[test]
+fn a_record_of_a_type_that_may_not_be_sold_is_not_sold() {
+    let mut f = fixture();
+    // The stock fund of the main account (700,000) becomes a NISA record: only the 100,000 of
+    // the bond fund is left to sell.
+    apply(
+        &mut f.portfolio,
+        Edit::SetRecordType {
+            account: f.main,
+            product: f.s1,
+            from: None,
+            to: Some("nisa".to_owned()),
+        },
+    );
+
+    let s = run(
+        &f.portfolio,
+        f.main,
+        Mode::FixedSell {
+            amount: dec!(100000),
+        },
+    )
+    .unwrap();
+    let too_much = run(
+        &f.portfolio,
+        f.main,
+        Mode::FixedSell {
+            amount: dec!(101000),
+        },
+    );
+
+    assert_eq!(deltas(&s), vec![(f.b1, dec!(-100000))]);
+    assert_eq!(too_much, Err(Error::NotEnoughToSell));
+}
+
+#[test]
 fn a_sale_never_exceeds_what_is_held_of_a_product_even_after_rounding() {
     let mut f = fixture();
     // 1,500 held, unit 1,000: rounding must not sell 2,000.
@@ -653,7 +687,6 @@ fn a_full_rebalance_reports_what_the_account_cannot_do() {
         Edit::UpdateAccount {
             id: f.main,
             name: None,
-            kind: None,
             sellable: Some(false),
             rounding_unit: None,
         },
@@ -808,7 +841,7 @@ fn bad_requests_are_rejected() {
 fn an_empty_portfolio_has_nothing_to_suggest() {
     let mut p = Portfolio::default();
     category(&mut p, "All", dec!(1));
-    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    let acc = account(&mut p, "Main");
 
     assert_eq!(
         run(&p, acc, Mode::BuyOnlyToTarget),
@@ -829,6 +862,7 @@ fn huge_holdings_and_weights_are_refused_instead_of_overflowing() {
     apply(
         &mut f.portfolio,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: f.main,
             product: f.s1,
             weight: Some(MAX_WEIGHT + dec!(1)),
@@ -978,7 +1012,7 @@ fn weighted_pair() -> (Portfolio, AccountId, ProductId, ProductId, CategoryId) {
     let c = category(&mut p, "All", dec!(1));
     let a = product(&mut p, "A", c, "JPY");
     let b = product(&mut p, "B", c, "JPY");
-    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    let acc = account(&mut p, "Main");
     hold(&mut p, acc, a, dec!(100000));
     hold(&mut p, acc, b, dec!(100000));
     apply(
@@ -993,6 +1027,7 @@ fn weighted_pair() -> (Portfolio, AccountId, ProductId, ProductId, CategoryId) {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: a,
             weight: Some(dec!(3)),
@@ -1001,6 +1036,7 @@ fn weighted_pair() -> (Portfolio, AccountId, ProductId, ProductId, CategoryId) {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: b,
             weight: Some(dec!(1)),
@@ -1053,6 +1089,7 @@ fn account_balance_only_spreads_over_products_the_account_holds_or_can_buy() {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: acc,
             product: other,
             weight: Some(dec!(4)),
@@ -1095,7 +1132,7 @@ fn account_balance_targets_add_up_to_the_category_total() {
         .into_iter()
         .map(|n| product(&mut p, n, c, "JPY"))
         .collect();
-    let acc = account(&mut p, "Main", AccountKind::Taxable);
+    let acc = account(&mut p, "Main");
     hold(&mut p, acc, ids[0], dec!(100));
     apply(
         &mut p,
@@ -1119,13 +1156,14 @@ fn account_balance_targets_add_up_to_the_category_total() {
 #[test]
 fn the_same_product_has_its_own_weight_in_each_account() {
     let (mut p, acc, a, b, c) = weighted_pair();
-    let other = account(&mut p, "Second", AccountKind::Taxable);
+    let other = account(&mut p, "Second");
     hold(&mut p, other, a, dec!(100000));
     hold(&mut p, other, b, dec!(100000));
     // In the second account B is wanted three times as much as A.
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: other,
             product: a,
             weight: Some(dec!(1)),
@@ -1134,6 +1172,7 @@ fn the_same_product_has_its_own_weight_in_each_account() {
     apply(
         &mut p,
         Edit::SetHoldingWeight {
+            account_type: None,
             account: other,
             product: b,
             weight: Some(dec!(3)),

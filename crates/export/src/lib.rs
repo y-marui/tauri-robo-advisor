@@ -131,7 +131,7 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
     let mut table = Table::new(&[
         "account_id",
         "account",
-        "account_kind",
+        "account_type",
         "product_id",
         "product",
         "category_id",
@@ -155,7 +155,7 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
         table.push(vec![
             plain_cell(&holding.account.0.to_string()),
             text_cell(account.map_or("", |a| &a.name)),
-            plain_cell(&account.map(|a| keyword(&a.kind)).unwrap_or_default()),
+            type_cell(portfolio, holding.account_type.as_deref()),
             plain_cell(&holding.product.0.to_string()),
             text_cell(product.map_or("", |p| &p.name)),
             plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),
@@ -292,11 +292,19 @@ fn aliases(portfolio: &Portfolio) -> Table {
     table
 }
 
+/// The type of a record: the id of a built-in type (such as `nisa`), the name of a custom type, or
+/// empty.
+fn type_cell(portfolio: &Portfolio, id: Option<&str>) -> String {
+    match id.and_then(|id| portfolio.custom_types.iter().find(|t| t.id == id)) {
+        Some(custom) => text_cell(&custom.name),
+        None => plain_cell(id.unwrap_or_default()),
+    }
+}
+
 fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
     let mut table = Table::new(&[
         "account_id",
         "account",
-        "kind",
         "sellable",
         "rounding_unit",
         "tradable_product_ids",
@@ -307,7 +315,6 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
         table.push(vec![
             plain_cell(&account.id.0.to_string()),
             text_cell(&account.name),
-            plain_cell(&keyword(&account.kind)),
             plain_cell(if account.sellable { "true" } else { "false" }),
             number(account.rounding_unit),
             plain_cell(&tradable(account)),

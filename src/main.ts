@@ -4,6 +4,7 @@ import { detectLanguage, getLanguage, LANGUAGES, setLanguage, t, type Lang } fro
 import type { Context, Panel } from "./panel.ts";
 import type { PortfolioView } from "./types.ts";
 import { accountsPanel } from "./views/accounts.ts";
+import { accountTypesPanel } from "./views/account-types.ts";
 import { bitflyerPanel } from "./views/bitflyer.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { groupsPanel } from "./views/groups.ts";
@@ -212,6 +213,7 @@ function build(): void {
   const categories = categoriesPanel(context);
   const records = recordsPanel(context);
   const accounts = accountsPanel(context);
+  const accountTypes = accountTypesPanel(context);
   const settings = settingsPanel(context);
   const dataFolder = dataFolderPanel(context);
   panels = [
@@ -227,6 +229,7 @@ function build(): void {
     categories,
     records,
     accounts,
+    accountTypes,
     settings,
     dataFolder,
   ];
@@ -292,6 +295,7 @@ function build(): void {
       groups.el,
       categories.el,
       accounts.el,
+      accountTypes.el,
       records.el,
       settings.el,
       dataFolder.el,

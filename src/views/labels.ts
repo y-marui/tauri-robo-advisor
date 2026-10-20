@@ -1,16 +1,18 @@
 import { t } from "../i18n.ts";
-import type { AccountKind, ProductTargeting } from "../types.ts";
+import type { CustomType, ProductTargeting } from "../types.ts";
 
 export const TARGETINGS: ProductTargeting[] = ["free", "equal", "keep_current", "weighted"];
-export const KINDS: AccountKind[] = [
-  "taxable",
+/** The account types that ship with the app, in the order they are offered. */
+export const BUILTIN_TYPES = [
+  "general",
+  "specific",
   "nisa",
-  "ideco",
-  "points",
-  "crypto",
+  "nisa_growth",
+  "nisa_tsumitate",
+  "old_nisa",
   "deposit",
-  "other",
-];
+  "crypto",
+] as const;
 
 export function targetingLabel(value: ProductTargeting): string {
   switch (value) {
@@ -25,21 +27,42 @@ export function targetingLabel(value: ProductTargeting): string {
   }
 }
 
-export function kindLabel(value: AccountKind): string {
-  switch (value) {
-    case "taxable":
-      return t("Taxable account");
+export function typeLabel(id: string | null | undefined, custom: CustomType[] | undefined): string {
+  switch (id) {
+    case undefined:
+    case null:
+      return t("Not set");
+    case "general":
+      return t("General account");
+    case "specific":
+      return t("Specific account");
     case "nisa":
-      return t("NISA");
-    case "ideco":
-      return t("iDeCo");
-    case "points":
-      return t("Points");
-    case "crypto":
-      return t("Crypto exchange");
+      return t("NISA (unspecified)");
+    case "nisa_growth":
+      return t("NISA growth");
+    case "nisa_tsumitate":
+      return t("NISA tsumitate");
+    case "old_nisa":
+      return t("Old NISA");
     case "deposit":
-      return t("Deposit");
-    case "other":
-      return t("Other");
+      return t("Cash");
+    case "crypto":
+      return t("Crypto assets");
+    default:
+      return custom?.find((c) => c.id === id)?.name ?? id;
   }
+}
+
+/** The choices of a type: not set, the built-in types, then the user's. */
+export function typeOptions(custom: CustomType[] | undefined): { value: string; label: string }[] {
+  return [
+    { value: "", label: typeLabel(null, custom) },
+    ...BUILTIN_TYPES.map((id) => ({ value: id, label: typeLabel(id, custom) })),
+    ...(custom ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ];
+}
+
+/** Identifies a record in the screen (account, product, type). */
+export function recordKey(account: number, product: number, type: string | null | undefined): string {
+  return `${account}:${product}:${type ?? ""}`;
 }
