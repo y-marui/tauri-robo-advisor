@@ -81,8 +81,15 @@ export function groupsPanel(ctx: Context): Panel {
         move: (id, index) => void ctx.apply({ type: "move_group_to", id, index }),
       });
 
-      const name = h("input", { type: "text", "aria-label": t("Group name"), autocomplete: "off" });
-      const form = h("form", { class: "add-row" }, name, h("button", { type: "submit" }, t("Add a group")));
+      // The add form is the last row of the table; its controls belong to this (empty) form.
+      const formId = "add-group-form";
+      const name = h("input", { type: "text", "aria-label": t("Group name"), autocomplete: "off", form: formId });
+      const form = h("form", { id: formId });
+      const addRow = h(
+        "tfoot",
+        {},
+        h("tr", {}, h("td", {}), h("td", {}, name), h("td", { class: "add-cell" }, h("button", { type: "submit", form: formId }, t("Add a group")))),
+      );
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         void ctx.apply({ type: "add_group", name: name.value }).then((ok) => {
@@ -104,7 +111,7 @@ export function groupsPanel(ctx: Context): Panel {
         h(
           "div",
           { class: "table-wrap" },
-          h("table", {}, tbody),
+          h("table", { class: "list-table" }, tbody, addRow),
         ),
         form,
       ];

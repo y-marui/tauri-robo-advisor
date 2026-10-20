@@ -623,6 +623,25 @@ td.clip {
   text-overflow: ellipsis;
 }
 
+/* The settings lists (Groups, Categories, Accounts): columns sized to their content and kept
+   close together; the add form is the last row (tfoot), its button in the delete-button column. */
+table.list-table {
+  width: auto;
+}
+
+table.list-table td.add-cell {
+  text-align: right;
+}
+
+table.list-table tfoot td {
+  border-top: 1px solid var(--line);
+}
+
+table.list-table tfoot input:not(.number) {
+  width: 100%;
+  min-width: 10rem;
+}
+
 .order {
   display: inline-flex;
   gap: 2px;

@@ -116,12 +116,23 @@ export function accountsPanel(ctx: Context): Panel {
         move: (id, index) => void ctx.apply({ type: "move_account_to", id, index }),
       });
 
-      const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off" });
-      const form = h(
-        "form",
-        { class: "add-row" },
-        name,
-        h("button", { type: "submit" }, t("Add an account")),
+      // The add form is the last row of the table; its controls belong to this (empty) form.
+      const formId = "add-account-form";
+      const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off", form: formId });
+      const form = h("form", { id: formId });
+      const addRow = h(
+        "tfoot",
+        {},
+        h(
+          "tr",
+          {},
+          h("td", {}),
+          h("td", {}, name),
+          h("td", {}),
+          h("td", {}),
+          h("td", {}),
+          h("td", { class: "add-cell" }, h("button", { type: "submit", form: formId }, t("Add an account"))),
+        ),
       );
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -141,7 +152,7 @@ export function accountsPanel(ctx: Context): Panel {
           { class: "table-wrap" },
           h(
             "table",
-            {},
+            { class: "list-table" },
             h(
               "thead",
               {},
@@ -157,6 +168,7 @@ export function accountsPanel(ctx: Context): Panel {
               ),
             ),
             tbody,
+            addRow,
           ),
         ),
         form,

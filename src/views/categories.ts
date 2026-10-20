@@ -105,20 +105,31 @@ export function categoriesPanel(ctx: Context): Panel {
         move: (id, index) => void ctx.apply({ type: "move_category_to", id, index }),
       });
 
-      const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off" });
+      // The add form is the last row of the table; its controls belong to this (empty) form.
+      const formId = "add-category-form";
+      const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off", form: formId });
       const target = h("input", {
+        form: formId,
         type: "text",
         "aria-label": t("Target (%)"),
         inputmode: "decimal",
         class: "number",
         placeholder: "%",
       });
-      const form = h(
-        "form",
-        { class: "add-row" },
-        name,
-        target,
-        h("button", { type: "submit" }, t("Add a category")),
+      const form = h("form", { id: formId });
+      const addRow = h(
+        "tfoot",
+        {},
+        h(
+          "tr",
+          {},
+          h("td", {}),
+          h("td", {}, name),
+          ...(view.portfolio.groups.length === 0 ? [] : [h("td", {})]),
+          h("td", {}, target),
+          h("td", {}),
+          h("td", { class: "add-cell" }, h("button", { type: "submit", form: formId }, t("Add a category"))),
+        ),
       );
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -144,7 +155,7 @@ export function categoriesPanel(ctx: Context): Panel {
           { class: "table-wrap" },
           h(
             "table",
-            {},
+            { class: "list-table" },
             h(
               "thead",
               {},
@@ -160,6 +171,7 @@ export function categoriesPanel(ctx: Context): Panel {
               ),
             ),
             tbody,
+            addRow,
           ),
         ),
         form,
