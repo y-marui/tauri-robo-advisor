@@ -25,7 +25,9 @@ pub enum Error {
     NotSellable,
     #[error("this account does not hold enough to sell that amount")]
     NotEnoughToSell,
-    #[error("this account cannot buy any product in the categories that need money")]
+    #[error(
+        "this account holds no product it can buy in the categories that need money; a product it does not hold is never bought"
+    )]
     NothingToBuy,
     #[error("choose the rebalancing account in the settings first")]
     NoTargetAccount,
