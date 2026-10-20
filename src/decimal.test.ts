@@ -62,5 +62,6 @@ test("formatAmount groups digits by locale and keeps exact digits", () => {
   assert.equal(formatAmount("12345678901234567890.123", "en"), "12,345,678,901,234,567,890.123");
   assert.equal(formatAmount("10.50", "en"), "10.50");
   assert.equal(formatAmount("-1000.00", "ja"), "-1,000.00");
+  assert.doesNotThrow(() => formatAmount("1.1234567890123456789012345", "en"));
   assert.equal(formatAmount("not a number", "en"), "not a number");
 });
