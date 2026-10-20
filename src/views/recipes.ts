@@ -48,8 +48,8 @@ export function recipesPanel(ctx: Context): Panel {
     h("h3", {}, t("Add from a preset")),
     presetSelect,
     presetAccount,
-    presetAdd,
     newAccountName,
+    presetAdd,
     presetNote,
   );
   let presets: PresetInfo[] = [];
