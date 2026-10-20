@@ -66,3 +66,16 @@ export function typeOptions(custom: CustomType[] | undefined): { value: string; 
 export function recordKey(account: number, product: number, type: string | null | undefined): string {
   return `${account}:${product}:${type ?? ""}`;
 }
+
+/** The filter value for the records without a type. */
+export const NO_TYPE = "none";
+
+/** The filter value of a record's type. */
+export function typeFilterKey(id: string | null | undefined): string {
+  return id ?? NO_TYPE;
+}
+
+/** Whether a record of this type is shown under the filter ("" shows every record). */
+export function matchesTypeFilter(id: string | null | undefined, filter: string): boolean {
+  return filter === "" || typeFilterKey(id) === filter;
+}

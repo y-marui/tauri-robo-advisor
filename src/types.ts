@@ -129,6 +129,8 @@ export interface Recipe {
   /** Sites whose other hosts the recipe may follow links to (only those containing the host it starts on count). */
   allowed_sites?: string[];
   currency: string;
+  /** What the title of each table says about the type of its records (then `all_tables` is on). */
+  type_rules?: { title: string; account_type: AccountTypeId }[];
   account: number;
   mapping: ImportMapping;
   /** The id of the built-in preset this recipe refers to (its definition is the app's current preset). */
@@ -282,7 +284,7 @@ export type Edit =
       quantity: string | null;
     }
   | { type: "remove_holding"; account: number; product: number; account_type?: AccountTypeId | null }
-  | { type: "replace_holdings"; account: number; holdings: { product: number; account_type?: AccountTypeId | null; value: string; quantity?: string | null; price?: string | null; price_unit?: number }[] }
+  | { type: "replace_holdings"; account: number; types?: (AccountTypeId | null)[] | null; holdings: { product: number; account_type?: AccountTypeId | null; value: string; quantity?: string | null; price?: string | null; price_unit?: number }[] }
   | {
       type: "set_import_mapping";
       source: string;
@@ -366,6 +368,8 @@ export interface Overview {
   categories: CategoryOverview[];
   holdings: HoldingOverview[];
   accounts: AccountOverview[];
+  /** Only types that have records; ordered by id, records without a type first. */
+  types: { account_type: AccountTypeId | null; value: string; share: string }[];
 }
 
 export type SuggestMode =
@@ -450,6 +454,8 @@ export interface MatchedRow {
   /** Kept when every row had the same price. */
   price: string | null;
   price_unit: number;
+  /** The type the table title gave the rows; null: none. */
+  account_type: AccountTypeId | null;
 }
 
 export interface ImportPlan {

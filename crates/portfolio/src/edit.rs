@@ -7,7 +7,7 @@ use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, Alias, CardSource, Category, CategoryId, Error, FetchLink, Group, GroupId,
     Holding, ImportMapping, KindRead, KindRule, Portfolio, Product, ProductId, ProductTargeting,
-    Recipe,
+    Recipe, TypeRule,
 };
 
 /// Which record stays when a merge finds a record of both products in one account.
@@ -25,6 +25,9 @@ pub enum MergeConflict {
 /// ids, and applies it, so no rule lives in the UI.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+// An edit is built and applied once per user action, never stored in bulk: the one large variant
+// (`SetRecipe`) is not worth boxing and changing every caller.
+#[allow(clippy::large_enum_variant)]
 pub enum Edit {
     /// Adds a product and links a name of an import source to it in one step (a name the import
     /// did not know yet becomes a product). Both or neither.
@@ -218,9 +221,15 @@ pub enum Edit {
     },
     /// Makes the account hold exactly these products, as an import does. The
     /// values are in each product's own currency.
+    ///
+    /// With `types`, only the records of these types (`None`: records without a type) are
+    /// replaced, and every input must have one of them; the account's records of other types are
+    /// left as they are. Without `types`, the whole account is replaced.
     ReplaceHoldings {
         account: AccountId,
         holdings: Vec<HoldingInput>,
+        #[serde(default)]
+        types: Option<Vec<Option<String>>>,
     },
     /// Saves (or replaces) the column mapping of an import source.
     SetImportMapping {
@@ -651,6 +660,12 @@ impl Recipe {
             ));
         }
         portfolio.account(self.account)?;
+        let type_rules = validated_type_rules(
+            &self.type_rules,
+            self.all_tables,
+            cards.is_some(),
+            portfolio,
+        )?;
         let allowed_sites = allowed_sites(&self.allowed_sites)?;
         let start_site = start_site(&self.start_site)?;
         Ok(Self {
@@ -667,11 +682,53 @@ impl Recipe {
                 currency(&self.currency)?
             },
             mapping: self.mapping.validated()?,
+            type_rules,
             ..self
         })
     }
 }
 
+/// The title rules, trimmed. They name the types of the tables of a page read with
+/// `all_tables`, so a recipe that reads another way has none.
+fn validated_type_rules(
+    type_rules: &[TypeRule],
+    all_tables: bool,
+    cards: bool,
+    portfolio: &Portfolio,
+) -> Result<Vec<TypeRule>, Error> {
+    if type_rules.is_empty() {
+        return Ok(Vec::new());
+    }
+    let bad = |what: &str| Error::Invalid(format!("the type rules are not acceptable: {what}"));
+    if cards || !all_tables || type_rules.len() > MAX_TYPE_RULES {
+        return Err(bad("they need a recipe that reads every matching table"));
+    }
+    let mut rules: Vec<TypeRule> = Vec::with_capacity(type_rules.len());
+    for rule in type_rules {
+        let title = rule.title.trim().to_owned();
+        if title.is_empty()
+            || title.chars().count() > MAX_LINK_TEXT_CHARS
+            || title.chars().any(char::is_control)
+        {
+            return Err(bad("a title"));
+        }
+        portfolio.check_type(Some(&rule.account_type))?;
+        let squashed: String = title.split_whitespace().collect();
+        if rules
+            .iter()
+            .any(|r| r.title.split_whitespace().collect::<String>() == squashed)
+        {
+            return Err(bad("a title appears twice"));
+        }
+        rules.push(TypeRule {
+            title,
+            account_type: rule.account_type.clone(),
+        });
+    }
+    Ok(rules)
+}
+
+const MAX_TYPE_RULES: usize = 30;
 const MAX_RECIPES: usize = 50;
 const MAX_RECIPE_LINKS: usize = 5;
 const MAX_LINK_TEXT_CHARS: usize = 60;
@@ -1168,6 +1225,9 @@ impl Portfolio {
                     return Err(Error::NotFound("account type"));
                 }
                 self.custom_types.retain(|t| t.id != id);
+                for recipe in &mut self.recipes {
+                    recipe.type_rules.retain(|r| r.account_type != id);
+                }
                 for h in std::mem::take(&mut self.holdings) {
                     let mut h = h;
                     if h.account_type.as_deref() == Some(id.as_str()) {
@@ -1287,8 +1347,16 @@ impl Portfolio {
                         && h.account_type == account_type)
                 });
             }
-            Edit::ReplaceHoldings { account, holdings } => {
+            Edit::ReplaceHoldings {
+                account,
+                holdings,
+                types,
+            } => {
                 self.account(account)?;
+                let in_scope = |t: &Option<String>| types.as_ref().is_none_or(|ts| ts.contains(t));
+                for t in types.iter().flatten() {
+                    self.check_type(t.as_deref())?;
+                }
                 let mut seen = std::collections::BTreeSet::new();
                 let mut next = Vec::with_capacity(holdings.len());
                 for input in holdings {
@@ -1297,6 +1365,9 @@ impl Portfolio {
                     // A record the page does not give a type for keeps the type of the existing
                     // record of the product in the account (when it is the only one).
                     let account_type = input.account_type.clone().or_else(|| {
+                        if types.is_some() {
+                            return None;
+                        }
                         let mut existing = self
                             .holdings
                             .iter()
@@ -1306,6 +1377,11 @@ impl Portfolio {
                             _ => None,
                         }
                     });
+                    if !in_scope(&account_type) {
+                        return Err(Error::Invalid(
+                            "an imported record has a type the import does not replace".to_owned(),
+                        ));
+                    }
                     if !seen.insert((input.product, account_type.clone())) {
                         return Err(Error::Invalid(
                             "a product appears twice in the import".to_owned(),
@@ -1342,7 +1418,8 @@ impl Portfolio {
                 let kept: Vec<Holding> = self
                     .holdings
                     .iter()
-                    .filter(|h| h.account == account && h.weight.is_some())
+                    .filter(|h| h.account == account && in_scope(&h.account_type))
+                    .filter(|h| h.weight.is_some())
                     .filter(|h| !seen.contains(&(h.product, h.account_type.clone())))
                     .map(|h| Holding {
                         value: Decimal::ZERO,
@@ -1356,12 +1433,13 @@ impl Portfolio {
                 let others = self
                     .holdings
                     .iter()
-                    .filter(|h| h.account != account)
+                    .filter(|h| h.account != account || !in_scope(&h.account_type))
                     .count();
                 if others + next.len() > MAX_ITEMS {
                     return Err(Error::Invalid("too many items".to_owned()));
                 }
-                self.holdings.retain(|h| h.account != account);
+                self.holdings
+                    .retain(|h| h.account != account || !in_scope(&h.account_type));
                 self.holdings.extend(next);
             }
             Edit::SetImportMapping {

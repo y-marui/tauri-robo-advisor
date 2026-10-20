@@ -306,6 +306,16 @@ pub struct CardSource {
     pub item_depth: u8,
 }
 
+/// What a table title says about the type of the records under it: a table whose title starts
+/// with `title` (compared without whitespace) holds records of `account_type`. The person (or a
+/// preset) names each title; a title is never guessed. The longest matching `title` wins.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TypeRule {
+    pub title: String,
+    /// A built-in type id or the id of a custom type.
+    pub account_type: String,
+}
+
 /// A saved way to fetch one table after the user has logged in: follow these
 /// links, find the table whose first cell starts with `table_starts_with`, read
 /// it with `mapping`, and put the result into `account`.
@@ -341,6 +351,13 @@ pub struct Recipe {
     pub allowed_sites: Vec<String>,
     #[serde(default)]
     pub currency: String,
+    /// What the title of each table of a page (read with `all_tables`) says about the type of its
+    /// records. With rules, a record gets the type of its table, and an import replaces only the
+    /// types the rules name (a table with another title is read without a type, and replaces the
+    /// records without a type). No rules: records are read without a type and the import replaces
+    /// the whole account.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_rules: Vec<TypeRule>,
     pub account: AccountId,
     #[serde(default)]
     pub mapping: ImportMapping,

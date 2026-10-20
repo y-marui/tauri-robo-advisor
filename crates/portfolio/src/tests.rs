@@ -533,6 +533,7 @@ fn replace_holdings_overwrites_only_that_account() {
     apply(
         &mut p,
         Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![HoldingInput {
                 account_type: None,
@@ -582,6 +583,7 @@ fn replace_holdings_rejects_bad_input_and_changes_nothing() {
 
     assert!(
         p.apply(Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![input(dec!(1)), input(dec!(2))],
         })
@@ -589,6 +591,7 @@ fn replace_holdings_rejects_bad_input_and_changes_nothing() {
     );
     assert!(
         p.apply(Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![input(dec!(-1))],
         })
@@ -596,6 +599,7 @@ fn replace_holdings_rejects_bad_input_and_changes_nothing() {
     );
     assert!(
         p.apply(Edit::ReplaceHoldings {
+            types: None,
             account: AccountId(9999),
             holdings: vec![],
         })
@@ -633,6 +637,7 @@ fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
         },
     );
     let row = |name: &str| ImportRow {
+        account_type: None,
         name: name.to_owned(),
         value: dec!(10),
         quantity: None,
@@ -669,6 +674,7 @@ fn plan_import_adds_up_names_linked_to_the_same_product() {
         );
     }
     let row = |name: &str, value| ImportRow {
+        account_type: None,
         name: name.to_owned(),
         value,
         quantity: None,
@@ -861,6 +867,7 @@ fn mapping_for(source: &str) -> ImportMapping {
 
 fn recipe_for(account: AccountId) -> Recipe {
     Recipe {
+        type_rules: Vec::new(),
         name: " Domestic stocks ".to_owned(),
         links: vec![
             FetchLink {
@@ -1169,6 +1176,7 @@ fn quantity_and_price_follow_the_rows_linked_to_one_product() {
         );
     }
     let row = |name: &str, quantity, price| ImportRow {
+        account_type: None,
         name: name.to_owned(),
         value: dec!(100),
         quantity,
@@ -1234,6 +1242,7 @@ fn an_empty_import_currency_takes_the_products_own_currency() {
         },
     );
     let rows = [ImportRow {
+        account_type: None,
         name: "D".to_owned(),
         value: dec!(10),
         quantity: None,
@@ -1253,6 +1262,7 @@ fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_pri
     apply(
         &mut p,
         Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![HoldingInput {
                 account_type: None,
@@ -1292,6 +1302,7 @@ fn replace_holdings_keeps_the_quantity_and_price_and_a_manual_edit_drops_the_pri
     ] {
         assert!(
             p.apply(Edit::ReplaceHoldings {
+                types: None,
                 account: acc,
                 holdings: vec![bad],
             })
@@ -1948,6 +1959,7 @@ fn an_import_keeps_the_weights_of_the_records_it_replaces() {
     apply(
         &mut p,
         Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![HoldingInput {
                 account_type: None,
@@ -2843,6 +2855,7 @@ fn an_import_keeps_the_type_of_the_only_existing_record() {
     apply(
         &mut p,
         Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![input(None)],
         },
@@ -2854,6 +2867,7 @@ fn an_import_keeps_the_type_of_the_only_existing_record() {
     apply(
         &mut p,
         Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![input(Some("specific")), input(Some("old_nisa"))],
         },
@@ -2861,6 +2875,7 @@ fn an_import_keeps_the_type_of_the_only_existing_record() {
     assert_eq!(p.holdings.len(), 2);
     assert!(
         p.apply(Edit::ReplaceHoldings {
+            types: None,
             account: acc,
             holdings: vec![input(Some("nisa")), input(Some("nisa"))],
         })
@@ -3064,6 +3079,7 @@ fn checked_row(
     computed: Option<rust_decimal::Decimal>,
 ) -> ImportRow {
     ImportRow {
+        account_type: None,
         name: name.to_owned(),
         value,
         quantity: Some(dec!(10)),
@@ -3147,4 +3163,258 @@ fn a_file_of_the_previous_version_loads_and_a_mapping_without_the_check_stays_as
     // Saved again without the new fields.
     let text = serde_json::to_string(&p.import_mappings[0]).unwrap();
     assert!(!text.contains("evaluation"));
+}
+
+fn typed_input(
+    product: ProductId,
+    account_type: Option<&str>,
+    value: rust_decimal::Decimal,
+) -> HoldingInput {
+    HoldingInput {
+        account_type: account_type.map(str::to_owned),
+        product,
+        value,
+        quantity: None,
+        price: None,
+        price_unit: 1,
+    }
+}
+
+#[test]
+fn an_import_with_types_replaces_only_those_types_of_the_account() {
+    let (mut p, _, prod, acc) = sample();
+    // The sample holds the product untyped; add the same product under two types.
+    for (ty, value) in [("nisa", dec!(10)), ("specific", dec!(20))] {
+        apply(
+            &mut p,
+            Edit::SetHolding {
+                account_type: Some(ty.to_owned()),
+                account: acc,
+                product: prod,
+                value,
+                quantity: None,
+            },
+        );
+    }
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![typed_input(prod, Some("nisa"), dec!(99))],
+            types: Some(vec![Some("nisa".to_owned())]),
+        },
+    );
+    let value_of = |p: &Portfolio, ty: Option<&str>| {
+        p.holdings
+            .iter()
+            .find(|h| h.account_type.as_deref() == ty)
+            .map(|h| h.value)
+    };
+    assert_eq!(value_of(&p, Some("nisa")), Some(dec!(99)));
+    assert_eq!(value_of(&p, Some("specific")), Some(dec!(20)));
+    assert_eq!(value_of(&p, None), Some(dec!(1000)));
+    assert_eq!(p.holdings.len(), 3);
+
+    // A type that is in scope but no longer on the page is removed; the others stay.
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![],
+            types: Some(vec![Some("nisa".to_owned())]),
+        },
+    );
+    assert_eq!(value_of(&p, Some("nisa")), None);
+    assert_eq!(p.holdings.len(), 2);
+}
+
+#[test]
+fn an_import_with_types_rejects_a_record_outside_them_and_keeps_no_inferred_type() {
+    let (mut p, _, prod, acc) = sample();
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![typed_input(prod, Some("specific"), dec!(5))],
+            types: Some(vec![Some("nisa".to_owned())]),
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![],
+            types: Some(vec![Some("no-such-type".to_owned())]),
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+
+    // An untyped input is untyped when the import is limited to types (no type is inferred from
+    // the existing record, which is the whole-account behavior).
+    apply(
+        &mut p,
+        Edit::SetHolding {
+            account_type: Some("nisa".to_owned()),
+            account: acc,
+            product: prod,
+            value: dec!(7),
+            quantity: None,
+        },
+    );
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![typed_input(prod, None, dec!(3))],
+            types: Some(vec![None]),
+        },
+    );
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account_type.is_none() && h.value == dec!(3))
+    );
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account_type.as_deref() == Some("nisa") && h.value == dec!(7))
+    );
+}
+
+#[test]
+fn plan_import_keeps_rows_of_one_product_with_two_types_apart() {
+    let (mut p, _, prod, _) = sample();
+    apply(
+        &mut p,
+        Edit::AddAlias {
+            product: prod,
+            source: "Made Up".to_owned(),
+            name: "Fund X".to_owned(),
+        },
+    );
+    let row = |ty: Option<&str>, value| ImportRow {
+        account_type: ty.map(str::to_owned),
+        name: "Fund X".to_owned(),
+        value,
+        quantity: None,
+        price: None,
+        price_unit: 1,
+        computed: None,
+    };
+    let rows = [
+        row(Some("nisa"), dec!(1)),
+        row(Some("specific"), dec!(2)),
+        row(Some("nisa"), dec!(4)),
+    ];
+    let plan = p.plan_import("Made Up", "", &rows);
+    assert_eq!(plan.matched.len(), 2);
+    assert_eq!(plan.matched[0].account_type.as_deref(), Some("nisa"));
+    assert_eq!(plan.matched[0].value, dec!(5));
+    assert_eq!(plan.matched[1].value, dec!(2));
+}
+
+#[test]
+fn a_table_title_stands_for_the_type_of_the_longest_matching_rule() {
+    let mut recipe = recipe_for(AccountId(1));
+    recipe.type_rules = vec![
+        TypeRule {
+            title: "Stocks (cash/ NISA".to_owned(),
+            account_type: "nisa".to_owned(),
+        },
+        TypeRule {
+            title: "Stocks (cash/NISA (growth))".to_owned(),
+            account_type: "nisa_growth".to_owned(),
+        },
+    ];
+    assert_eq!(
+        recipe.type_of_title("Stocks (cash/ NISA (growth))"),
+        Some("nisa_growth")
+    );
+    assert_eq!(recipe.type_of_title("Stocks (cash/NISA)"), Some("nisa"));
+    assert_eq!(recipe.type_of_title("Stocks (cash/ taxable)"), None);
+}
+
+#[test]
+fn type_rules_are_checked_when_a_recipe_is_saved() {
+    let (mut p, _, _, acc) = sample();
+    let rules = |title: &str, ty: &str| {
+        vec![TypeRule {
+            title: title.to_owned(),
+            account_type: ty.to_owned(),
+        }]
+    };
+    let mut recipe = recipe_for(acc);
+    recipe.all_tables = true;
+    recipe.type_rules = rules(" Stocks (cash/NISA) ", "nisa");
+    apply(
+        &mut p,
+        Edit::SetRecipe {
+            recipe: recipe.clone(),
+        },
+    );
+    assert_eq!(p.recipes[0].type_rules[0].title, "Stocks (cash/NISA)");
+
+    for bad in [
+        rules("Stocks", "no-such-type"),
+        rules("  ", "nisa"),
+        [rules("A b", "nisa"), rules("Ab", "specific")].concat(),
+    ] {
+        let mut r = recipe.clone();
+        r.type_rules = bad;
+        assert!(p.apply(Edit::SetRecipe { recipe: r }).is_err());
+    }
+    // Rules name the tables of a page read with every matching table.
+    let mut r = recipe;
+    r.all_tables = false;
+    assert!(p.apply(Edit::SetRecipe { recipe: r }).is_err());
+}
+
+#[test]
+fn removing_a_custom_type_removes_the_rules_that_name_it() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddAccountType {
+            name: "Made Up Type".to_owned(),
+            sellable: true,
+        },
+    );
+    let id = p.custom_types[0].id.clone();
+    let mut recipe = recipe_for(acc);
+    recipe.all_tables = true;
+    recipe.type_rules = vec![TypeRule {
+        title: "Stocks (x".to_owned(),
+        account_type: id.clone(),
+    }];
+    apply(&mut p, Edit::SetRecipe { recipe });
+    apply(&mut p, Edit::RemoveAccountType { id });
+    assert!(p.recipes[0].type_rules.is_empty());
+}
+
+#[test]
+fn the_sbi_presets_read_the_type_from_the_table_title() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "sbi-funds".to_owned(),
+            account: acc,
+        },
+    );
+    // The stored recipe holds no definition; the effective one has the rules.
+    assert!(p.recipes[0].type_rules.is_empty());
+    let effective = p.recipes[0].effective().unwrap();
+    assert!(effective.all_tables);
+    assert_eq!(
+        effective.type_of_title("投資信託（金額/NISA預り（成長投資枠））"),
+        Some("nisa_growth")
+    );
+    assert_eq!(
+        effective.type_of_title("投資信託（金額/旧NISA預り）"),
+        Some("old_nisa")
+    );
+    for rule in &effective.type_rules {
+        assert!(p.has_account_type(&rule.account_type));
+    }
 }

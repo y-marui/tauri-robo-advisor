@@ -57,6 +57,8 @@ pub enum RecipeRead {
     /// The table, and where each link went (to save when it was not saved yet).
     Table {
         table: Table,
+        /// Where each table of a merged page starts (see `Section`); empty for other reads.
+        sections: Vec<Section>,
         references: Vec<String>,
     },
     /// Several different links have this text; the user has to pick one.
@@ -66,6 +68,16 @@ pub enum RecipeRead {
     },
     /// A saved link no longer exists: the page has changed.
     LinkChanged { link: usize },
+}
+
+/// A table of a page read with several matching tables put together: its title (the first row's
+/// cells as one text) and the row of the merged table where its records start.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Section {
+    pub title: String,
+    /// The index (in the merged table's rows) of the first row of this table: the first table's
+    /// title row, or the first row after the title and heading rows of the others.
+    pub start: usize,
 }
 
 /// What a recipe reads from the page it reached.
@@ -394,7 +406,8 @@ impl BrowserSession {
             ReadSource::Cards {
                 heading,
                 item_depth,
-            } => read_cards_settled(&mut cdp, &session, heading, item_depth),
+            } => read_cards_settled(&mut cdp, &session, heading, item_depth)
+                .map(|table| (table, Vec::new())),
         };
         // Every run ends on the page it started from, so the next recipe starts there too. After a
         // click there is no way back, and the next recipe starts from the page that was reached.
@@ -406,8 +419,12 @@ impl BrowserSession {
         // A failed restoration takes precedence: the batch must stop before the next recipe
         // reads the wrong page.
         restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;
-        let table = read?;
-        Ok(RecipeRead::Table { table, references })
+        let (table, sections) = read?;
+        Ok(RecipeRead::Table {
+            table,
+            sections,
+            references,
+        })
     }
 
     /// Whether the page the tab is on already has the table a table recipe reads. Only reads.
@@ -560,14 +577,14 @@ fn pick_table_in_page(
     title: &str,
     merge: Option<usize>,
     follow: bool,
-) -> Result<Table, String> {
+) -> Result<(Table, Vec<Section>), String> {
     if follow && page.len() >= browser::MAX_TABLES {
         return Err("The page has too many tables to be sure the whole list was read.".to_owned());
     }
     let title_words = squash(title);
     let in_leaf = page.leaf.iter().any(|t| title_matches(t, &title_words));
     let raw = if in_leaf { page.leaf } else { page.outer };
-    pick_table(raw, title, merge, follow)
+    pick_table_sections(raw, title, merge, follow)
 }
 
 /// Cells keep their line breaks and no-break spaces, and a heading may be broken into lines where
@@ -597,12 +614,23 @@ fn title_matches(rows: &[Vec<String>], title: &str) -> bool {
 /// With `follow`, exactly one table must match (the heading), and the rows of every table after
 /// it that has the same number of columns are added: a page laid out as a heading table and then
 /// one small table per holding.
+#[cfg(test)]
 fn pick_table(
     raw: Vec<Vec<Vec<String>>>,
     title: &str,
     merge: Option<usize>,
     follow: bool,
 ) -> Result<Table, String> {
+    pick_table_sections(raw, title, merge, follow).map(|(table, _)| table)
+}
+
+/// `pick_table`, and for several tables put together where each one starts.
+fn pick_table_sections(
+    raw: Vec<Vec<Vec<String>>>,
+    title: &str,
+    merge: Option<usize>,
+    follow: bool,
+) -> Result<(Table, Vec<Section>), String> {
     let title = squash(title);
     let matches_title = |rows: &Vec<Vec<String>>| title_matches(rows, &title);
     if follow {
@@ -634,29 +662,52 @@ fn pick_table(
                 rows.extend(table.iter().cloned());
             }
         }
-        return tabular::from_rows(rows).map_err(|e| e.to_string());
+        return tabular::from_rows(rows)
+            .map(|t| (t, Vec::new()))
+            .map_err(|e| e.to_string());
     }
     let mut matching: Vec<Vec<Vec<String>>> =
         raw.into_iter().filter(|rows| matches_title(rows)).collect();
+    let mut sections = Vec::new();
     let rows = match (matching.len(), merge) {
         (0, _) => {
             return Err("No table on the page starts with the recipe's table title.".to_owned());
         }
-        (1, _) => matching.remove(0),
+        (1, None) => matching.remove(0),
         (n, None) => {
             return Err(format!(
                 "{n} tables on the page start with the recipe's table title; make the title more specific."
             ));
         }
         (_, Some(header_rows)) => {
-            let mut all = matching.remove(0);
-            for table in matching {
-                all.extend(table.into_iter().skip(header_rows));
+            // Blank rows are dropped when the table is made, so they are dropped here first: the
+            // sections count the rows that stay.
+            let non_blank = |rows: Vec<Vec<String>>| -> Vec<Vec<String>> {
+                rows.into_iter()
+                    .filter(|row| row.iter().any(|cell| !cell.trim().is_empty()))
+                    .collect()
+            };
+            let mut all = Vec::new();
+            for (n, table) in matching.into_iter().enumerate() {
+                let table = non_blank(table);
+                let title: String = table.first().map(|r| r.concat()).unwrap_or_default();
+                let skip = if n == 0 {
+                    0
+                } else {
+                    header_rows.min(table.len())
+                };
+                sections.push(Section {
+                    title,
+                    start: all.len(),
+                });
+                all.extend(table.into_iter().skip(skip));
             }
             all
         }
     };
-    tabular::from_rows(rows).map_err(|e| e.to_string())
+    tabular::from_rows(rows)
+        .map(|t| (t, sections))
+        .map_err(|e| e.to_string())
 }
 
 /// For the tests of the presets: the table a recipe would read from these tables.
@@ -669,7 +720,7 @@ pub fn pick_table_for_test(raw: Vec<Vec<Vec<String>>>, title: &str, follow: bool
 /// page.
 #[cfg(test)]
 pub fn pick_page_table_for_test(page: browser::PageTables, title: &str, follow: bool) -> Table {
-    pick_table_in_page(page, title, None, follow).unwrap()
+    pick_table_in_page(page, title, None, follow).unwrap().0
 }
 
 /// The profile folder is chosen by the user on their own computer, but it must
@@ -763,8 +814,9 @@ mod tests {
         ]];
 
         // A table that holds no table and matches wins, as it always did.
-        let table =
-            pick_table_in_page(page(leaf.clone(), outer.clone()), "Name", None, false).unwrap();
+        let table = pick_table_in_page(page(leaf.clone(), outer.clone()), "Name", None, false)
+            .unwrap()
+            .0;
         assert_eq!(table.rows.last().unwrap()[0], "a");
         // Only when none matches is an outer table asked.
         let table = pick_table_in_page(
@@ -773,7 +825,8 @@ mod tests {
             None,
             false,
         )
-        .unwrap();
+        .unwrap()
+        .0;
         assert_eq!(table.rows.last().unwrap()[0], "A");
         // No match in either group is the same error as before.
         assert!(
@@ -884,6 +937,43 @@ mod tests {
             first_cells,
             vec!["Stocks (taxable)", "Quantity", "A", "1", "B", "1"]
         );
+    }
+
+    #[test]
+    fn the_tables_put_together_tell_where_each_one_starts_and_its_title() {
+        let table = |title: &str, name: &str| {
+            vec![
+                vec![title.to_owned(), String::new()],
+                vec![String::new(), String::new()],
+                vec!["Quantity".to_owned(), "Price".to_owned()],
+                vec![name.to_owned(), String::new()],
+                vec!["1".to_owned(), "2".to_owned()],
+            ]
+        };
+        let raw = vec![table("Stocks (a)", "A"), table("Stocks (b)", "B")];
+        let (merged, sections) =
+            pick_table_sections(raw.clone(), "Stocks (", Some(2), false).unwrap();
+        // Blank rows do not count: the first table has 4 rows, the second 2 after its 2 header rows.
+        assert_eq!(merged.rows.len(), 6);
+        assert_eq!(
+            sections,
+            vec![
+                Section {
+                    title: "Stocks (a)".to_owned(),
+                    start: 0
+                },
+                Section {
+                    title: "Stocks (b)".to_owned(),
+                    start: 4
+                },
+            ]
+        );
+        // One table matching still has its section, so its type can be read.
+        let (_, one) = pick_table_sections(raw[..1].to_vec(), "Stocks (", Some(2), false).unwrap();
+        assert_eq!(one.len(), 1);
+        // Without merging there are no sections.
+        let (_, none) = pick_table_sections(raw[..1].to_vec(), "Stocks (", None, false).unwrap();
+        assert!(none.is_empty());
     }
 
     #[test]

@@ -8,7 +8,9 @@
 
 use serde::Serialize;
 
-use crate::{AccountId, CardSource, Error, FetchLink, ImportMapping, KindRead, KindRule, Recipe};
+use crate::{
+    AccountId, CardSource, Error, FetchLink, ImportMapping, KindRead, KindRule, Recipe, TypeRule,
+};
 
 /// How a preset reads its table: the columns and rows of a record. Counted from 0.
 struct Layout {
@@ -67,6 +69,8 @@ pub struct Preset {
     /// heading table (otherwise every table that starts with the title is read).
     start_site: &'static str,
     following_tables: bool,
+    /// The types the table titles stand for (title start, type id); see `TypeRule`.
+    types: &'static [(&'static str, &'static str)],
     /// Repeated blocks under a heading instead of a table (`table_starts_with` is then empty).
     cards: Option<PresetCards>,
     /// The page where the person logs in (the app only opens it; nothing is typed). One per
@@ -92,7 +96,8 @@ pub struct PresetInfo {
     pub links: &'static [&'static str],
 }
 
-/// SBI Securities: every table is a title row, a heading row, then two rows per holding (a row
+/// SBI Securities: the title of each table names the custody type (the `types` of the presets; the
+/// titles are to be checked on the real page, #99). Every table is a title row, a heading row, then two rows per holding (a row
 /// with the name, then a row with the quantity, the cost, the price, and the profit; only the
 /// quantity and the price are read).
 const fn sbi_layout(price_unit: u64) -> Layout {
@@ -127,6 +132,14 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
         following_tables: false,
+        types: &[
+            ("株式（現物/特定預り）", "specific"),
+            ("株式（現物/一般預り）", "general"),
+            ("株式（現物/NISA預り）", "nisa"),
+            ("株式（現物/旧NISA預り）", "old_nisa"),
+            ("株式（現物/NISA預り（成長投資枠））", "nisa_growth"),
+            ("株式（現物/NISA預り（つみたて投資枠））", "nisa_tsumitate"),
+        ],
         cards: None,
         login_url: "https://www.sbisec.co.jp/ETGate",
         currency: "",
@@ -142,6 +155,17 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "sbisec.co.jp",
         following_tables: false,
+        types: &[
+            ("投資信託（金額/特定預り）", "specific"),
+            ("投資信託（金額/一般預り）", "general"),
+            ("投資信託（金額/NISA預り）", "nisa"),
+            ("投資信託（金額/旧NISA預り）", "old_nisa"),
+            ("投資信託（金額/NISA預り（成長投資枠））", "nisa_growth"),
+            (
+                "投資信託（金額/NISA預り（つみたて投資枠））",
+                "nisa_tsumitate",
+            ),
+        ],
         cards: None,
         login_url: "https://www.sbisec.co.jp/ETGate",
         currency: "",
@@ -166,6 +190,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["monex.co.jp"],
         start_site: "monex.co.jp",
         following_tables: false,
+        types: &[],
         cards: None,
         login_url: "https://www.monex.co.jp/",
         currency: "",
@@ -215,6 +240,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["rakuten-sec.co.jp"],
         start_site: "rakuten-sec.co.jp",
         following_tables: false,
+        types: &[],
         cards: None,
         login_url: "https://www.rakuten-sec.co.jp/",
         currency: "JPY",
@@ -270,6 +296,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["connect-sec.co.jp"],
         start_site: "connect-sec.co.jp",
         following_tables: true,
+        types: &[],
         cards: None,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
         currency: "",
@@ -310,6 +337,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &["connect-sec.co.jp"],
         start_site: "connect-sec.co.jp",
         following_tables: false,
+        types: &[],
         cards: None,
         login_url: "https://www.connect-sec.co.jp/jumppages/login.html",
         currency: "",
@@ -346,6 +374,7 @@ const PRESETS: &[Preset] = &[
         allowed_sites: &[],
         start_site: "paypay-sec.co.jp",
         following_tables: false,
+        types: &[],
         cards: Some(PresetCards {
             heading: "保有銘柄",
             item_depth: 1,
@@ -442,6 +471,14 @@ impl Preset {
             // The values are in the page's currency when the preset knows it, else in the currency
             // of the product they are linked to.
             currency: self.currency.to_owned(),
+            type_rules: self
+                .types
+                .iter()
+                .map(|(title, id)| TypeRule {
+                    title: (*title).to_owned(),
+                    account_type: (*id).to_owned(),
+                })
+                .collect(),
             account,
             mapping: ImportMapping {
                 source: layout.source.to_owned(),
@@ -477,6 +514,19 @@ impl Preset {
 }
 
 impl Recipe {
+    /// The type the title of a table stands for: the rule with the longest title that the table's
+    /// title starts with (whitespace does not count). `None`: no rule fits.
+    pub fn type_of_title(&self, table_title: &str) -> Option<&str> {
+        let squash = |t: &str| t.split_whitespace().collect::<String>();
+        let table_title = squash(table_title);
+        self.type_rules
+            .iter()
+            .map(|r| (squash(&r.title), r))
+            .filter(|(title, _)| table_title.starts_with(title.as_str()))
+            .max_by_key(|(title, _)| title.chars().count())
+            .map(|(_, r)| r.account_type.as_str())
+    }
+
     /// The definition the recipe stands for. An ordinary recipe is its own definition. A recipe
     /// made from a preset is the app's current preset (read each time, so an app update updates
     /// it) with this recipe's name, account, and the remembered destinations of its links. It is
@@ -523,6 +573,7 @@ impl Recipe {
             start_site: String::new(),
             allowed_sites: Vec::new(),
             currency: String::new(),
+            type_rules: Vec::new(),
             account: self.account,
             mapping: ImportMapping::default(),
             preset: self.preset,
@@ -545,6 +596,7 @@ mod tests {
             allowed_sites: &[],
             start_site: "example.test",
             following_tables: false,
+            types: &[],
             cards: Some(PresetCards {
                 heading: "Holdings",
                 item_depth: 2,

@@ -66,6 +66,17 @@ pub struct AccountOverview {
     pub share: Decimal,
 }
 
+/// The records of one type valued in JPY (only types that have records).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TypeOverview {
+    /// `None`: the records without a type.
+    pub account_type: Option<String>,
+    #[serde(serialize_with = "crate::display::yen")]
+    pub value: Decimal,
+    /// `value` divided by the portfolio total, as a fraction.
+    pub share: Decimal,
+}
+
 /// The whole portfolio valued in JPY, for the balance charts.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Overview {
@@ -77,6 +88,8 @@ pub struct Overview {
     pub categories: Vec<CategoryOverview>,
     pub holdings: Vec<HoldingOverview>,
     pub accounts: Vec<AccountOverview>,
+    /// Ordered by type id, the records without a type first.
+    pub types: Vec<TypeOverview>,
 }
 
 /// Values every category in JPY. Unlike a suggestion this works while the
@@ -155,6 +168,18 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
             }
         })
         .collect();
+    let mut by_type: BTreeMap<Option<String>, Decimal> = BTreeMap::new();
+    for (_, _, account_type, value) in &rows {
+        *by_type.entry(account_type.clone()).or_default() += *value;
+    }
+    let types = by_type
+        .into_iter()
+        .map(|(account_type, value)| TypeOverview {
+            account_type,
+            value,
+            share: share_of_total(value),
+        })
+        .collect();
     let holdings = rows
         .into_iter()
         .map(|(account, product, account_type, value)| HoldingOverview {
@@ -171,6 +196,7 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
         categories,
         holdings,
         accounts,
+        types,
     })
 }
 
