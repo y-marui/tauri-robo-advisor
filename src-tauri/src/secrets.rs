@@ -16,6 +16,8 @@ const COINCHECK_KEY: &str = "coincheck-api-key";
 const COINCHECK_SECRET: &str = "coincheck-api-secret";
 const GMOCOIN_KEY: &str = "gmocoin-api-key";
 const GMOCOIN_SECRET: &str = "gmocoin-api-secret";
+const BINANCE_KEY: &str = "binance-api-key";
+const BINANCE_SECRET: &str = "binance-api-secret";
 
 /// Both parts are pasted by hand, so reject anything that could not be a real
 /// exchange key: empty, very long, or containing whitespace or control
@@ -116,6 +118,28 @@ pub fn delete_gmocoin() -> Result<(), String> {
     remove(GMOCOIN_SECRET)
 }
 
+pub fn save_binance(api_key: &str, api_secret: &str) -> Result<(), String> {
+    validate("API key", api_key)?;
+    validate("API secret", api_secret)?;
+    let key = entry(BINANCE_KEY)?;
+    let secret = entry(BINANCE_SECRET)?;
+    key.set_password(api_key)
+        .and_then(|()| secret.set_password(api_secret))
+        .map_err(|e| format!("Could not save to the OS keychain: {e}"))
+}
+
+pub fn load_binance() -> Result<Option<binance::Credentials>, String> {
+    match (read(BINANCE_KEY)?, read(BINANCE_SECRET)?) {
+        (Some(key), Some(secret)) => Ok(Some(binance::Credentials::new(key, secret))),
+        _ => Ok(None),
+    }
+}
+
+pub fn delete_binance() -> Result<(), String> {
+    remove(BINANCE_KEY)?;
+    remove(BINANCE_SECRET)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +197,14 @@ mod tests {
 
         delete_gmocoin().unwrap();
         assert!(load_gmocoin().unwrap().is_none());
+
+        delete_binance().unwrap();
+        assert!(load_binance().unwrap().is_none());
+
+        save_binance("dummy-key", "dummy-secret").unwrap();
+        assert!(load_binance().unwrap().is_some());
+
+        delete_binance().unwrap();
+        assert!(load_binance().unwrap().is_none());
     }
 }
