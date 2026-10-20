@@ -3,7 +3,16 @@ import type { CustomType, ProductTargeting } from "../types.ts";
 
 export const TARGETINGS: ProductTargeting[] = ["free", "equal", "keep_current", "weighted"];
 /** The account types that ship with the app, in the order they are offered. */
-export const BUILTIN_TYPES = ["general", "specific", "nisa", "old_nisa", "deposit", "crypto"] as const;
+export const BUILTIN_TYPES = [
+  "general",
+  "specific",
+  "nisa",
+  "nisa_growth",
+  "nisa_tsumitate",
+  "old_nisa",
+  "deposit",
+  "crypto",
+] as const;
 
 export function targetingLabel(value: ProductTargeting): string {
   switch (value) {
@@ -28,11 +37,15 @@ export function typeLabel(id: string | null | undefined, custom: CustomType[] | 
     case "specific":
       return t("Specific account");
     case "nisa":
-      return t("NISA");
+      return t("NISA (unspecified)");
+    case "nisa_growth":
+      return t("NISA growth");
+    case "nisa_tsumitate":
+      return t("NISA tsumitate");
     case "old_nisa":
       return t("Old NISA");
     case "deposit":
-      return t("Deposit");
+      return t("Cash");
     case "crypto":
       return t("Crypto assets");
     default:

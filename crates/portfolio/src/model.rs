@@ -104,10 +104,12 @@ pub struct Product {
 /// The account types that ship with the app: the id (stored in a record) and whether a record of
 /// the type may be sold by a suggestion. The display names belong to the screen (translated).
 /// NISA and old NISA are not sellable: selling would forfeit tax-free room.
-pub const BUILTIN_ACCOUNT_TYPES: [(&str, bool); 6] = [
+pub const BUILTIN_ACCOUNT_TYPES: [(&str, bool); 8] = [
     ("general", true),
     ("specific", true),
     ("nisa", false),
+    ("nisa_growth", false),
+    ("nisa_tsumitate", false),
     ("old_nisa", false),
     ("deposit", true),
     ("crypto", true),

@@ -2769,6 +2769,13 @@ fn custom_types_are_added_renamed_and_removed() {
     assert!(id.starts_with("custom-"));
     assert!(!p.type_sellable(Some(&id)));
     assert!(p.type_sellable(Some("general")) && !p.type_sellable(Some("old_nisa")));
+    for nisa in ["nisa", "nisa_growth", "nisa_tsumitate", "old_nisa"] {
+        assert!(
+            p.has_account_type(nisa) && !p.type_sellable(Some(nisa)),
+            "{nisa}"
+        );
+    }
+    assert!(p.type_sellable(Some("deposit")) && p.type_sellable(Some("crypto")));
     assert!(p.type_sellable(None));
     assert!(
         p.apply(Edit::AddAccountType {
@@ -2911,6 +2918,7 @@ fn a_version_13_file_gets_the_record_types_of_its_account_kinds() {
     };
     assert_eq!(t(3).as_deref(), Some("specific"));
     assert_eq!(t(4).as_deref(), Some("nisa"));
+    assert!(p.has_account_type("nisa") && !p.type_sellable(t(4).as_deref()));
     assert_eq!(t(7), None);
     // iDeCo and Points become custom types, one each, from the id counter.
     assert_eq!(p.custom_types.len(), 2);

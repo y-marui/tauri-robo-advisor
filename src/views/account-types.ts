@@ -68,7 +68,7 @@ export function accountTypesPanel(ctx: Context): Panel {
           "p",
           { class: "muted" },
           t(
-            "Each record has a type (general, specific, NISA, old NISA, deposit, crypto assets, or one added here). NISA and old NISA are never sold by a suggestion. The type is read automatically only where the page shows it; otherwise set it by hand in the Records card.",
+            "Each record has a type (general, specific, NISA, NISA growth, NISA tsumitate, old NISA, cash, crypto assets, or one added here). NISA types, old NISA included, are never sold by a suggestion. “NISA” means a NISA whose frame is not decided yet. The type is read automatically only where the page shows it; otherwise set it by hand in the Records card.",
           ),
           " ",
           t("Types you add: the sellable box says whether a suggestion may sell records of the type."),
