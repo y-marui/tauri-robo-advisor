@@ -766,8 +766,7 @@ table.records td.clip {
 
 /* The suggestion tables have the whole wide area; a long product name wraps in its cell
    instead of pushing the amount columns out. */
-.suggestions .suggestion,
-.account-tabs .suggestion {
+.rebalance .suggestion {
   max-width: 60rem;
 }
 
@@ -788,8 +787,7 @@ table.records td.clip {
 }
 
 .overview select,
-.suggestions select,
-.account-tabs select {
+.rebalance select {
   max-width: 100%;
   box-sizing: border-box;
 }

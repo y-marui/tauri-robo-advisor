@@ -44,7 +44,7 @@ pub struct AccountBalance {
 }
 
 /// Compares the products inside one account with the product weights. The
-/// split is only over the products the account holds or can buy, and the money
+/// split is only over the products the account holds, and the money
 /// that is already in a category stays there; moving it between categories is
 /// the suggestion's job, not this view's.
 pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<AccountBalance, Error> {
@@ -90,13 +90,9 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .products
                 .iter()
                 .filter(|p| p.category == category.id)
-                .filter(|p| {
-                    held.get(&p.id).is_some_and(|v| *v > Decimal::ZERO)
-                        || account
-                            .tradable
-                            .as_ref()
-                            .is_none_or(|list| list.contains(&p.id))
-                })
+                // A product the account does not hold is out of scope here: not shown, and it
+                // gets no share of the category.
+                .filter(|p| held.get(&p.id).is_some_and(|v| *v > Decimal::ZERO))
                 .collect();
             let total: Decimal = members
                 .iter()

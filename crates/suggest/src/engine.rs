@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use portfolio::{Account, Category, CategoryId, Portfolio, Product, ProductId, ProductTargeting};
 use rust_decimal::Decimal;
@@ -55,6 +55,9 @@ struct Book<'a> {
     account: &'a Account,
     /// This account's holdings per product.
     account_value: BTreeMap<ProductId, Decimal>,
+    /// Products this account holds in any record (selling allowed or not), when only those
+    /// may be bought; `None` when every tradable product may be bought.
+    held_only: Option<BTreeSet<ProductId>>,
     /// Holdings per product across all accounts.
     product_value: BTreeMap<ProductId, Decimal>,
     category_value: BTreeMap<CategoryId, Decimal>,
@@ -77,6 +80,7 @@ impl<'a> Book<'a> {
         }
 
         let mut account_value = BTreeMap::new();
+        let mut held_here: BTreeMap<ProductId, Decimal> = BTreeMap::new();
         let mut product_value: BTreeMap<ProductId, Decimal> = BTreeMap::new();
         for holding in &portfolio.holdings {
             let product = portfolio
@@ -86,6 +90,9 @@ impl<'a> Book<'a> {
                 .ok_or(Error::Inconsistent)?;
             let value = to_jpy(portfolio, &product.currency, holding.value)?;
             *product_value.entry(product.id).or_default() += value;
+            if holding.account == account.id {
+                *held_here.entry(product.id).or_default() += value;
+            }
             // Only what a suggestion may sell counts as held here (the type of a record can forbid
             // selling it, like a NISA record).
             if holding.account == account.id
@@ -111,6 +118,13 @@ impl<'a> Book<'a> {
             portfolio,
             account,
             account_value,
+            held_only: request.held_only.then(|| {
+                held_here
+                    .into_iter()
+                    .filter(|(_, value)| *value > Decimal::ZERO)
+                    .map(|(id, _)| id)
+                    .collect()
+            }),
             product_value,
             category_value,
             total,
@@ -150,6 +164,11 @@ impl<'a> Book<'a> {
                     .tradable
                     .as_ref()
                     .is_none_or(|list| list.contains(&p.id))
+            })
+            .filter(|p| {
+                self.held_only
+                    .as_ref()
+                    .is_none_or(|held| held.contains(&p.id))
             })
             .collect()
     }

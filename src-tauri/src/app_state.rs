@@ -1139,6 +1139,7 @@ mod tests {
             .suggest(&Request {
                 account,
                 mode: suggest::Mode::BuyOnlyToTarget,
+                held_only: false,
             })
             .unwrap_err();
 

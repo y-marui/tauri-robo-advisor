@@ -385,6 +385,8 @@ export type SuggestMode =
 export interface SuggestRequest {
   account: number;
   mode: SuggestMode;
+  /** Only buy products the account holds. Omitted means false. */
+  held_only?: boolean;
 }
 
 export interface CategoryLine {

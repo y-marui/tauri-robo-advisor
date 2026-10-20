@@ -113,7 +113,14 @@ fn fixture() -> Fixture {
 }
 
 fn run(p: &Portfolio, account: AccountId, mode: Mode) -> Result<Suggestion, Error> {
-    suggest(p, &Request { account, mode })
+    suggest(
+        p,
+        &Request {
+            account,
+            mode,
+            held_only: false,
+        },
+    )
 }
 
 fn deltas(s: &Suggestion) -> Vec<(ProductId, Decimal)> {
@@ -905,7 +912,8 @@ fn requests_and_suggestions_use_exact_decimal_strings_in_json() {
             account: AccountId(5),
             mode: Mode::FixedAdd {
                 amount: dec!(100000)
-            }
+            },
+            held_only: false
         }
     );
     assert!(
@@ -1111,7 +1119,7 @@ fn account_balance_has_no_target_when_the_category_does_not_split() {
 }
 
 #[test]
-fn account_balance_only_spreads_over_products_the_account_holds_or_can_buy() {
+fn account_balance_leaves_out_products_the_account_does_not_hold() {
     let (mut p, acc, a, b, c) = weighted_pair();
     let other = product(&mut p, "C", c, "JPY");
     apply(
@@ -1127,7 +1135,7 @@ fn account_balance_only_spreads_over_products_the_account_holds_or_can_buy() {
         &mut p,
         Edit::SetTradable {
             id: acc,
-            products: Some(vec![a]),
+            products: Some(vec![a, other]),
         },
     );
 
@@ -1138,7 +1146,7 @@ fn account_balance_only_spreads_over_products_the_account_holds_or_can_buy() {
         .iter()
         .map(|x| x.product)
         .collect();
-    // B is held, A is both, C is neither held nor buyable here.
+    // C is buyable and has a weight, but the account holds none of it: out of scope.
     assert_eq!(ids, vec![a, b]);
 }
 
@@ -1384,4 +1392,30 @@ fn the_account_balance_serializes_whole_yen_and_keeps_exact_values() {
         .map(|c| &c["total"])
         .collect();
     assert!(totals.contains(&&serde_json::Value::from("701581")));
+}
+
+#[test]
+fn held_only_never_buys_a_product_the_account_does_not_hold() {
+    let f = fixture();
+    // The sub account holds only bonds; stocks are under no restriction but not held there.
+    let request = |held_only| Request {
+        account: f.sub,
+        mode: Mode::FixedAdd {
+            amount: dec!(2000000),
+        },
+        held_only,
+    };
+    let all = suggest(&f.portfolio, &request(false)).unwrap();
+    let held = suggest(&f.portfolio, &request(true)).unwrap();
+
+    assert!(all.products.iter().any(|l| l.product == f.s1));
+    assert!(held.products.iter().all(|l| l.product != f.s1));
+    assert!(held.products.iter().any(|l| l.product == f.b1));
+}
+
+#[test]
+fn held_only_defaults_to_false_in_json() {
+    let request: Request =
+        serde_json::from_str(r#"{"account":5,"mode":{"type":"buy_only_to_target"}}"#).unwrap();
+    assert!(!request.held_only);
 }
