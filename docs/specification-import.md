@@ -1,6 +1,6 @@
 # Specification: Import and Acquisition
 
-[specification.md](specification.md) の一部。取得方法、表の取り込み、証券会社の出力、bitFlyer と Coincheck の残高を扱う。
+[specification.md](specification.md) の一部。取得方法、表の取り込み、証券会社の出力、bitFlyer・Coincheck・GMO コインの残高を扱う。
 
 ## Acquisition Methods
 
@@ -10,6 +10,7 @@
 | 表形式の取り込み | CSV ファイル、または画面の保有一覧をコピーして貼り付けたテキスト（タブ区切り）。取り込むたびに列の対応づけ（名称・評価額・数量など）を画面で指定し、取得元ごとに保存して次回から使う。文字コードは Shift-JIS と UTF-8 を自動判別する | 実装済み（下記） |
 | bitFlyer | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。証拠金の取得は未実装 |
 | Coincheck | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。実サービスでの確認は未了 |
+| GMO コイン | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。実サービスでの確認は未了 |
 | ブラウザ拡張 | ログイン済みのブラウザで資産ページを読み取り、ローカルのアプリへ渡す | 将来の選択肢。必要になった時点で設計する |
 
 証券会社ごとの専用パーサーは作らない。会社ごとに形式が違い、版によって変わり、公開された仕様もないため、列の対応づけを利用者が指定する汎用の取り込みにする。例外として、実際のページの構造を確認した**組み込みのレシピ（プリセット）**を、コードではなくデータとして出荷する（[specification-recipes.md](specification-recipes.md) の「Fetch Recipes」）。取り込んだ名称は、商品の別名として保存する。未登録の名称は、利用者が既存の商品へ割り当てるか、新しい商品として登録する。名称の自動推測はしない。
@@ -97,3 +98,19 @@
 - API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `coincheck-api-key` / `coincheck-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
 - フロントエンドから呼べるコマンド: `save_coincheck_credentials`、`has_coincheck_credentials`、`delete_coincheck_credentials`、`fetch_coincheck_holdings`。
 - 画面は「Coincheck」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは bitFlyer と同じ部品（別名の `source` は `coincheck`、名前は通貨コード）で、価格の基準は公開ティッカーの最終価格だけ。
+
+## GMO Coin Balances (#126)
+
+`crates/gmocoin` が `GET /private/v1/account/assets` で残高を取得し、JPY 建ての保有へ変換する。`crates/bitflyer`・`crates/coincheck` と同じ形（`Credentials`、`Transport`、`sign`、`Client`、`Holdings`）で、共通部分の抽出は見送った（[architecture.md](architecture.md) の Extraction Policy の Decision）。
+
+- API キーには資産残高を読む権限だけを付ける。キー作成画面での権限の名称は確認できていない（公式ドキュメントは「機能ごとに指定する」とだけ書く。実サービスで確認したら、ここと画面の案内を直す）。注文・入出金は不要で、クライアントは `GET` しか送らない。IP アドレスでの制限をキーに付けられるので、画面で勧める。
+- 署名は `API-TIMESTAMP + メソッド + パス + 本文` の HMAC-SHA256（16 進）。パスは `/v1/account/assets`（URL の `/private` を含めない）、`GET` の本文は空。ヘッダーは `API-KEY`、`API-TIMESTAMP`（ミリ秒の UNIX 時間）、`API-SIGN`。タイムスタンプは GMO コインの時計に近ければよく（ずれると ERR-5008 / 5009）、リクエストをまたぐ単調増加は要求されないので、Coincheck の nonce のような状態は持たない。
+- 通信は固定の `https://api.coin.z.com` のみ。リダイレクトは追従せず、タイムアウトと応答サイズの上限を設ける。送るリクエストは署名付きの 1 回だけで、公開 API（ティッカー）は使わない。
+- 数量は `amount`（残高。注文で拘束中の分を含む）。`available` は出金予定額を除いた値で、評価には使わない。エラーは HTTP 200 のまま `status` が 0 以外で返る（`messages` の `message_code` と `message_string`）ので、それをエラーにする。メッセージは長さを制限し、制御文字を除く。
+- 価格の基準（#126 の決定）: 評価は残高の応答の `conversionRate` を使う。公式ドキュメントでは「販売所での売却価格」で、販売所に取り扱いのない銘柄だけ「取引所現物での最終約定価格」である。利用者が実際に売買する価格が販売所の価格なので、これを他の取引所の販売所レート（Coincheck）と同じ基準として採る。公開の `GET /public/v1/ticker` は、公式ドキュメントに販売所の価格を返すという記載がなく（取引所の現物・レバレッジの銘柄名が並ぶ）、販売所の価格として使えると確認できないため使わない（公開 API を認証なしで叩いて、銘柄名と最終価格の形式だけ確認した）。
+- 基準は保有ごとに `basis` で持つ。`sales` は販売所の売値、`board` は取引所の最終約定価格。応答の項目には基準がないため、取引所だけの銘柄（`FCR`・`ASTR`・`NAC`・`WILD`。公式の資産銘柄の表で「取引所」と書かれたもの。2026-10-20 確認）の一覧を `crates/gmocoin/src/client.rs` に 1 か所だけ持ち、それ以外は `sales` とする。銘柄が増えたらこの一覧を更新する。画面は `board` の銘柄を名指しして、混ざっていることを必ず知らせる。
+- `conversionRate` が 0 または無い銘柄は `unpriced` として一覧で返し、保有からは除く。残高 0 は除く。
+- 数値は文字列のまま十進数へ変換し、浮動小数点を通さない。
+- API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `gmocoin-api-key` / `gmocoin-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
+- フロントエンドから呼べるコマンド: `save_gmocoin_credentials`、`has_gmocoin_credentials`、`delete_gmocoin_credentials`、`fetch_gmocoin_holdings`。
+- 画面は「GMO Coin」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは Coincheck と同じ部品（別名の `source` は `gmocoin`、名前は銘柄コード）。

@@ -14,6 +14,8 @@ const BITFLYER_KEY: &str = "bitflyer-api-key";
 const BITFLYER_SECRET: &str = "bitflyer-api-secret";
 const COINCHECK_KEY: &str = "coincheck-api-key";
 const COINCHECK_SECRET: &str = "coincheck-api-secret";
+const GMOCOIN_KEY: &str = "gmocoin-api-key";
+const GMOCOIN_SECRET: &str = "gmocoin-api-secret";
 
 /// Both parts are pasted by hand, so reject anything that could not be a real
 /// exchange key: empty, very long, or containing whitespace or control
@@ -92,6 +94,28 @@ pub fn delete_coincheck() -> Result<(), String> {
     remove(COINCHECK_SECRET)
 }
 
+pub fn save_gmocoin(api_key: &str, api_secret: &str) -> Result<(), String> {
+    validate("API key", api_key)?;
+    validate("API secret", api_secret)?;
+    let key = entry(GMOCOIN_KEY)?;
+    let secret = entry(GMOCOIN_SECRET)?;
+    key.set_password(api_key)
+        .and_then(|()| secret.set_password(api_secret))
+        .map_err(|e| format!("Could not save to the OS keychain: {e}"))
+}
+
+pub fn load_gmocoin() -> Result<Option<gmocoin::Credentials>, String> {
+    match (read(GMOCOIN_KEY)?, read(GMOCOIN_SECRET)?) {
+        (Some(key), Some(secret)) => Ok(Some(gmocoin::Credentials::new(key, secret))),
+        _ => Ok(None),
+    }
+}
+
+pub fn delete_gmocoin() -> Result<(), String> {
+    remove(GMOCOIN_KEY)?;
+    remove(GMOCOIN_SECRET)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +164,14 @@ mod tests {
 
         delete_coincheck().unwrap();
         assert!(load_coincheck().unwrap().is_none());
+
+        delete_gmocoin().unwrap();
+        assert!(load_gmocoin().unwrap().is_none());
+
+        save_gmocoin("dummy-key", "dummy-secret").unwrap();
+        assert!(load_gmocoin().unwrap().is_some());
+
+        delete_gmocoin().unwrap();
+        assert!(load_gmocoin().unwrap().is_none());
     }
 }

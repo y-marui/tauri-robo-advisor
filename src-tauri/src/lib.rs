@@ -145,6 +145,41 @@ async fn fetch_coincheck_holdings() -> Result<coincheck::Holdings, String> {
         .map_err(|e| e.to_string())
 }
 
+// GMO Coin: the same shape, with prices from the sales desk rate in the assets response.
+#[tauri::command]
+async fn save_gmocoin_credentials(api_key: String, api_secret: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::save_gmocoin(&api_key, &api_secret))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn has_gmocoin_credentials() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(|| secrets::load_gmocoin().map(|c| c.is_some()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn delete_gmocoin_credentials() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(secrets::delete_gmocoin)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fetch_gmocoin_holdings() -> Result<gmocoin::Holdings, String> {
+    let credentials = tauri::async_runtime::spawn_blocking(secrets::load_gmocoin)
+        .await
+        .map_err(|e| e.to_string())??
+        .ok_or_else(|| "No GMO Coin API credentials are saved.".to_owned())?;
+    let transport = gmocoin::ReqwestTransport::new().map_err(|e| e.to_string())?;
+    gmocoin::Client::new(transport, credentials)
+        .holdings()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn bitflyer_client() -> Result<Client<ReqwestTransport>, String> {
     let credentials = tauri::async_runtime::spawn_blocking(secrets::load_bitflyer)
         .await
@@ -528,6 +563,10 @@ pub fn run() {
             has_coincheck_credentials,
             delete_coincheck_credentials,
             fetch_coincheck_holdings,
+            save_gmocoin_credentials,
+            has_gmocoin_credentials,
+            delete_gmocoin_credentials,
+            fetch_gmocoin_holdings,
             get_portfolio,
             apply_portfolio_edit,
             get_overview,

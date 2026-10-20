@@ -61,6 +61,7 @@ Built-in presets read the holdings tables of a logged-in browser page (you log i
 | Daiwa Connect Securities | Domestic stocks, cash (yen) | Verified for the stock list; the cash page is not recorded as verified |
 | bitFlyer | Balances through the REST API (read-only key in the OS keychain) | Verified against the real service with a read-only key (authentication and balances). A currency without a yen market on bitFlyer Lightning is left out and reported; prices can be taken from the public price page instead (opened and read in the dedicated browser from the bitFlyer card; the Lightning price is shown for comparison) |
 | Coincheck | Balances through the REST API (read-only key in the OS keychain) | Not verified against the real service yet. Prices come from the public sales (hanbaijo) rate; a currency without a yen pair is left out and reported |
+| GMO Coin | Balances through the REST API (read-only key in the OS keychain) | Not verified against the real service yet. Prices use the sales desk (hanbaijo) selling price from the assets response; the few exchange-only assets use the exchange's last price and are named on screen. A currency without a rate is left out and reported |
 | PayPay Securities | Holdings cards (evaluation only; the page shows no quantity or price). Provisional preset | Structure checked on the real page (two holdings). "More" and many holdings are not checked (#76) |
 
 Other sources: import a CSV or pasted table with your own column mapping, or enter holdings by hand.
