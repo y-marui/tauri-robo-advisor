@@ -14,6 +14,10 @@ use crate::sign::sign;
 use crate::transport::{BASE_URL, Request, Response, Transport};
 
 const BALANCE_PATH: &str = "/api/accounts/balance";
+/// The last nonce sent by this process. Coincheck wants the nonce to increase per API key,
+/// and the app builds a new `Client` for every fetch, so the counter lives here and not in
+/// the client (two fetches in the same millisecond, or after the clock went back, still increase).
+static PROCESS_NONCE: Mutex<u64> = Mutex::new(0);
 const JPY: &str = "JPY";
 
 /// One balance valued in JPY: the currency, the value in JPY, and the amount held.
@@ -43,7 +47,7 @@ pub struct Client<T> {
     transport: T,
     credentials: Credentials,
     clock: fn() -> u64,
-    last_nonce: Mutex<u64>,
+    last_nonce: &'static Mutex<u64>,
 }
 
 impl<T: Transport> Client<T> {
@@ -52,12 +56,21 @@ impl<T: Transport> Client<T> {
             transport,
             credentials,
             clock: unix_millis,
-            last_nonce: Mutex::new(0),
+            last_nonce: &PROCESS_NONCE,
         }
     }
 
+    /// Uses a fake clock and a private nonce counter, so tests do not affect each other.
     #[cfg(test)]
     fn with_clock(mut self, clock: fn() -> u64) -> Self {
+        self.clock = clock;
+        self.last_nonce = Box::leak(Box::new(Mutex::new(0)));
+        self
+    }
+
+    /// Uses a fake clock but keeps the process-wide nonce counter.
+    #[cfg(test)]
+    fn with_shared_counter_clock(mut self, clock: fn() -> u64) -> Self {
         self.clock = clock;
         self
     }
@@ -287,6 +300,23 @@ mod tests {
         assert_eq!(first, 1_700_000_000_000);
         assert_eq!(second, first + 1);
         assert_eq!(third, second + 1);
+    }
+
+    #[test]
+    fn separate_clients_share_one_increasing_nonce_counter() {
+        let fake = FakeTransport::new(&[]);
+        let new = |clock: fn() -> u64| {
+            Client::new(&fake, Credentials::new("test-key", "test-secret"))
+                .with_shared_counter_clock(clock)
+        };
+
+        let first = new(|| 5_000_000_000_000).next_nonce();
+        let same_millisecond = new(|| 5_000_000_000_000).next_nonce();
+        let clock_went_back = new(|| 4_000_000_000_000).next_nonce();
+
+        assert_eq!(first, 5_000_000_000_000);
+        assert!(same_millisecond > first);
+        assert!(clock_went_back > same_millisecond);
     }
 
     #[test]
