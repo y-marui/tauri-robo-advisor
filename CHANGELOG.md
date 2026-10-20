@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- Records card: a product name is no longer cut off. The name box grows with the name (and shows it whole as a tooltip), and the merge choices are no longer clipped to 11rem by the table-cell rule for selects; the cause was CSS (a fixed width and `td select` max-width), not a shortening of the text.
+
 - The overall balance panel uses the same color for a category in the bars, the doughnut, and the legend: a category of a group takes the color of its group with the same fading, instead of its own position in the list. The "Current" key is a neutral swatch, since the bars have one color per category.
 - The bitFlyer balance fetch was checked against the real service with a read-only key (authentication and balances). Currencies without a yen market on Lightning are left out and reported; taking their prices from the public price page is tracked in #103.
 

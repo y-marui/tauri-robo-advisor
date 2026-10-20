@@ -43,7 +43,7 @@ export function productTools(ctx: Context, view: PortfolioView, product: Product
     const target = h(
       "select",
       { "aria-label": `${product.name}: ${t("Merge into")}` },
-      ...targets.map((p) => h("option", { value: String(p.id) }, p.name)),
+      ...targets.map((p) => h("option", { value: String(p.id), title: p.name }, p.name)),
     );
     const policy = h(
       "select",
