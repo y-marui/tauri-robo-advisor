@@ -24,6 +24,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rebalance = { path = "../crates/rebalance" }
 bitflyer = { path = "../crates/bitflyer" }
+coincheck = { path = "../crates/coincheck" }
 portfolio = { path = "../crates/portfolio" }
 suggest = { path = "../crates/suggest" }
 export = { path = "../crates/export" }

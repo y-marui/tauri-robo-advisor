@@ -494,6 +494,19 @@ export interface BitflyerHoldings {
   unpriced: string[];
 }
 
+/** What the Coincheck command returns: balances in JPY, and what could not be valued. */
+export interface CoincheckHoldings {
+  holdings: {
+    symbol: string;
+    value: string;
+    /** How much of the currency is held. */
+    amount: string;
+    /** The yen price (the ticker's last price) the value was worked out with. */
+    price?: string | null;
+  }[];
+  unpriced: string[];
+}
+
 /** The top of a table read for an import. Mirrors `TablePreview` in Rust. */
 export interface TablePreview {
   rows: string[][];

@@ -1,6 +1,6 @@
 # Specification: Import and Acquisition
 
-[specification.md](specification.md) の一部。取得方法、表の取り込み、証券会社の出力、bitFlyer の残高を扱う。
+[specification.md](specification.md) の一部。取得方法、表の取り込み、証券会社の出力、bitFlyer と Coincheck の残高を扱う。
 
 ## Acquisition Methods
 
@@ -9,6 +9,7 @@
 | 全口座共通 | 手入力（設定タブの「全レコード」で編集） | 基本の方式 |
 | 表形式の取り込み | CSV ファイル、または画面の保有一覧をコピーして貼り付けたテキスト（タブ区切り）。取り込むたびに列の対応づけ（名称・評価額・数量など）を画面で指定し、取得元ごとに保存して次回から使う。文字コードは Shift-JIS と UTF-8 を自動判別する | 実装済み（下記） |
 | bitFlyer | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。証拠金の取得は未実装 |
+| Coincheck | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。実サービスでの確認は未了 |
 | ブラウザ拡張 | ログイン済みのブラウザで資産ページを読み取り、ローカルのアプリへ渡す | 将来の選択肢。必要になった時点で設計する |
 
 証券会社ごとの専用パーサーは作らない。会社ごとに形式が違い、版によって変わり、公開された仕様もないため、列の対応づけを利用者が指定する汎用の取り込みにする。例外として、実際のページの構造を確認した**組み込みのレシピ（プリセット）**を、コードではなくデータとして出荷する（[specification-recipes.md](specification-recipes.md) の「Fetch Recipes」）。取り込んだ名称は、商品の別名として保存する。未登録の名称は、利用者が既存の商品へ割り当てるか、新しい商品として登録する。名称の自動推測はしない。
@@ -79,3 +80,18 @@
 - 多数の商品のカテゴリは、記録カードで選択して一括で設定・変更する（`SetProductsCategory { products, category | new_category }`）。`category`（既存）と `new_category`（名前。同じ編集で作る）はどちらか一方だけ。商品の一覧が空、未知の商品・カテゴリ、両方または両方なし、カテゴリ名の規則違反（空・重複・上限）は拒否し、検証のあとで反映するので一部だけ適用されることはない。新しいカテゴリの目標比率は 0、グループなし。既存カテゴリのグループは変えない。スキーマ変更なし。
 - 評価できなかった通貨（`unpriced`）と、円建てでない商品に対応づけられた通貨は、一覧で示して除外する。
 - 「保有を置き換える」を押すと（2 回のクリック）、`ReplaceHoldings` の編集で、選んだ口座の保有を、対応づけ済みの残高だけに 1 回の保存で置き換える。その口座にあった、一覧にない保有は消える。数量と価格は、残高にあれば保存する（取引所の残高は数量を持つが、価格は保存しない）。
+
+## Coincheck Balances (#125)
+
+`crates/coincheck` が `GET /api/accounts/balance` で残高を取得し、JPY 建ての保有へ変換する。`crates/bitflyer` と同じ形（`Credentials`、`Transport`、`sign`、`Client`、`Holdings`）で、共通部分の抽出はまだしない。
+
+- API キーには残高を読む権限だけを付ける。第三者の連携サービスの手順は「残高」の権限だけを許可している。公式ページは権限を画面の図でしか示さず、キー作成画面での名称は確認できていない（実サービスで確認したら、ここと画面の案内を直す）。注文・出金などの権限は不要で、クライアントは `GET` しか送らない。IP アドレスでの制限をキーに付けられるので、画面で勧める。
+- 署名は `ACCESS-NONCE + URL + 本文` の HMAC-SHA256（16 進）。URL は送るとおりの完全な URL（`https://coincheck.com/api/accounts/balance`）、`GET` の本文は空。ヘッダーは `ACCESS-KEY`、`ACCESS-NONCE`、`ACCESS-SIGNATURE`。
+- nonce はミリ秒の時刻で、直前の値より必ず大きくする（時計が戻っても重複しない）。
+- 通信は固定の `https://coincheck.com` のみ。リダイレクトは追従せず、タイムアウトと応答サイズの上限を設ける。
+- 数量は、通貨ごとの自由な数量に、注文で拘束中の数量（`<通貨>_reserved`）を足したもの（拘束中でも保有である）。貸出（`_lending` など）、借入（`_debt`）、つみたて（`_tsumitate`）は数えない（つみたてが `<通貨>` に含まれるかは公式の記載から確認できていないため、二重に数えないよう外している。実サービスで確認する）。応答が `success: false` のときはエラーにする。
+- JPY 以外の通貨は、公開 API の `GET /api/ticker?pair=<通貨>_jpy` の `last` で評価する（認証情報は送らない）。取得した価格は数量と一緒に記録する。残高 0 は除く。JPY の通貨ペアがない通貨（HTTP 400/404、または `success: false`）は、`unpriced` として一覧で返し、保有からは除く。
+- 数値は文字列のまま十進数へ変換し、浮動小数点を通さない。
+- API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `coincheck-api-key` / `coincheck-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
+- フロントエンドから呼べるコマンド: `save_coincheck_credentials`、`has_coincheck_credentials`、`delete_coincheck_credentials`、`fetch_coincheck_holdings`。
+- 画面は「Coincheck」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは bitFlyer と同じ部品（別名の `source` は `coincheck`、名前は通貨コード）で、価格の基準は公開ティッカーの最終価格だけ。

@@ -110,6 +110,41 @@ async fn open_bitflyer_price_page(
     .map_err(|e| e.to_string())?
 }
 
+// Coincheck: the same shape as bitFlyer, with prices from the public ticker only.
+#[tauri::command]
+async fn save_coincheck_credentials(api_key: String, api_secret: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::save_coincheck(&api_key, &api_secret))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn has_coincheck_credentials() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(|| secrets::load_coincheck().map(|c| c.is_some()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn delete_coincheck_credentials() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(secrets::delete_coincheck)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fetch_coincheck_holdings() -> Result<coincheck::Holdings, String> {
+    let credentials = tauri::async_runtime::spawn_blocking(secrets::load_coincheck)
+        .await
+        .map_err(|e| e.to_string())??
+        .ok_or_else(|| "No Coincheck API credentials are saved.".to_owned())?;
+    let transport = coincheck::ReqwestTransport::new().map_err(|e| e.to_string())?;
+    coincheck::Client::new(transport, credentials)
+        .holdings()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn bitflyer_client() -> Result<Client<ReqwestTransport>, String> {
     let credentials = tauri::async_runtime::spawn_blocking(secrets::load_bitflyer)
         .await
@@ -489,6 +524,10 @@ pub fn run() {
             fetch_bitflyer_holdings,
             fetch_bitflyer_holdings_with_page_prices,
             open_bitflyer_price_page,
+            save_coincheck_credentials,
+            has_coincheck_credentials,
+            delete_coincheck_credentials,
+            fetch_coincheck_holdings,
             get_portfolio,
             apply_portfolio_edit,
             get_overview,

@@ -642,6 +642,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
+name = "coincheck"
+version = "0.1.0"
+dependencies = [
+ "hmac 0.12.1",
+ "reqwest",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4346,6 +4359,7 @@ version = "0.1.0"
 dependencies = [
  "bitflyer",
  "browser",
+ "coincheck",
  "export",
  "keyring",
  "portfolio",

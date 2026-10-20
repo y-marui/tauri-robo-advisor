@@ -293,6 +293,9 @@ export const MESSAGES = {
   "Create the API key with the balance-read permission only. No trading or withdrawal permission is needed.": {
     ja: "API キーには、資産残高の取得の権限だけを付けて作成してください。取引や出金の権限は不要です。",
   },
+  "Create the API key with the permission to read balances only. No trading or withdrawal permission is needed. If you can, also restrict the key to your IP address.": {
+    ja: "API キーには、残高の取得の権限だけを付けて作成してください。取引や出金の権限は不要です。可能なら、キーの利用元を自分の IP アドレスに限ってください。",
+  },
   "Balances": { ja: "残高" },
   "Account to update": { ja: "更新する口座" },
   "Fetch balances": { ja: "残高を取得" },
