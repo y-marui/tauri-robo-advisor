@@ -15,7 +15,7 @@ mod presets;
 mod validate;
 mod valuation;
 
-pub use edit::{Edit, HoldingInput};
+pub use edit::{Edit, HoldingInput, MergeConflict};
 pub use error::{Error, Issue};
 pub use import::{ImportPlan, ImportRow, MatchedRow};
 pub use model::*;
