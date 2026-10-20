@@ -23,7 +23,7 @@ _最終更新: 2026-10-19_
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「提案」の副タブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/browser-fetch.ts` | 「ブラウザで取得」。ブラウザの選択・起動、ページと表の選択、閉じる | `src/api.ts` |
-| `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
+| `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表（とカード一覧）の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
 | `src/views/data-folder.ts` | データの保存場所のカードと、同期に関する知らせ | `src/api.ts` |
 | `src-tauri/src/data_folder.rs` | 保存先のフォルダの選択（ポインタファイル）、競合のコピーと未ダウンロードの検出、iCloud Drive のフォルダ | — |
 | `src/views/recipes.ts` | 取得レシピのカード（一覧、すべて取得、リンクの選択、反映） | `src/views/import-plan.ts` |

@@ -5,7 +5,7 @@ import type {
   BrowserInfo,
   BrowserKind,
   BrowserPage,
-  FetchedTable,
+  FetchedTables,
   BitflyerHoldings,
   Edit,
   ImportPlan,
@@ -131,8 +131,8 @@ export function browserPages(): Promise<BrowserPage[]> {
 }
 
 /** Reads the tables of a page the user has logged in to and opened. */
-export function fetchBrowserTables(page: string): Promise<FetchedTable[]> {
-  return invoke<FetchedTable[]>("fetch_browser_tables", { page });
+export function fetchBrowserTables(page: string): Promise<FetchedTables> {
+  return invoke<FetchedTables>("fetch_browser_tables", { page });
 }
 
 /** Moves a fetched table into the import, where the columns are chosen. */

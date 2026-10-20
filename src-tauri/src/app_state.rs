@@ -16,7 +16,7 @@ use serde::Serialize;
 use suggest::{AccountBalance, Overview, Request, Suggestion};
 use tabular::{ColumnMapping, Skipped, Table};
 
-use crate::browser_session::{LinkChoiceView, RecipeRead};
+use crate::browser_session::{LinkChoiceView, ReadSource, RecipeRead};
 use crate::data_folder::{self, DATA_FILE, SyncNotes};
 use crate::store;
 
@@ -684,14 +684,20 @@ impl AppState {
             runs.retain(|r| r.name != name);
             self.runs_generation.fetch_add(1, Ordering::SeqCst);
         }
-        let read = self.browser.run_recipe(
-            page,
-            &recipe.links,
-            &recipe.table_starts_with,
-            recipe.all_tables.then_some(recipe.mapping.header_rows),
-            recipe.following_tables,
-            &recipe.allowed_sites,
-        )?;
+        let source = match &recipe.cards {
+            Some(cards) => ReadSource::Cards {
+                heading: &cards.heading,
+                item_depth: cards.item_depth,
+            },
+            None => ReadSource::Table {
+                title: &recipe.table_starts_with,
+                merge: recipe.all_tables.then_some(recipe.mapping.header_rows),
+                follow: recipe.following_tables,
+            },
+        };
+        let read = self
+            .browser
+            .run_recipe(page, &recipe.links, source, &recipe.allowed_sites)?;
         let (table, references) = match read {
             RecipeRead::NeedsChoice { link, choices } => {
                 return Ok(RecipeOutcome::NeedsChoice { link, choices });

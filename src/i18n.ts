@@ -328,6 +328,8 @@ export const MESSAGES = {
   "Open the holdings page in the browser first.": { ja: "先に、ブラウザで保有一覧のページを開いてください。" },
   "Reading the page…": { ja: "ページを読み取り中…" },
   "{rows} rows × {columns} columns: {label}": { ja: "{rows} 行 × {columns} 列: {label}" },
+  "The page has more headings than the app reads, so card lists below the first ones are not offered. Choose the table with the holdings, then use it.": { ja: "このページには、アプリが読める数より多くの見出しがあるため、あとのほうのカード一覧は候補に出ません。保有が載っている表を選んで、使ってください。" },
+  "{rows} cards × {columns} lines: {label}": { ja: "カード {rows} 件 × {columns} 行: {label}" },
   "No table was found on that page.": { ja: "そのページには、表が見つかりませんでした。" },
   "Choose the table with the holdings, then use it.": { ja: "保有が載っている表を選んで、使ってください。" },
   "The browser was closed.": { ja: "ブラウザを閉じました。" },

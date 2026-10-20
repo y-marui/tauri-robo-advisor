@@ -2,7 +2,7 @@ import { clearTable, loadTableFile, loadTableText, planTableImport } from "../ap
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
-import type { ColumnMapping, PortfolioView, SkipReason, TablePreview } from "../types.ts";
+import type { CardSource, ColumnMapping, PortfolioView, SkipReason, TablePreview } from "../types.ts";
 import { browserFetch } from "./browser-fetch.ts";
 import { importPlanView } from "./import-plan.ts";
 
@@ -242,7 +242,20 @@ export function tableImportPanel(ctx: Context): Panel {
   perRecordSelect.addEventListener("change", syncControls);
 
   /** Fills the column selects from the preview and the saved mapping of the source. */
+  /** The card list that was last chosen in the browser, if the loaded rows are its cards. */
+  let chosenCards: CardSource | null = null;
+
+  /** The saved mapping of the source, if any; then, for cards, one headerless row per record. */
   function useSavedMapping(): void {
+    applySavedMapping();
+    if (chosenCards !== null) {
+      headerInput.value = "0";
+      perRecordSelect.value = "1";
+      syncControls();
+    }
+  }
+
+  function applySavedMapping(): void {
     const saved = current?.portfolio.import_mappings.find((m) => m.source === source());
     const loaded = preview;
     if (!saved || !loaded) {
@@ -335,6 +348,8 @@ export function tableImportPanel(ctx: Context): Panel {
   }
 
   async function load(read: () => Promise<TablePreview>): Promise<void> {
+    chosenCards = null;
+    tableTitleInput.disabled = false;
     info(t("Reading…"));
     try {
       showPreview(await read());
@@ -456,7 +471,8 @@ export function tableImportPanel(ctx: Context): Panel {
     const chosen = mapping();
     const account = Number(accountSelect.value);
     const title = tableTitleInput.value.trim();
-    if (!chosen || source() === "" || recipeName.value.trim() === "" || title === "" || accountSelect.value === "" || !Number.isFinite(account)) {
+    const cards = chosenCards;
+    if (!chosen || source() === "" || recipeName.value.trim() === "" || (cards === null && title === "") || accountSelect.value === "" || !Number.isFinite(account)) {
       fail(t("Choose an account and enter the recipe name and the table title first."));
       return;
     }
@@ -476,12 +492,13 @@ export function tableImportPanel(ctx: Context): Panel {
         recipe: {
           name: recipeName.value.trim(),
           links,
-          all_tables: existing?.all_tables ?? false,
-          following_tables: existing?.following_tables ?? false,
+          all_tables: cards === null ? (existing?.all_tables ?? false) : false,
+          following_tables: cards === null ? (existing?.following_tables ?? false) : false,
           start_site: existing?.start_site ?? "",
           // Only the sites the app knows (for example sbisec.co.jp); Rust refuses any other.
           allowed_sites: typedSites.length > 0 ? typedSites : (existing?.allowed_sites ?? []),
-          table_starts_with: title,
+          table_starts_with: cards === null ? title : "",
+          cards: cards === null ? null : { heading: cards.heading, item_depth: cards.item_depth },
           currency: currencySelect.value,
           account,
           mapping: {
@@ -541,7 +558,10 @@ export function tableImportPanel(ctx: Context): Panel {
     ),
     h("div", { class: "add-row" }, fileInput),
     browserFetch({
-      onTable: (loaded, label) => {
+      onTable: (loaded, label, card) => {
+        // A card list is saved by its heading and item depth; the title field only shows it.
+        chosenCards = card;
+        tableTitleInput.disabled = card !== null;
         showPreview(loaded);
         tableTitleInput.value = label;
       },

@@ -8,7 +8,7 @@ import {
 } from "../api.ts";
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
-import type { BrowserKind, BrowserPage, FetchedTable, TablePreview } from "../types.ts";
+import type { BrowserKind, BrowserPage, CardSource, FetchedTable, TablePreview } from "../types.ts";
 
 // An optional way to get a table: the app opens Chrome, Edge, or Brave with a
 // profile of its own, the user logs in and opens the holdings page by hand,
@@ -47,7 +47,7 @@ function kindLabel(kind: BrowserKind): string {
 
 interface Options {
   /** Receives the preview of the table the user chose, and the text its first cell starts with. */
-  onTable(preview: TablePreview, label: string): void;
+  onTable(preview: TablePreview, label: string, card: CardSource | null): void;
   info(text: string): void;
   fail(text: string): void;
 }
@@ -134,14 +134,15 @@ export function browserFetch(options: Options): HTMLElement {
         return;
       }
       info(t("Reading the page…"));
-      const tables: FetchedTable[] = await fetchBrowserTables(pageSelect.value);
+      const fetched = await fetchBrowserTables(pageSelect.value);
+      const tables: FetchedTable[] = fetched.tables;
       lastTables = tables;
       tableSelect.replaceChildren(
         ...tables.map((table) =>
           h(
             "option",
             { value: String(table.index) },
-            t("{rows} rows × {columns} columns: {label}", {
+            t(table.card ? "{rows} cards × {columns} lines: {label}" : "{rows} rows × {columns} columns: {label}", {
               rows: String(table.rows),
               columns: String(table.columns),
               label: table.label,
@@ -155,7 +156,9 @@ export function browserFetch(options: Options): HTMLElement {
       info(
         tables.length === 0
           ? t("No table was found on that page.")
-          : t("Choose the table with the holdings, then use it."),
+          : fetched.headings_cut
+            ? t("The page has more headings than the app reads, so card lists below the first ones are not offered. Choose the table with the holdings, then use it.")
+            : t("Choose the table with the holdings, then use it."),
       );
     });
   });
@@ -166,8 +169,8 @@ export function browserFetch(options: Options): HTMLElement {
         return;
       }
       const index = Number(tableSelect.value);
-      const label = lastTables.find((table) => table.index === index)?.label ?? "";
-      onTable(await useFetchedTable(index), label);
+      const chosen = lastTables.find((table) => table.index === index);
+      onTable(await useFetchedTable(index), chosen?.label ?? "", chosen?.card ?? null);
     });
   });
 

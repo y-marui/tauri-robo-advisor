@@ -74,7 +74,7 @@ export function recipesPanel(ctx: Context): Panel {
     return preset
       ? t(preset.description as MessageKey)
       : t("Open the page that shows the table starting with “{title}” in the browser, then fetch this recipe again.", {
-          title: recipe.table_starts_with,
+          title: recipe.cards?.heading ?? recipe.table_starts_with,
         });
   };
   const accountNameOf = (recipe: Recipe): string =>
@@ -487,7 +487,7 @@ export function recipesPanel(ctx: Context): Panel {
         remove,
       );
     }
-    const text = `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`;
+    const text = `${recipe.name} — ${recipe.links.map((l) => l.text).join(" › ") || t("(this page)")} › ${recipe.cards?.heading ?? recipe.table_starts_with} → ${accountName(recipe.account)} (${recipe.currency === "" ? t("(the product’s currency)") : recipe.currency})`;
     if (!recipe.preset) {
       return h("div", { class: "add-row" }, h("span", {}, text), fetchOne(recipe), remove);
     }
