@@ -28,6 +28,25 @@ function svg<K extends keyof SVGElementTagNameMap>(
 
 const percent = (fraction: string): string => `${fractionToPercent(fraction)}%`;
 
+/** The color class and fade of each category, the same in the bars, the doughnut, and the legend. */
+function categoryColors(view: PortfolioView, overview: Overview): Map<number, { className: string; opacity: number }> {
+  const colors = new Map<number, { className: string; opacity: number }>();
+  const entries = groupEntries(view);
+  if (entries.length === 0) {
+    overview.categories.forEach((row, index) => {
+      colors.set(row.category, { className: `swatch-${index % PALETTE_SIZE}`, opacity: 1 });
+    });
+    return colors;
+  }
+  entries.forEach((entry, index) => {
+    const className = entry.id === null ? "swatch-none" : `swatch-${index % PALETTE_SIZE}`;
+    entry.categories.forEach((category, j) => {
+      colors.set(category.id, { className, opacity: Math.max(0.45, 1 - 0.2 * j) });
+    });
+  });
+  return colors;
+}
+
 /** Target and current share of each category, as two horizontal bars. */
 function barChart(view: PortfolioView, overview: Overview): SVGElement {
   const rows = overview.categories;
@@ -42,19 +61,28 @@ function barChart(view: PortfolioView, overview: Overview): SVGElement {
     role: "img",
     "aria-label": t("Target vs current"),
   });
+  const colors = categoryColors(view, overview);
   rows.forEach((row, index) => {
     const top = index * rowHeight;
+    const color = colors.get(row.category) ?? { className: `swatch-${index % PALETTE_SIZE}`, opacity: 1 };
     const label = svg("text", { x: left, y: top + 12, class: "chart-label" });
     label.textContent = categoryName(view, row.category);
     chart.append(label);
-    const bars: [string, string, number][] = [
-      [row.target_share, "bar-target", top + 18],
-      [row.current_share, `bar-current swatch-${index % PALETTE_SIZE}`, top + 18 + barHeight + 2],
+    const bars: [string, string, number, number][] = [
+      [row.target_share, "bar-target", top + 18, 1],
+      [row.current_share, `bar-current ${color.className}`, top + 18 + barHeight + 2, color.opacity],
     ];
-    for (const [share, className, y] of bars) {
+    for (const [share, className, y, opacity] of bars) {
       const length = (Number(share) / peak) * (width - 90);
       chart.append(
-        svg("rect", { x: left, y, width: Math.max(length, 0), height: barHeight, class: className }),
+        svg("rect", {
+          x: left,
+          y,
+          width: Math.max(length, 0),
+          height: barHeight,
+          class: className,
+          "fill-opacity": opacity,
+        }),
       );
       const value = svg("text", { x: left + length + 6, y: y + barHeight - 1, class: "chart-value" });
       value.textContent = percent(share);
@@ -204,7 +232,7 @@ export function overviewPanel(_ctx: Context): Panel {
           { class: "muted key" },
           h("span", { class: "dot bar-target", "aria-hidden": "true" }),
           t("Target"),
-          h("span", { class: "dot bar-current swatch-0", "aria-hidden": "true" }),
+          h("span", { class: "dot bar-current swatch-none", "aria-hidden": "true" }),
           t("Current"),
         ),
         barChart(view, overview),
