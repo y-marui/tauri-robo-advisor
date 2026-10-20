@@ -1754,6 +1754,25 @@ fn every_login_page_is_a_plain_https_address_of_its_own_site() {
 }
 
 #[test]
+fn every_site_a_preset_reads_has_a_login_page_to_open() {
+    for preset in presets() {
+        let recipe_site = {
+            let (mut p, _, _, acc) = sample();
+            apply(
+                &mut p,
+                Edit::AddPresetRecipe {
+                    preset: preset.id.to_owned(),
+                    account: acc,
+                },
+            );
+            p.recipes[0].effective().unwrap().start_site
+        };
+        assert!(!recipe_site.is_empty(), "{}", preset.id);
+        assert!(login_url_for(&recipe_site).is_some(), "{}", preset.id);
+    }
+}
+
+#[test]
 fn a_name_becomes_a_product_with_its_alias_in_one_step_or_not_at_all() {
     let (mut p, cat, _, _) = sample();
     let revision = p.revision;

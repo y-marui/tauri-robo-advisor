@@ -31,6 +31,9 @@ export const MESSAGES = {
   },
   "Site the recipe reads (for example example.co.jp)": { ja: "レシピが読むサイト（例: example.co.jp）" },
   "Enter the site the recipe reads first.": { ja: "先に、レシピが読むサイトを入れてください。" },
+  "For recipes that read cards, open the page that shows the holdings by hand after logging in.": {
+    ja: "カードを読むレシピは、ログインしたあと、保有銘柄が見えるページを自分で開いてください。",
+  },
   "Fetch all": { ja: "すべて取得" },
   "Recipe to add": { ja: "追加するレシピ" },
   "Choose a recipe and an account first.": { ja: "先にレシピと口座を選んでください。" },

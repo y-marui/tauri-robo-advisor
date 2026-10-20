@@ -265,6 +265,10 @@ export function recipesPanel(ctx: Context): Panel {
           // Whether the login page was just opened or came back with the browser's saved tabs, the
           // person has not logged in yet: nothing is fetched for these sites.
           parts.push(t("Log in in the opened browser, then press Fetch again."));
+          // A recipe that reads cards needs the holdings page opened by hand (no menu is clicked).
+          if (wanted.some((r) => r.cards && !held.run.includes(r))) {
+            parts.push(t("For recipes that read cards, open the page that shows the holdings by hand after logging in."));
+          }
         }
         if (result.unknown.length > 0) {
           parts.push(t("No login page is known for: {sites}. Log in and open a page of the site by hand, then press Fetch again.", { sites: result.unknown.join(", ") }));

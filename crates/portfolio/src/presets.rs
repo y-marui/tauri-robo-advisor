@@ -383,7 +383,8 @@ const PRESETS: &[Preset] = &[
             heading: "保有銘柄",
             item_depth: 1,
         }),
-        login_url: "",
+        // The top page only: after logging in, the person opens the holdings page by hand.
+        login_url: "https://www.paypay-sec.co.jp/",
         currency: "",
         layout: Layout {
             source: "PayPay",

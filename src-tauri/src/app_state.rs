@@ -2388,6 +2388,23 @@ mod tests {
         }
         let error = state.open_login_pages(&sites).unwrap_err();
         assert!(error.contains("Open the browser first"), "{error}");
+
+        // Every shipped site has a login page, so a fetch with no open tab reaches the step that
+        // opens it (here: the browser is not open) and never reports an unknown site.
+        for site in portfolio::login_pages()
+            .iter()
+            .map(|(site, _)| (*site).to_owned())
+        {
+            let error = state
+                .open_login_pages(std::slice::from_ref(&site))
+                .unwrap_err();
+            assert!(error.contains("Open the browser first"), "{site}: {error}");
+        }
+        assert!(
+            portfolio::presets()
+                .iter()
+                .all(|p| portfolio::login_url_for(p.site).is_some())
+        );
     }
 
     #[test]
