@@ -1,6 +1,6 @@
 # UI Design: Settings, Import and Records
 
-[ui-design.md](ui-design.md) の一部。設定タブの各カード（bitFlyer、Coincheck、GMO コイン、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups）を扱う。
+[ui-design.md](ui-design.md) の一部。設定タブの各カード（bitFlyer、Coincheck、GMO コイン、Binance、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups）を扱う。
 
 ## bitFlyer Card
 
@@ -23,6 +23,14 @@ Coincheck カードの次に置く。上から、API キーの権限の注意（
 
 - キーは保存後に再表示せず、保存済みかどうかだけを示す。
 - 取り込みは Coincheck と同じ手順。結果の上に、価格の基準の注意を必ず出す。通常は「評価額は販売所の売値を使っています」。販売所の価格がなく取引所の最終約定価格で評価した銘柄（`basis` が `board`）があれば、その銘柄を名指しした注意を、エラーの色で足す。円のレートがない銘柄は除外として示す（#126）。
+
+## Binance Card
+
+GMO Coin カードの次に置く。上から、Binance Japan の利用者向けの注意（Binance Japan のキーがグローバル版の API で使えるのは未確認の前提であること。キーが拒否されたときは Binance のメッセージを出す）、API キーの権限の注意（読み取り専用。取引・出金などは付けない。可能なら IP アドレスを制限する）、キーとシークレットの入力と保存・削除、残高の取り込みの順。
+
+- キーは保存後に再表示せず、保存済みかどうかだけを示す。
+- 取り込みは Coincheck と同じ手順。結果の上に、価格の基準の注意を必ず出す: 「評価額は Binance の最終取引価格（取引所の板。販売所の価格ではない）を使っている」。JPY 市場がなく USDT 市場の価格に USDT/JPY を掛けた銘柄（`basis` が `board_via_usdt`）があれば、その銘柄を名指しした注意を、エラーの色で足す。換算できない銘柄は除外として示す。取得に失敗したときは、エラー文言（Binance の `code` と `msg`）の下に、上の前提の注意を再掲する（#128）。
+- 「更新先の口座」は、前回選んだ口座を既定にする。
 
 ## Table Import Card
 

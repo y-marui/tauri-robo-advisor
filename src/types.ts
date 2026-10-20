@@ -534,6 +534,21 @@ export interface GmocoinHoldings {
   unpriced: string[];
 }
 
+/** What the Binance command returns: balances in JPY, with the basis of each price. */
+export interface BinanceHoldings {
+  holdings: {
+    symbol: string;
+    value: string;
+    /** How much of the currency is held. */
+    amount: string;
+    /** The yen price the value was worked out with. */
+    price?: string | null;
+    /** "board": the JPY market's last price; "board_via_usdt": the USDT market's last price times USDT/JPY. */
+    basis?: "board" | "board_via_usdt" | null;
+  }[];
+  unpriced: string[];
+}
+
 /** The top of a table read for an import. Mirrors `TablePreview` in Rust. */
 export interface TablePreview {
   rows: string[][];

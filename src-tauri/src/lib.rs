@@ -180,6 +180,41 @@ async fn fetch_gmocoin_holdings() -> Result<gmocoin::Holdings, String> {
         .map_err(|e| e.to_string())
 }
 
+// Binance: the same shape, with prices from the public JPY/USDT markets (api.binance.com).
+#[tauri::command]
+async fn save_binance_credentials(api_key: String, api_secret: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::save_binance(&api_key, &api_secret))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn has_binance_credentials() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(|| secrets::load_binance().map(|c| c.is_some()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn delete_binance_credentials() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(secrets::delete_binance)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn fetch_binance_holdings() -> Result<binance::Holdings, String> {
+    let credentials = tauri::async_runtime::spawn_blocking(secrets::load_binance)
+        .await
+        .map_err(|e| e.to_string())??
+        .ok_or_else(|| "No Binance API credentials are saved.".to_owned())?;
+    let transport = binance::ReqwestTransport::new().map_err(|e| e.to_string())?;
+    binance::Client::new(transport, credentials)
+        .holdings()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn bitflyer_client() -> Result<Client<ReqwestTransport>, String> {
     let credentials = tauri::async_runtime::spawn_blocking(secrets::load_bitflyer)
         .await
@@ -567,6 +602,10 @@ pub fn run() {
             has_gmocoin_credentials,
             delete_gmocoin_credentials,
             fetch_gmocoin_holdings,
+            save_binance_credentials,
+            has_binance_credentials,
+            delete_binance_credentials,
+            fetch_binance_holdings,
             get_portfolio,
             apply_portfolio_edit,
             get_overview,

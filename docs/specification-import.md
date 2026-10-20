@@ -1,6 +1,6 @@
 # Specification: Import and Acquisition
 
-[specification.md](specification.md) の一部。取得方法、表の取り込み、証券会社の出力、bitFlyer・Coincheck・GMO コインの残高を扱う。
+[specification.md](specification.md) の一部。取得方法、表の取り込み、証券会社の出力、bitFlyer・Coincheck・GMO コイン・Binance の残高を扱う。
 
 ## Acquisition Methods
 
@@ -11,6 +11,7 @@
 | bitFlyer | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。証拠金の取得は未実装 |
 | Coincheck | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。実サービスでの確認は未了 |
 | GMO コイン | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。実サービスでの確認は未了 |
+| Binance | REST API。API キーは OS のキーチェーンに保存する | 残高取得は実装済み（下記）。Binance Japan のキーがグローバル版の API で使えることは未確認の前提。実サービスでの確認は未了 |
 | ブラウザ拡張 | ログイン済みのブラウザで資産ページを読み取り、ローカルのアプリへ渡す | 将来の選択肢。必要になった時点で設計する |
 
 証券会社ごとの専用パーサーは作らない。会社ごとに形式が違い、版によって変わり、公開された仕様もないため、列の対応づけを利用者が指定する汎用の取り込みにする。例外として、実際のページの構造を確認した**組み込みのレシピ（プリセット）**を、コードではなくデータとして出荷する（[specification-recipes.md](specification-recipes.md) の「Fetch Recipes」）。取り込んだ名称は、商品の別名として保存する。未登録の名称は、利用者が既存の商品へ割り当てるか、新しい商品として登録する。名称の自動推測はしない。
@@ -115,10 +116,25 @@
 - フロントエンドから呼べるコマンド: `save_gmocoin_credentials`、`has_gmocoin_credentials`、`delete_gmocoin_credentials`、`fetch_gmocoin_holdings`。
 - 画面は「GMO Coin」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは Coincheck と同じ部品（別名の `source` は `gmocoin`、名前は銘柄コード）。
 
+## Binance Balances (#128)
+
+`crates/binance` が `GET /api/v3/account` で残高を取得し、JPY 建ての保有へ変換する。`crates/gmocoin` などと同じ形（`Credentials`、`Transport`、`sign`、`Client`、`Holdings`）で、共通部分の抽出は見送った（[architecture.md](architecture.md) の Extraction Policy の Decision）。
+
+- **未確認の前提（Binance Japan）**: 対象は Binance Japan の利用者だが、Binance Japan 固有の API 文書とホストは公式には確認できていない（[research-crypto-exchanges.md](research-crypto-exchanges.md)）。利用者の見立て（Binance Japan のキーはグローバル版の API で使える）に基づいて、接続先をグローバル版の `https://api.binance.com` に固定している。ホストの設定項目は作らない。実機で最初に取得したときに、次を確認する: キーが受け入れられるか（拒否されたら Binance のエラー文言が画面に出る）、キー作成画面の権限の名前（読み取り専用にできるか）、IP 制限が必須か。確認できたら、この項と画面の注意を直す。
+- API キーは読み取り専用にする（取引・出金などの権限を付けない）。IP アドレスでの制限をキーに付けられるので、画面で勧める。クライアントは `GET` しか送らない。
+- 署名は HMAC-SHA256（16 進）。署名対象はクエリ文字列（`omitZeroBalances=true&recvWindow=5000&timestamp=<ミリ秒>`）で、結果を `signature` として末尾に付ける。キーは `X-MBX-APIKEY` ヘッダー。タイムスタンプが Binance の時計から `recvWindow`（5 秒）以上ずれると拒否される（`-1021`）。RSA・Ed25519 は新しい依存が要るため使わない。
+- 通信は固定の `https://api.binance.com` のみ。リダイレクトは追従せず、タイムアウトと応答サイズの上限を設ける。送るリクエストは署名付きの `GET /api/v3/account` と、公開の `GET /api/v3/ticker/price`（キーなし。全市場の最終価格のうち、JPY 建てと USDT 建てだけを使う）の 2 つ。円だけの残高なら価格は取らない。
+- 数量は `free + locked`（注文で拘束中の分を含む）。0 の残高は除く。エラーは `{"code": …, "msg": …}` で返るので、`code` と `msg` を長さを制限し制御文字を除いて、そのまま画面に出す（キーの拒否の原因が分かるように）。
+- 価格の基準（#128 の決定）: Binance の API には販売所のレートがないため、取引所の板の最終取引価格だけを使う。その銘柄の JPY 市場（`<銘柄>JPY`）があればその価格（`basis` は `board`）。なければ `<銘柄>USDT` の価格に `USDTJPY` を掛ける（`basis` は `board_via_usdt`）。どちらもない銘柄、または `USDTJPY` がなくて換算できない銘柄は `unpriced` として返し、保有からは除く。販売所のレートがある取引所（Coincheck・GMO コイン）の価格とは基準が違うので、画面は基準を必ず示し、USDT 経由の銘柄を名指しする。基準は保有ごとに持つ。
+- 数値は文字列のまま十進数へ変換し、浮動小数点を通さない。
+- API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `binance-api-key` / `binance-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
+- フロントエンドから呼べるコマンド: `save_binance_credentials`、`has_binance_credentials`、`delete_binance_credentials`、`fetch_binance_holdings`。
+- 画面は「Binance」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは Coincheck と同じ部品（別名の `source` は `binance`、名前は銘柄コード）。更新先の口座は共有の部品（`src/exchange-account.ts`）で、取引所ごとに最後に選んだものを既定にする。
+
 ## Remembered Account for Exchange Cards
 
-bitFlyer、Coincheck、GMO コインのカードの「更新先の口座」は、取引所ごとに最後に選んだ口座を覚え、次回（再起動後も）の初期値にする。
+bitFlyer、Coincheck、GMO コイン、Binance のカードの「更新先の口座」は、取引所ごとに最後に選んだ口座を覚え、次回（再起動後も）の初期値にする。
 
-- 表示の好みであり、保有データには入れない（スキーマ変更なし）。WebView の `localStorage` に、キー `exchange-account:<取引所>`（`bitflyer`・`coincheck`・`gmocoin`）、値は口座 ID で持つ。タブや言語の記憶と同じ方式で、Rust の保存は使わない（この PC の表示の好みだけで、データフォルダが同期されても影響しない）。保存できない環境でも動作は変わらない。
+- 表示の好みであり、保有データには入れない（スキーマ変更なし）。WebView の `localStorage` に、キー `exchange-account:<取引所>`（`bitflyer`・`coincheck`・`gmocoin`・`binance`）、値は口座 ID で持つ。タブや言語の記憶と同じ方式で、Rust の保存は使わない（この PC の表示の好みだけで、データフォルダが同期されても影響しない）。保存できない環境でも動作は変わらない。
 - 覚えた口座が今はない（削除された）ときは無視し、従来の初期値（暗号資産の保有がある口座を先頭にした並びの 1 番目）に戻る。口座の一覧が変わったときも、画面で選んでいる口座を優先し、なければ覚えた口座を使う。
 - ブラウザ取得のレシピには適用しない（口座はレシピごとに保存済み）。実装は `src/exchange-account.ts`（3 つのカードで共通）。

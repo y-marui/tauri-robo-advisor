@@ -31,11 +31,12 @@ _最終更新: 2026-10-19_
 | `src-tauri/src/data_folder.rs` | 保存先のフォルダの選択（ポインタファイル）、競合のコピーと未ダウンロードの検出、iCloud Drive のフォルダ | — |
 | `src/views/recipes.ts` | 取得レシピのカード（サイトごとの一覧、取得、口座の変更、ログインのページ、リンクの選択、反映） | `src/views/coincheck.ts` | Coincheck のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/gmocoin.ts` | GMO コインのカード。Coincheck と同じ流れで、価格の基準（販売所 / 取引所の最終価格）の注意を出す | `src/api.ts` |
+| `src/views/binance.ts` | Binance のカード。Coincheck と同じ流れで、Binance Japan の前提（未確認）と価格の基準（JPY 市場 / USDT 経由）の注意を出す | `src/api.ts`, `src/exchange-account.ts` |
 | `src/views/import-plan.ts` |
 | `src/recipe-groups.ts` | 取得レシピのカードの純粋な補助（表示名、サイトごとの分け方、ログインが要るサイトの判定） | `src/i18n.ts`, `src/types.ts` |
 | `crates/browser/src/links.rs` | リンクをたどる規則（押してよいリンク、行き先の参照、安全な文字列の受け渡し） | — |
 | `src/views/table-import.ts` | 表の取り込みのカード（ファイル・貼り付け・列の指定・保存） | `src/views/import-plan.ts` |
-| `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer・Coincheck・GMO コインと表の取り込みで共有 | `src/api.ts` |
+| `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer・Coincheck・GMO コイン・Binance と表の取り込みで共有 | `src/api.ts` |
 | `src/views/differences.ts` | 評価額が 数量 × 価格 と合わない行の文面（取り込みの確認の画面用） | `src/types.ts` |
 | `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネル、全体のバランス（グラフと提案）のパネル、不備の表示 | `src/panel.ts`, `src/fields.ts` |
 | `src/*.test.ts` | Node の組み込みテストランナーによる単体テスト（`npm test`） | — |
@@ -46,10 +47,10 @@ _最終更新: 2026-10-19_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `src-tauri/src/main.rs` | デスクトップのエントリ | `src-tauri/src/lib.rs` |
-| `src-tauri/src/lib.rs` | Tauri のセットアップ、`propose_rebalance`、ポートフォリオ（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）と bitFlyer・Coincheck・GMO コイン関連のコマンド | `tauri`, `crates/rebalance`, `crates/bitflyer`, `src-tauri/src/secrets.rs` |
+| `src-tauri/src/lib.rs` | Tauri のセットアップ、`propose_rebalance`、ポートフォリオ（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）と bitFlyer・Coincheck・GMO コイン・Binance 関連のコマンド | `tauri`, `crates/rebalance`, `crates/bitflyer`, `src-tauri/src/secrets.rs` |
 | `src-tauri/src/store.rs` | ポートフォリオ JSON の読み書き（一時ファイル → 同期 → 置き換え、権限 0600、サイズ上限） | `crates/portfolio` |
 | `src-tauri/src/app_state.rs` | メモリ上のポートフォリオ。編集を検証・保存してから反映する | `store.rs`, `crates/portfolio` |
-| `src-tauri/src/secrets.rs` | OS キーチェーンへの API キーの保存・読み出し・削除と入力検証 | `keyring`, `crates/bitflyer`, `crates/coincheck`, `crates/gmocoin` |
+| `src-tauri/src/secrets.rs` | OS キーチェーンへの API キーの保存・読み出し・削除と入力検証 | `keyring`, `crates/bitflyer`, `crates/coincheck`, `crates/gmocoin`, `crates/binance` |
 | `src-tauri/tauri.conf.json` | アプリ設定 | — |
 | `src-tauri/capabilities/default.json` | 権限定義 | — |
 
@@ -76,6 +77,12 @@ _最終更新: 2026-10-19_
 | `crates/gmocoin/src/transport.rs` | `Transport` トレイトと HTTPS 実装（固定ホスト `api.coin.z.com`・リダイレクトなし・サイズ上限） | `reqwest` |
 | `crates/gmocoin/src/model.rs` | 応答の解析と検証（銘柄・金額・`status` のエラー） | `serde_json`, `rust_decimal` |
 | `crates/gmocoin/src/sign.rs` | HMAC-SHA256 署名（時刻 + メソッド + パス + 本文） | `hmac`, `sha2` |
+| `crates/binance/src/client.rs` | `Client`：残高の取得（署名付き GET 1 回）と公開価格の取得、JPY 評価（JPY 市場、なければ USDT 市場 × USDTJPY）、価格の基準 | `transport.rs`, `model.rs`, `sign.rs` |
+| `crates/binance/src/transport.rs` | `Transport` トレイトと HTTPS 実装（固定ホスト `api.binance.com`・リダイレクトなし・サイズ上限） | `reqwest` |
+| `crates/binance/src/model.rs` | 応答の解析と検証（銘柄・金額・価格・`code` / `msg` のエラー） | `serde_json`, `rust_decimal` |
+| `crates/binance/src/sign.rs` | HMAC-SHA256 署名（クエリ文字列） | `hmac`, `sha2` |
+| `crates/binance/src/credentials.rs` | 値を表示しない認証情報の型 | — |
+| `crates/binance/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
 | `crates/gmocoin/src/credentials.rs` | 値を表示しない認証情報の型 | — |
 | `crates/gmocoin/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
 | `crates/portfolio/src/model.rs` | データ型（`Portfolio`、`Group`、`Category`、`Product`、`Account`、`Holding`、`Settings`）とスキーマのバージョン | `rust_decimal`, `serde` |
@@ -107,7 +114,7 @@ _最終更新: 2026-10-19_
 | ファイル | 役割 |
 |---|---|
 | `docs/specification.md` | 仕様の索引（状態・範囲・データフロー・制約）。詳細は次のファイル |
-| `docs/specification-import.md` | 取得方法、表の取り込み、証券会社の出力、bitFlyer・Coincheck・GMO コインの残高 |
+| `docs/specification-import.md` | 取得方法、表の取り込み、証券会社の出力、bitFlyer・Coincheck・GMO コイン・Binance の残高 |
 | `docs/specification-browser.md` | ブラウザで取得（Browser Fetch） |
 | `docs/specification-recipes.md` | 取得レシピ（リンクのたどり方、メニューのクリック、表の選び方） |
 | `docs/specification-presets.md` | 組み込みのレシピ（プリセット）、ログインのページ、結果の反映 |
