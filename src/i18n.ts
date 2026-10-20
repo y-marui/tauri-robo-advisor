@@ -342,6 +342,18 @@ export const MESSAGES = {
   "No JPY market, so these could not be valued and are left out: {names}": {
     ja: "円の市場がなく評価できないため、除外します: {names}",
   },
+  "No yen rate, so these could not be valued and are left out: {names}": {
+    ja: "円のレートがなく評価できないため、除外します: {names}",
+  },
+  "Values use GMO Coin's sales desk (hanbaijo) selling price.": {
+    ja: "評価額は、GMO コインの販売所の売値を使っています。",
+  },
+  "No sales desk price exists for these, so they use the exchange's last executed price instead: {names}": {
+    ja: "販売所の価格がない銘柄のため、取引所の最終約定価格を使っています: {names}",
+  },
+  "Create the API key with the permission to read the asset balance only. No trading, deposit or withdrawal permission is needed. If you can, also restrict the key to your IP address.": {
+    ja: "API キーには、資産残高の参照の権限だけを付けて作成してください。取引・入出金の権限は不要です。可能なら、キーの利用元を自分の IP アドレスに限ってください。",
+  },
   "Replace holdings": { ja: "保有を置き換える" },
   "Confirm replace": { ja: "置き換える" },
   "This replaces every holding of “{account}” with the linked rows above.": {

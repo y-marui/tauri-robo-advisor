@@ -519,6 +519,21 @@ export interface CoincheckHoldings {
   unpriced: string[];
 }
 
+/** What the GMO Coin command returns: balances in JPY, with the basis of each price. */
+export interface GmocoinHoldings {
+  holdings: {
+    symbol: string;
+    value: string;
+    /** How much of the currency is held. */
+    amount: string;
+    /** The yen price the value was worked out with. */
+    price?: string | null;
+    /** "sales": the sales desk's selling price; "board": the exchange's last price (no sales desk price). */
+    basis?: "sales" | "board" | null;
+  }[];
+  unpriced: string[];
+}
+
 /** The top of a table read for an import. Mirrors `TablePreview` in Rust. */
 export interface TablePreview {
   rows: string[][];

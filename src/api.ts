@@ -9,6 +9,7 @@ import type {
   FetchedTables,
   BitflyerHoldings,
   CoincheckHoldings,
+  GmocoinHoldings,
   Edit,
   ImportPlan,
   ImportRow,
@@ -124,6 +125,24 @@ export function deleteCoincheckCredentials(): Promise<void> {
 /** Fetches the Coincheck balances (read-only) and values them in JPY with the public sales rate. */
 export function fetchCoincheckHoldings(): Promise<CoincheckHoldings> {
   return invoke<CoincheckHoldings>("fetch_coincheck_holdings");
+}
+
+/** Saves the GMO Coin key in the OS keychain. It is never returned to the frontend. */
+export function saveGmocoinCredentials(apiKey: string, apiSecret: string): Promise<void> {
+  return invoke<void>("save_gmocoin_credentials", { apiKey, apiSecret });
+}
+
+export function hasGmocoinCredentials(): Promise<boolean> {
+  return invoke<boolean>("has_gmocoin_credentials");
+}
+
+export function deleteGmocoinCredentials(): Promise<void> {
+  return invoke<void>("delete_gmocoin_credentials");
+}
+
+/** Fetches the GMO Coin balances (read-only) and values them in JPY with the sales desk rate. */
+export function fetchGmocoinHoldings(): Promise<GmocoinHoldings> {
+  return invoke<GmocoinHoldings>("fetch_gmocoin_holdings");
 }
 
 /** Sends a CSV or text file's bytes to Rust, which decodes (UTF-8 or Shift-JIS) and parses them. */

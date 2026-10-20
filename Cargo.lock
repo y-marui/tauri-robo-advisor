@@ -1626,6 +1626,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "gmocoin"
+version = "0.1.0"
+dependencies = [
+ "hmac 0.12.1",
+ "reqwest",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4361,6 +4374,7 @@ dependencies = [
  "browser",
  "coincheck",
  "export",
+ "gmocoin",
  "keyring",
  "portfolio",
  "rebalance",
