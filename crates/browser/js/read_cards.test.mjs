@@ -66,6 +66,17 @@ test("the region stops at the next heading", () => {
   assert.deepEqual(run(root, "read", "Holdings"), { items: [], cut: false });
 });
 
+test("a next section wrapped around its heading is not the region", () => {
+  const root = page(new El("h2", ["Holdings"]), new El("section", [new El("h2", ["Other"]), new El("div", [card("x")])]));
+  assert.deepEqual(run(root, "read", "Holdings"), { items: [], cut: false });
+  // Cards that themselves begin with a heading cannot be told from a next section: refused (no items).
+  const titled = new El("div", [new El("div", [new El("h3", ["t"]), card("a", "1")]), card("b", "2")]);
+  assert.deepEqual(run(page(new El("h2", ["Holdings"]), titled), "read", "Holdings"), { items: [], cut: false });
+  // A heading inside a card, after its first block, is fine.
+  const later = new El("div", [new El("div", [card("a", "1"), new El("h3", ["t"])]), card("b", "2")]);
+  assert.equal(run(page(new El("h2", ["Holdings"]), later), "read", "Holdings").items.length, 2);
+});
+
 test("a single child that holds several blocks asks for a deeper item depth", () => {
   const inner = new El("div", [card("a", "1"), card("b", "2")]);
   const root = page(new El("h2", ["Holdings"]), new El("div", [inner]));

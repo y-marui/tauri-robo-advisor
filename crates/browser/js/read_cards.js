@@ -38,13 +38,18 @@
     anchor = parent;
   }
   // The region is the first block with text after it, unless a heading comes first.
+  const blocks = (e) => [...e.children].filter((c) => shown(c) && squash(textOf(c)) !== '');
+  // A block that begins with a heading (a wrapped next section) is that section, not our region.
+  const beginsWithHeading = (e) => {
+    for (let n = e; n; n = blocks(n)[0]) if (isHeading(n)) return true;
+    return false;
+  };
   let region = null;
   for (let e = anchor.nextElementSibling; e; e = e.nextElementSibling) {
-    if (isHeading(e)) break;
+    if (beginsWithHeading(e)) break;
     if (shown(e) && squash(textOf(e)) !== '') { region = e; break; }
   }
   if (!region) return { items: [], cut: false };
-  const blocks = (e) => [...e.children].filter((c) => shown(c) && squash(textOf(c)) !== '');
   const steps = Math.min(Math.max(Number(depth) || 1, 1), 3);
   let level = [region];
   for (let i = 0; i < steps; i++) level = level.flatMap(blocks);

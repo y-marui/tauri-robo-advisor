@@ -96,7 +96,7 @@ fn parse_cards(value: &Value) -> Result<Vec<Vec<String>>, Error> {
                 .collect::<Result<Vec<_>, _>>()
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if cut || rows.len() >= MAX_CARD_ITEMS {
+    if cut {
         return Err(Error::CardsCut);
     }
     if rows.is_empty() || rows.iter().all(Vec::is_empty) {
@@ -148,10 +148,13 @@ mod tests {
             parse_cards(&json!({"items": [["A"]], "cut": true})),
             Err(Error::CardsCut)
         );
+        // Exactly the limit, and not cut, is a complete page.
         let full = vec![json!(["a"]); MAX_CARD_ITEMS];
         assert_eq!(
-            parse_cards(&json!({"items": full, "cut": false})),
-            Err(Error::CardsCut)
+            parse_cards(&json!({"items": full, "cut": false}))
+                .unwrap()
+                .len(),
+            MAX_CARD_ITEMS
         );
     }
 
