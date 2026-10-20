@@ -1,7 +1,7 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::{Portfolio, ProductId};
+use crate::{Portfolio, ProductId, minor_units};
 
 /// One line of imported data: a name the source uses, and its value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -15,6 +15,10 @@ pub struct ImportRow {
     pub price: Option<Decimal>,
     #[serde(default = "one")]
     pub price_unit: u64,
+    /// When the value is an evaluation that the table showed next to a quantity and a price:
+    /// quantity x price / unit, to check the value against.
+    #[serde(default)]
+    pub computed: Option<Decimal>,
 }
 
 fn one() -> u64 {
@@ -44,6 +48,17 @@ pub struct ImportPlan {
     pub unmatched: Vec<ImportRow>,
     /// Names linked to a product whose currency differs from the values'.
     pub wrong_currency: Vec<ImportRow>,
+    /// Rows whose evaluation differs from quantity x price by more than the smallest unit of the
+    /// currency. The evaluation stays the value; the person looks before applying.
+    pub differences: Vec<ValueDifference>,
+}
+
+/// A row whose read value and computed value (quantity x price / unit) disagree.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ValueDifference {
+    pub name: String,
+    pub value: Decimal,
+    pub computed: Decimal,
 }
 
 impl Portfolio {
@@ -57,6 +72,7 @@ impl Portfolio {
             matched: Vec::new(),
             unmatched: Vec::new(),
             wrong_currency: Vec::new(),
+            differences: Vec::new(),
         };
         for row in rows {
             let name = row.name.trim();
@@ -65,6 +81,23 @@ impl Portfolio {
                     .iter()
                     .any(|a| a.source == source && a.name == name)
             });
+            // The currency of the values: the recipe's, else the linked product's, else a whole
+            // unit (the loosest check) when nothing says.
+            let unit_currency = if currency.is_empty() {
+                product.map_or("", |p| p.currency.as_str())
+            } else {
+                currency
+            };
+            if let Some(computed) = row.computed {
+                let places = minor_units(unit_currency).unwrap_or(0);
+                if (row.value - computed).abs() > Decimal::new(1, places) {
+                    plan.differences.push(ValueDifference {
+                        name: name.to_owned(),
+                        value: row.value,
+                        computed,
+                    });
+                }
+            }
             match product {
                 None => plan.unmatched.push(row.clone()),
                 Some(p) if !currency.is_empty() && p.currency != currency => {

@@ -33,6 +33,7 @@ _最終更新: 2026-10-19_
 | `crates/browser/src/links.rs` | リンクをたどる規則（押してよいリンク、行き先の参照、安全な文字列の受け渡し） | — |
 | `src/views/table-import.ts` | 表の取り込みのカード（ファイル・貼り付け・列の指定・保存） | `src/views/import-plan.ts` |
 | `src/views/import-plan.ts` | 取り込み結果の表示（対応づけ・別名の追加と解除・保有の置き換え）。bitFlyer と表の取り込みで共有 | `src/api.ts` |
+| `src/views/differences.ts` | 評価額が 数量 × 価格 と合わない行の文面（取り込みの確認の画面用） | `src/types.ts` |
 | `src/views/*.ts` | カテゴリ・商品・口座・保有・設定の各パネル、全体のバランス（グラフと提案）のパネル、不備の表示 | `src/panel.ts`, `src/fields.ts` |
 | `src/*.test.ts` | Node の組み込みテストランナーによる単体テスト（`npm test`） | — |
 | `src/styles.css` | スタイル | — |

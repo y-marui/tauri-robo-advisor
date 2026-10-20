@@ -440,15 +440,21 @@ export const MESSAGES = {
   "Starts from the top page of Rakuten Securities (after logging in): follows \"保有商品一覧-すべて\" and reads the table of all holdings (units x price per 10,000 units). Investment trusts (units x price per 10,000 units) and domestic stocks (the evaluation) in yen are covered; other kinds are left out and reported, and so are holdings in a foreign currency.": {
     ja: "ログイン後の楽天証券のホームのページから始め、「保有商品一覧-すべて」を辿って、すべての保有の表を読みます。円建ての投資信託（口数 × 1万口あたりの基準価額）と国内株式（評価額）が対象で、ほかの種別は読まずに知らせます。外貨建ても対象外です。",
   },
-  "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (evaluation and quantity).": {
-    ja: "大和コネクト証券にログインしたあと、メニューの「国内株式」の「保有銘柄一覧」（現物取引保有銘柄一覧）をクリックして開き、保有の各行を読みます（評価額と数量）。",
+  "After logging in to Daiwa Connect Securities, clicks the menu 国内株式 > 保有銘柄一覧 (the list of holdings, 現物取引保有銘柄一覧) and reads every holding row (the evaluation, with the quantity and price, which are checked against it).": {
+    ja: "大和コネクト証券にログインしたあと、メニューの「国内株式」の「保有銘柄一覧」（現物取引保有銘柄一覧）をクリックして開き、保有の各行を読みます（評価額を読み、数量と現在値は評価額との照合に使います）。",
+  },
+  "{name}: read {value}, quantity x price {computed}": {
+    ja: "{name}: 読んだ評価額 {value}、数量 × 価格 {computed}",
+  },
+  "{count} rows have an evaluation that differs from quantity x price (the evaluation is used):": {
+    ja: "{count} 行で、評価額が 数量 × 価格 と合いません（評価額を使います）:",
   },
   "After logging in to Daiwa Connect Securities, clicks the menu 資産照会 > 取引余力・預り資産 and reads the yen balance (金銭残高).": {
     ja: "大和コネクト証券にログインしたあと、メニューの「資産照会」の「取引余力・預り資産」をクリックして開き、円の残高（金銭残高）を読みます。",
   },
   "Daiwa Connect Securities: domestic stocks": { ja: "大和コネクト証券: 国内株式" },
   "Open the list of holdings (現物取引保有銘柄一覧) of Daiwa Connect Securities after logging in, then fetch: every holding row is read (evaluation and quantity).": {
-    ja: "ログイン後に、大和コネクト証券の「現物取引保有銘柄一覧」を開いてから取得します。保有の各行（評価額と数量）を読みます。",
+    ja: "ログイン後に、大和コネクト証券の「現物取引保有銘柄一覧」を開いてから取得します。保有の各行（評価額と数量・現在値）を読みます。",
   },
   "Open the login pages": { ja: "ログインのページを開く" },
   "Opened the login page of: {sites}. Log in by hand, then open the page you want.": {

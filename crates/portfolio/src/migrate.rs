@@ -21,6 +21,9 @@ fn to_current(value: &mut Value) {
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..14).contains(&v)) {
         account_kind_to_record_type(value);
     }
+    // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
+    // reads the value as before and has nothing to check, and a preset recipe follows the shipped
+    // preset. The version is raised by the caller; an older app refuses the new file.
 }
 
 /// Version 14: the type moves from the account (`kind`) to its records. The type of a record is

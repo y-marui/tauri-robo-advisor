@@ -245,6 +245,10 @@ pub enum Edit {
         #[serde(default)]
         price_part: Option<usize>,
         #[serde(default)]
+        evaluation_column: Option<usize>,
+        #[serde(default)]
+        evaluation_part: Option<usize>,
+        #[serde(default)]
         loose_numbers: bool,
         #[serde(default)]
         quantity_column: Option<usize>,
@@ -333,6 +337,7 @@ impl ImportMapping {
             || self.value_column >= MAX_COLUMN
             || self.price_column.is_some_and(|c| c >= MAX_COLUMN)
             || self.quantity_column.is_some_and(|c| c >= MAX_COLUMN)
+            || self.evaluation_column.is_some_and(|c| c >= MAX_COLUMN)
         {
             return Err(invalid("a column"));
         }
@@ -350,6 +355,7 @@ impl ImportMapping {
             self.value_part,
             self.price_part,
             self.quantity_part,
+            self.evaluation_part,
         ]
         .iter()
         .any(|p| p.is_some_and(|p| p >= MAX_PARTS))
@@ -363,6 +369,23 @@ impl ImportMapping {
             return Err(invalid("the price unit"));
         }
         self.validate_kinds()?;
+        if self.evaluation_column.is_some() {
+            if self.price_column.is_none() {
+                return Err(Error::Invalid(
+                    "an evaluation column needs a price column to be checked against".to_owned(),
+                ));
+            }
+            if self.evaluation_column == Some(self.value_column)
+                || self.evaluation_column == self.price_column
+            {
+                return Err(Error::Invalid(
+                    "the evaluation, the quantity and the price must be in different columns"
+                        .to_owned(),
+                ));
+            }
+        } else if self.evaluation_part.is_some() {
+            return Err(invalid("an evaluation part without a column"));
+        }
         // The name and the value may share a column number only when they are in
         // different rows of the record.
         if self.name_column == self.value_column && self.name_row == self.value_row {
@@ -1354,6 +1377,8 @@ impl Portfolio {
                 name_part,
                 value_part,
                 price_part,
+                evaluation_column,
+                evaluation_part,
                 loose_numbers,
                 quantity_column,
                 quantity_part,
@@ -1374,6 +1399,8 @@ impl Portfolio {
                     name_part,
                     value_part,
                     price_part,
+                    evaluation_column,
+                    evaluation_part,
                     loose_numbers,
                     quantity_column,
                     quantity_part,

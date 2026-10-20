@@ -17,6 +17,8 @@ fn mapping(name: usize, value: usize, header_rows: usize) -> ColumnMapping {
         name_part: None,
         value_part: None,
         price_part: None,
+        evaluation: None,
+        evaluation_part: None,
         loose_numbers: false,
         quantity: None,
         quantity_part: None,
@@ -437,6 +439,8 @@ fn a_cell_with_several_values_is_read_by_part() {
         name_part: Some(1),
         value_part: Some(0),
         price_part: Some(0),
+        evaluation: None,
+        evaluation_part: None,
         loose_numbers: true,
         ..mapping(0, 1, 1)
     };
@@ -701,8 +705,12 @@ fn each_kind_is_read_by_its_own_rule() {
     assert_eq!(stock.name, "Beta Corp");
     assert_eq!(stock.value, dec!(25100));
     assert_eq!(stock.quantity, Some(dec!(100)));
-    assert_eq!(stock.price, None);
+    // The price of a stock is per share: it is kept, and quantity x price only checks the
+    // evaluation (25,000 against the 25,100 the page shows; the evaluation stays the value).
+    assert_eq!(stock.price, Some(dec!(250)));
     assert_eq!(stock.price_unit, 1);
+    assert_eq!(stock.computed, Some(dec!(25000)));
+    assert_eq!(fund.computed, None);
 }
 
 #[test]
@@ -794,4 +802,124 @@ fn a_kind_cell_is_matched_with_its_whitespace_folded() {
     let result = extract(&table, &mapping);
     assert_eq!(result.skipped, vec![]);
     assert_eq!(result.rows[0].value, dec!(25100));
+}
+
+#[test]
+fn an_evaluation_next_to_a_quantity_and_a_price_is_the_value_and_the_product_is_a_check() {
+    let table: Vec<Vec<String>> = [
+        ["Alpha", "10株", "1,250円", "12,500円"],
+        ["Beta", "3株", "2,100円", "6,000円"],
+        ["Gamma", "5株", "", "700円"],
+    ]
+    .iter()
+    .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
+    .collect();
+    let m = ColumnMapping {
+        price: Some(2),
+        evaluation: Some(3),
+        loose_numbers: true,
+        ..mapping(0, 1, 0)
+    };
+    let got = extract(&table, &m);
+    assert!(got.skipped.is_empty());
+    let rows: Vec<_> = got
+        .rows
+        .iter()
+        .map(|r| (r.value, r.quantity, r.price, r.computed))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            (
+                dec!(12500),
+                Some(dec!(10)),
+                Some(dec!(1250)),
+                Some(dec!(12500))
+            ),
+            // The evaluation is kept even though it differs from 3 x 2,100.
+            (
+                dec!(6000),
+                Some(dec!(3)),
+                Some(dec!(2100)),
+                Some(dec!(6300))
+            ),
+            // No price: nothing to check against.
+            (dec!(700), Some(dec!(5)), None, None),
+        ]
+    );
+}
+
+#[test]
+fn a_price_unit_applies_to_the_check() {
+    let table = vec![vec![
+        "Fund".to_owned(),
+        "5,000".to_owned(),
+        "12,000".to_owned(),
+        "6,000".to_owned(),
+    ]];
+    let m = ColumnMapping {
+        price: Some(2),
+        price_unit: 10_000,
+        evaluation: Some(3),
+        ..mapping(0, 1, 0)
+    };
+    let got = extract(&table, &m);
+    assert_eq!(got.rows[0].value, dec!(6000));
+    assert_eq!(got.rows[0].computed, Some(dec!(6000)));
+    assert_eq!(got.rows[0].price_unit, 10_000);
+}
+
+#[test]
+fn an_evaluation_kind_rule_with_a_price_column_records_the_price_and_checks() {
+    let table: Vec<Vec<String>> = [
+        ["Stock", "Alpha", "10", "125", "1,250"],
+        ["Fund", "Beta", "5,000", "12,000", "9"],
+    ]
+    .iter()
+    .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
+    .collect();
+    let m = ColumnMapping {
+        price: Some(3),
+        kind_column: Some(0),
+        kind_rules: vec![
+            KindRule {
+                kind: "Stock".to_owned(),
+                read: KindRead::Evaluation {
+                    column: 4,
+                    part: None,
+                },
+            },
+            KindRule {
+                kind: "Fund".to_owned(),
+                read: KindRead::QuantityTimesPrice { price_unit: 10_000 },
+            },
+        ],
+        ..mapping(1, 2, 0)
+    };
+    let got = extract(&table, &m);
+    assert_eq!(got.rows[0].value, dec!(1250));
+    assert_eq!(got.rows[0].price, Some(dec!(125)));
+    assert_eq!(got.rows[0].price_unit, 1);
+    assert_eq!(got.rows[0].computed, Some(dec!(1250)));
+    // A fund is not an evaluation: its value is the product, and there is nothing to check.
+    assert_eq!(got.rows[1].value, dec!(6000));
+    assert_eq!(got.rows[1].computed, None);
+}
+
+#[test]
+fn a_row_too_short_for_the_price_is_read_without_the_check() {
+    let table = vec![vec![
+        "Alpha".to_owned(),
+        "10".to_owned(),
+        "".to_owned(),
+        "500".to_owned(),
+    ]];
+    let m = ColumnMapping {
+        price: Some(9),
+        evaluation: Some(3),
+        ..mapping(0, 1, 0)
+    };
+    let got = extract(&table, &m);
+    assert_eq!(got.rows[0].value, dec!(500));
+    assert_eq!(got.rows[0].computed, None);
 }

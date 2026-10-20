@@ -43,6 +43,13 @@ pub struct ColumnMapping {
     pub value_part: Option<usize>,
     #[serde(default)]
     pub price_part: Option<usize>,
+    /// An evaluation column (and part) read next to the quantity (`value`) and the price: the
+    /// evaluation is then the value, and quantity x price / `price_unit` is only a check
+    /// (`Extracted::computed`). Needs `price`.
+    #[serde(default)]
+    pub evaluation: Option<usize>,
+    #[serde(default)]
+    pub evaluation_part: Option<usize>,
     /// Read the first number in a cell that has other text around it ("123.45US$",
     /// "150.25（10/15）"). Off: the cell must be only a number.
     #[serde(default)]
@@ -79,7 +86,8 @@ pub enum KindRead {
     /// The value is quantity (the `value` column) x price (the `price` column) / `price_unit`.
     QuantityTimesPrice { price_unit: u64 },
     /// The value is read from this column (and part); the `value` column is then the quantity,
-    /// which is recorded next to it, and no price is kept.
+    /// which is recorded next to it. With a `price` column, the price is recorded too (per
+    /// unit) and quantity x price checks the value.
     Evaluation {
         column: usize,
         #[serde(default)]
@@ -92,7 +100,8 @@ impl ColumnMapping {
     fn price_unit_of(&self, rule: Option<KindRead>) -> u64 {
         match rule {
             Some(KindRead::QuantityTimesPrice { price_unit }) => price_unit.max(1),
-            _ => self.price_unit.max(1),
+            Some(KindRead::Evaluation { .. }) => 1,
+            None => self.price_unit.max(1),
         }
     }
 }
@@ -109,6 +118,10 @@ pub struct Extracted {
     pub price: Option<Decimal>,
     /// The unit the price is quoted per (1 when there is no price).
     pub price_unit: u64,
+    /// When the value is an evaluation that the table shows next to a quantity and a price:
+    /// quantity x price / `price_unit`, to check the value against. `None` when it cannot be
+    /// worked out (a part is missing or not a number).
+    pub computed: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -213,16 +226,19 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 }
             }
         };
-        let (price_column, unit, evaluation) = match rule {
-            None => (mapping.price, unit, None),
+        let (unit, evaluation) = match rule {
+            None => (
+                unit,
+                mapping
+                    .evaluation
+                    .map(|column| (column, mapping.evaluation_part)),
+            ),
             Some(KindRead::QuantityTimesPrice { price_unit }) => {
-                (mapping.price, Decimal::from(price_unit.max(1)), None)
+                (Decimal::from(price_unit.max(1)), None)
             }
-            Some(KindRead::Evaluation { column, part }) => {
-                (None, Decimal::ONE, Some((column, part)))
-            }
+            Some(KindRead::Evaluation { column, part }) => (Decimal::ONE, Some((column, part))),
         };
-        // An evaluation rule reads the value from its own cell; `first` is then the quantity.
+        // An evaluation is read from its own cell; `first` is then the quantity.
         let evaluation = match evaluation {
             None => None,
             Some((column, part)) => match value_cells.get(column) {
@@ -234,16 +250,17 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 }
             },
         };
-        let second = match price_column {
+        // The price cell. When the value is an evaluation the price is only a check, so a row that
+        // is too short to have it is read without one.
+        let second = match mapping.price.map(|column| value_cells.get(column)) {
             None => None,
-            Some(column) => match value_cells.get(column) {
-                Some(cell) => Some(cell),
-                None => {
-                    skip(&mut skipped, SkipReason::MissingColumn);
-                    start = record + 1;
-                    continue;
-                }
-            },
+            Some(Some(cell)) => Some(cell),
+            Some(None) if evaluation.is_some() => None,
+            Some(None) => {
+                skip(&mut skipped, SkipReason::MissingColumn);
+                start = record + 1;
+                continue;
+            }
         };
         let name = clean(&pick(name, mapping.name_part, true));
         if name.is_empty() {
@@ -261,6 +278,11 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
             }
         };
         let recordable = |n: Decimal| (n >= Decimal::ZERO && n <= MAX_VALUE).then_some(n);
+        let product = |quantity: Decimal, price: Decimal| {
+            quantity
+                .checked_mul(price)
+                .and_then(|v| v.checked_div(unit))
+        };
         // What is kept next to the value: quantity and price, or only a recorded quantity.
         let (quantity, price) = match &second {
             None if evaluation.is_some() => (read(&first).and_then(recordable), None),
@@ -277,26 +299,23 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 read(price).and_then(recordable),
             ),
         };
-        let value = match second {
-            None => match &evaluation {
-                Some(text) => read(text),
-                None => read(&first),
-            },
-            Some(price) => match (read(&first), read(&price)) {
-                (Some(quantity), Some(price)) => {
-                    // An overflowing product is out of range, not a number.
-                    match quantity
-                        .checked_mul(price)
-                        .and_then(|v| v.checked_div(unit))
-                    {
-                        Some(value) => Some(value),
-                        None => {
-                            skip(&mut skipped, SkipReason::OutOfRange);
-                            start = record + 1;
-                            continue;
-                        }
+        let mut computed = None;
+        let value = match (&evaluation, &second) {
+            (Some(text), _) => {
+                computed = quantity.zip(price).and_then(|(q, p)| product(q, p));
+                read(text)
+            }
+            (None, None) => read(&first),
+            (None, Some(price)) => match (read(&first), read(price)) {
+                // An overflowing product is out of range, not a number.
+                (Some(quantity), Some(price)) => match product(quantity, price) {
+                    Some(value) => Some(value),
+                    None => {
+                        skip(&mut skipped, SkipReason::OutOfRange);
+                        start = record + 1;
+                        continue;
                     }
-                }
+                },
                 _ => None,
             },
         };
@@ -319,6 +338,7 @@ pub fn extract(table: &[Vec<String>], mapping: &ColumnMapping) -> Extraction {
                 } else {
                     1
                 },
+                computed,
             }),
         }
     }

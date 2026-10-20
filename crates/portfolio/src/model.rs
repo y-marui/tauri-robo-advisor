@@ -24,9 +24,12 @@ use serde::{Deserialize, Serialize};
 /// the user's own types in `custom_types`; `Account::kind` was dropped: an older app would read every
 /// record as untyped and write the old kind back, so it refuses). An older file is converted on
 /// load (see `migrate`).
+/// Version 15 added the evaluation column of a mapping (`evaluation_column`, `evaluation_part`: an
+/// older app would read the value as quantity x price and skip the check against the page's
+/// evaluation, so it refuses). Records that were saved before keep working as they are.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 14;
+pub const SCHEMA_VERSION: u32 = 15;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -198,7 +201,8 @@ pub struct ImportMapping {
     pub name_column: usize,
     /// The value column, or the quantity column when `price_column` is set.
     pub value_column: usize,
-    /// When set, the value is quantity x price / `price_unit`.
+    /// When set, the value is quantity x price / `price_unit` (or, with `evaluation_column`, the
+    /// evaluation, which quantity x price checks).
     #[serde(default)]
     pub price_column: Option<usize>,
     #[serde(default = "one")]
@@ -220,6 +224,13 @@ pub struct ImportMapping {
     pub value_part: Option<usize>,
     #[serde(default)]
     pub price_part: Option<usize>,
+    /// An evaluation column (and part) read next to the quantity (the value column) and the price:
+    /// the evaluation is then the value of the record, and quantity x price only checks it (a
+    /// difference is shown on the confirmation screen). Needs `price_column`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation_column: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation_part: Option<usize>,
     /// Read the first number of a cell that has other text around it ("123.45US$").
     #[serde(default)]
     pub loose_numbers: bool,
@@ -256,7 +267,8 @@ pub enum KindRead {
     /// The value is quantity (the value column) x price (the price column) / `price_unit`.
     QuantityTimesPrice { price_unit: u64 },
     /// The value is read from this column (and part of its cell); the value column is then the
-    /// quantity, which is recorded next to it, and no price is kept.
+    /// quantity, which is recorded next to it. With a price column in the mapping, the price is
+    /// recorded as well (per unit) and quantity x price checks the value.
     Evaluation {
         column: usize,
         #[serde(default)]
@@ -355,6 +367,8 @@ impl Default for ImportMapping {
             name_part: None,
             value_part: None,
             price_part: None,
+            evaluation_column: None,
+            evaluation_part: None,
             loose_numbers: false,
             quantity_column: None,
             quantity_part: None,

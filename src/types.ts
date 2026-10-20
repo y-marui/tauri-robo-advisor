@@ -75,6 +75,9 @@ export interface ImportMapping {
   name_part?: number | null;
   value_part?: number | null;
   price_part?: number | null;
+  /** An evaluation column read next to the quantity and the price; quantity x price checks it. */
+  evaluation_column?: number | null;
+  evaluation_part?: number | null;
   /** Read the first number of a cell that has other text around it ("123.45US$"). */
   loose_numbers?: boolean;
   /** A quantity column to record next to an evaluation column. */
@@ -453,6 +456,15 @@ export interface ImportPlan {
   matched: MatchedRow[];
   unmatched: ImportRow[];
   wrong_currency: ImportRow[];
+  /** Rows whose evaluation differs from quantity x price by more than the smallest currency unit. */
+  differences: ValueDifference[];
+}
+
+/** A row whose read value and computed value (quantity x price / unit) disagree. */
+export interface ValueDifference {
+  name: string;
+  value: string;
+  computed: string;
 }
 
 /** What the bitFlyer command returns: balances in JPY, and what could not be valued. */
