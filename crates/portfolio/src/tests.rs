@@ -708,6 +708,8 @@ fn import_mappings_are_saved_per_source_and_replaced() {
         quantity_column: None,
         quantity_part: None,
         max_records: None,
+        kind_column: None,
+        kind_rules: Vec::new(),
     };
 
     apply(&mut p, set(" SBI ", 0, 5));
@@ -756,6 +758,8 @@ fn import_mappings_reject_bad_columns_and_leave_the_portfolio_unchanged() {
         quantity_column: None,
         quantity_part: None,
         max_records: None,
+        kind_column: None,
+        kind_rules: Vec::new(),
     };
 
     for edit in [
@@ -800,6 +804,8 @@ fn a_two_row_record_may_keep_the_name_and_the_value_in_one_column() {
             quantity_column: None,
             quantity_part: None,
             max_records: None,
+            kind_column: None,
+            kind_rules: Vec::new(),
         },
     );
 
@@ -840,6 +846,8 @@ fn mapping_for(source: &str) -> ImportMapping {
         quantity_column: None,
         quantity_part: None,
         max_records: None,
+        kind_column: None,
+        kind_rules: Vec::new(),
     }
 }
 
@@ -1036,6 +1044,8 @@ fn a_file_with_duplicate_or_invalid_recipes_and_mappings_is_not_valid() {
             quantity_column: None,
             quantity_part: None,
             max_records: None,
+            kind_column: None,
+            kind_rules: Vec::new(),
         },
     );
     mappings.validate_integrity().unwrap();
@@ -1131,6 +1141,8 @@ fn set_mapping(m: ImportMapping) -> Edit {
         quantity_column: None,
         quantity_part: None,
         max_records: None,
+        kind_column: m.kind_column,
+        kind_rules: m.kind_rules,
     }
 }
 
@@ -1371,7 +1383,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 12);
+    assert_eq!(SCHEMA_VERSION, 13);
 }
 
 #[test]
@@ -2195,4 +2207,133 @@ fn a_file_of_the_previous_schema_without_cards_still_loads() {
     let old: Portfolio = serde_json::from_value(value).unwrap();
     old.validate_integrity().unwrap();
     assert_eq!(old.recipes[0].cards, None);
+}
+
+fn kind_mapping() -> ImportMapping {
+    ImportMapping {
+        price_column: Some(3),
+        kind_column: Some(0),
+        kind_rules: vec![
+            KindRule {
+                kind: "Fund".to_owned(),
+                read: KindRead::QuantityTimesPrice { price_unit: 10_000 },
+            },
+            KindRule {
+                kind: "Stock".to_owned(),
+                read: KindRead::Evaluation {
+                    column: 4,
+                    part: Some(0),
+                },
+            },
+        ],
+        ..mapping_for("Mixed")
+    }
+}
+
+#[test]
+fn kind_rules_are_validated_like_the_rest_of_a_mapping() {
+    let mut p = Portfolio::default();
+    assert!(p.apply(set_mapping(kind_mapping())).is_ok());
+    assert_eq!(p.import_mappings[0].kind_rules.len(), 2);
+
+    let refused = |change: &dyn Fn(&mut ImportMapping)| {
+        let mut m = kind_mapping();
+        change(&mut m);
+        Portfolio::default().apply(set_mapping(m)).is_err()
+    };
+    assert!(
+        refused(&|m| m.kind_column = None),
+        "rules without a kind column"
+    );
+    assert!(
+        refused(&|m| m.kind_rules.clear()),
+        "a kind column without rules"
+    );
+    assert!(
+        refused(&|m| m.kind_rules[1].kind = " Fund ".to_owned()),
+        "a kind twice (after the spaces are tidied)"
+    );
+    assert!(
+        refused(&|m| m.kind_rules[0].kind = "  ".to_owned()),
+        "an empty kind"
+    );
+    assert!(
+        refused(&|m| m.kind_column = Some(5000)),
+        "the kind column out of range"
+    );
+    assert!(
+        refused(&|m| m.kind_rules[1].read = KindRead::Evaluation {
+            column: 5000,
+            part: None
+        }),
+        "the evaluation column out of range"
+    );
+    assert!(
+        refused(&|m| m.kind_rules[1].read = KindRead::Evaluation {
+            column: 4,
+            part: Some(500)
+        }),
+        "the part out of range"
+    );
+    assert!(
+        refused(&|m| m.kind_rules[0].read = KindRead::QuantityTimesPrice { price_unit: 0 }),
+        "a price unit of 0"
+    );
+    assert!(
+        refused(&|m| m.price_column = None),
+        "a rule that multiplies by the price without a price column"
+    );
+}
+
+#[test]
+fn kind_rules_survive_the_file_and_older_files_have_none() {
+    let mut p = Portfolio::default();
+    p.apply(set_mapping(kind_mapping())).unwrap();
+    let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+    assert_eq!(back, p);
+
+    let old: ImportMapping = serde_json::from_str(
+        r#"{"source":"SBI","name_column":0,"value_column":1,"header_rows":1}"#,
+    )
+    .unwrap();
+    assert_eq!(old.kind_column, None);
+    assert!(old.kind_rules.is_empty());
+    // A mapping without kinds is written as before (the older file format is unchanged).
+    assert!(!serde_json::to_string(&old).unwrap().contains("kind"));
+}
+
+#[test]
+fn the_rakuten_preset_reads_trusts_and_stocks_by_kind_and_a_reference_keeps_none() {
+    let (mut p, _, _, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddPresetRecipe {
+            preset: "rakuten-all".to_owned(),
+            account: acc,
+        },
+    );
+    let stored = &p.recipes[0];
+    assert_eq!(stored.mapping.kind_column, None);
+    assert!(stored.mapping.kind_rules.is_empty());
+
+    let effective = stored.effective().unwrap();
+    assert_eq!(effective.mapping.kind_column, Some(0));
+    let reads: Vec<KindRead> = effective
+        .mapping
+        .kind_rules
+        .iter()
+        .map(|r| r.read)
+        .collect();
+    assert_eq!(
+        reads,
+        vec![
+            KindRead::QuantityTimesPrice { price_unit: 10_000 },
+            KindRead::Evaluation {
+                column: 6,
+                part: Some(0)
+            }
+        ]
+    );
+    // The effective recipe passes the same validation as a recipe the user writes.
+    effective.mapping.clone().validated().unwrap();
 }

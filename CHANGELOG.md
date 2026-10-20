@@ -10,7 +10,13 @@
 
 - An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
 
+### Added
+
+- A mapping can read the rows of a mixed table by kind (#88): `kind_column` names a cell of the name row, and `kind_rules` give each kind either quantity x price / unit (the unit per rule) or the value of a chosen column (the quantity is recorded, no price is kept). A row whose kind matches no rule is left out and reported as "kind not in the rules" (`unknown_kind`). A mapping without them is read as before. Schema version 13; an older app refuses such a file because it would ignore the rules and misvalue some rows.
+
 ### Changed
+
+- The Rakuten preset `rakuten-all` reads investment trusts (units x price per 10,000 units) and domestic stocks (the evaluation) by the kind cell, and reports rows of any other kind instead of valuing them wrongly. Stocks are covered by tests with made-up pages only; the kind labels are not checked against a real page.
 
 - `make deploy` and `make dmg` sign the app (and the DMG) with a `Developer ID Application` certificate from the keychain when one exists (`TEAM_ID` / `DEVELOPER_NAME` / `SIGN_IDENTITY`, see `.env.example`), so macOS keeps the app's permissions across deploys (#73). With no certificate the app is signed ad-hoc with a message. The signature is verified after the build. New `make bundle-app`.
 

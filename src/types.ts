@@ -80,6 +80,14 @@ export interface ImportMapping {
   quantity_part?: number | null;
   /** Read at most this many records from the top. */
   max_records?: number | null;
+  /** A cell of the name row that says the kind of a holding, and how each kind is read. */
+  kind_column?: number | null;
+  kind_rules?: KindRule[];
+}
+
+export interface KindRule {
+  kind: string;
+  read: { type: "quantity_times_price"; price_unit: number } | { type: "evaluation"; column: number; part?: number | null };
 }
 
 /** One link of a recipe, by its visible text. */
@@ -256,6 +264,8 @@ export type Edit =
       quantity_column?: number | null;
       quantity_part?: number | null;
       max_records?: number | null;
+      kind_column?: number | null;
+      kind_rules?: KindRule[];
     }
   | { type: "remove_import_mapping"; source: string }
   | { type: "set_recipe"; recipe: Recipe }
@@ -439,7 +449,7 @@ export interface ColumnMapping {
   quantity_part?: number | null;
 }
 
-export type SkipReason = "missing_column" | "no_name" | "not_a_number" | "out_of_range";
+export type SkipReason = "missing_column" | "no_name" | "not_a_number" | "out_of_range" | "unknown_kind";
 
 export interface Skipped {
   /** The row's position in the table, counted from 1. */

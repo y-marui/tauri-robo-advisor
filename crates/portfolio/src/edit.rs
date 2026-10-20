@@ -5,8 +5,8 @@ use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, AccountKind, Alias, CardSource, Category, CategoryId, Error, FetchLink,
-    Group, GroupId, Holding, ImportMapping, Portfolio, Product, ProductId, ProductTargeting,
-    Recipe,
+    Group, GroupId, Holding, ImportMapping, KindRead, KindRule, Portfolio, Product, ProductId,
+    ProductTargeting, Recipe,
 };
 
 /// One user action. The frontend sends the intent and Rust validates it, assigns
@@ -156,6 +156,10 @@ pub enum Edit {
         quantity_part: Option<usize>,
         #[serde(default)]
         max_records: Option<usize>,
+        #[serde(default)]
+        kind_column: Option<usize>,
+        #[serde(default)]
+        kind_rules: Vec<KindRule>,
     },
     RemoveImportMapping {
         source: String,
@@ -222,7 +226,7 @@ fn one_row() -> usize {
 
 impl ImportMapping {
     /// Checks the columns and rows and trims the source name.
-    pub(crate) fn validated(self) -> Result<Self, Error> {
+    pub(crate) fn validated(mut self) -> Result<Self, Error> {
         let source = name(&self.source, "import source")?;
         let invalid = |what: &str| Error::Invalid(format!("{what} is out of range"));
         if self.name_column >= MAX_COLUMN
@@ -258,6 +262,7 @@ impl ImportMapping {
         if !(1..=MAX_PRICE_UNIT).contains(&self.price_unit) {
             return Err(invalid("the price unit"));
         }
+        self.validate_kinds()?;
         // The name and the value may share a column number only when they are in
         // different rows of the record.
         if self.name_column == self.value_column && self.name_row == self.value_row {
@@ -271,6 +276,65 @@ impl ImportMapping {
             ));
         }
         Ok(Self { source, ..self })
+    }
+}
+
+/// How many kind rules a mapping can have.
+const MAX_KIND_RULES: usize = 10;
+/// The longest kind text.
+const MAX_KIND_CHARS: usize = 100;
+
+impl ImportMapping {
+    /// Checks the kind column and rules: both or neither, no kind twice, columns in range, and a
+    /// price column for a rule that multiplies by it.
+    fn validate_kinds(&mut self) -> Result<(), Error> {
+        let invalid = |what: &str| Error::Invalid(what.to_owned());
+        match (self.kind_column, self.kind_rules.is_empty()) {
+            (None, true) => return Ok(()),
+            (None, false) => return Err(invalid("the kind rules need a kind column")),
+            (Some(_), true) => return Err(invalid("a kind column needs at least one kind rule")),
+            (Some(column), false) if column >= MAX_COLUMN => {
+                return Err(invalid("the kind column is out of range"));
+            }
+            _ => {}
+        }
+        if self.kind_rules.len() > MAX_KIND_RULES {
+            return Err(invalid("too many kind rules"));
+        }
+        let mut seen: Vec<String> = Vec::new();
+        for rule in &mut self.kind_rules {
+            // Compared the way a cell is: line breaks and runs of spaces are one space.
+            let kind = rule.kind.split_whitespace().collect::<Vec<_>>().join(" ");
+            if kind.is_empty() || kind.chars().count() > MAX_KIND_CHARS {
+                return Err(invalid("a kind must be 1 to 100 characters"));
+            }
+            if seen.contains(&kind) {
+                return Err(invalid("a kind is listed twice"));
+            }
+            seen.push(kind.clone());
+            rule.kind = kind;
+            match rule.read {
+                KindRead::QuantityTimesPrice { price_unit } => {
+                    if !(1..=MAX_PRICE_UNIT).contains(&price_unit) {
+                        return Err(invalid("the price unit is out of range"));
+                    }
+                    if self.price_column.is_none() {
+                        return Err(invalid(
+                            "a rule that multiplies by the price needs a price column",
+                        ));
+                    }
+                }
+                KindRead::Evaluation { column, part } => {
+                    if column >= MAX_COLUMN {
+                        return Err(invalid("the evaluation column is out of range"));
+                    }
+                    if part.is_some_and(|p| p >= MAX_PARTS) {
+                        return Err(invalid("a part number is out of range"));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -943,6 +1007,8 @@ impl Portfolio {
                 quantity_column,
                 quantity_part,
                 max_records,
+                kind_column,
+                kind_rules,
             } => {
                 let mapping = ImportMapping {
                     source,
@@ -961,6 +1027,8 @@ impl Portfolio {
                     quantity_column,
                     quantity_part,
                     max_records,
+                    kind_column,
+                    kind_rules,
                 }
                 .validated()?;
                 match self

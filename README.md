@@ -49,6 +49,21 @@ The app is a scaffold, so there is nothing to operate yet. Development commands:
 | `make build` | Build the app without bundling |
 | `make all` | Lint and test |
 
+## Supported Sources
+
+Built-in presets read the holdings tables of a logged-in browser page (you log in yourself). "Verified" means that the page structure was checked against the real page by the owner; it is not a guarantee, because a page change can break a preset.
+
+| Source | Reads | Status |
+|---|---|---|
+| SBI Securities | Domestic stocks, investment trusts | Verified |
+| Monex Securities | Investment trusts | Verified |
+| Rakuten Securities | Investment trusts in yen | Verified. Domestic stocks are read by the kind column (#88); they are covered by tests with made-up pages only, and the kind labels are not checked against a real page |
+| Daiwa Connect Securities | Domestic stocks, cash (yen) | Verified for the stock list; the cash page is not recorded as verified |
+| bitFlyer | Balances through the REST API (read-only key in the OS keychain) | Covered by tests with a fake transport; no record of a check against the real service |
+| PayPay Securities | Manual entry (the holdings are shown as cards, which the table reader cannot read yet; see #76) | Not supported |
+
+Other sources: import a CSV or pasted table with your own column mapping, or enter holdings by hand.
+
 ## Design Principles
 
 - No external runtime dependencies (no Python, Selenium, or separate browser install).

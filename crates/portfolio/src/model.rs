@@ -17,9 +17,12 @@ use serde::{Deserialize, Serialize};
 /// of categories (`groups`, and the `group` of a category: an older app would drop the grouping on
 /// its next save, so it refuses). Version 12 added the card source of a recipe (`cards`:
 /// an older app would read a recipe that reads cards as an empty ordinary recipe, so it refuses).
+/// Version 13 added the kind column and kind rules of a mapping (`kind_column`, `kind_rules`: an
+/// older app would ignore them and read every row of a mixed table the same way, misvaluing some, so
+/// it refuses).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 12;
+pub const SCHEMA_VERSION: u32 = 13;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -210,6 +213,35 @@ pub struct ImportMapping {
     /// lists several figures of which only the first is wanted (a cash balance above the totals).
     #[serde(default)]
     pub max_records: Option<usize>,
+    /// A cell of the name row that says what kind of holding a row is (a table, or a card, that
+    /// lists stocks and funds together), and how each kind is read. A row of any other kind is
+    /// left out and reported. `None` and no rules: every row is read the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind_column: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kind_rules: Vec<KindRule>,
+}
+
+/// How the rows of one kind are read (see `ImportMapping::kind_column`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KindRule {
+    /// The text of the kind cell, compared whole (line breaks and runs of spaces as one space).
+    pub kind: String,
+    pub read: KindRead,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum KindRead {
+    /// The value is quantity (the value column) x price (the price column) / `price_unit`.
+    QuantityTimesPrice { price_unit: u64 },
+    /// The value is read from this column (and part of its cell); the value column is then the
+    /// quantity, which is recorded next to it, and no price is kept.
+    Evaluation {
+        column: usize,
+        #[serde(default)]
+        part: Option<usize>,
+    },
 }
 
 /// One link to follow, by its visible text. `reference` says which of several
@@ -307,6 +339,8 @@ impl Default for ImportMapping {
             quantity_column: None,
             quantity_part: None,
             max_records: None,
+            kind_column: None,
+            kind_rules: Vec::new(),
         }
     }
 }

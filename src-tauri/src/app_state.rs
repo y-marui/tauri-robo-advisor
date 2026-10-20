@@ -230,11 +230,27 @@ fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
         quantity: mapping.quantity_column,
         quantity_part: mapping.quantity_part,
         max_records: mapping.max_records,
+        kind_column: mapping.kind_column,
+        kind_rules: mapping
+            .kind_rules
+            .iter()
+            .map(|rule| tabular::KindRule {
+                kind: rule.kind.clone(),
+                read: match rule.read {
+                    portfolio::KindRead::QuantityTimesPrice { price_unit } => {
+                        tabular::KindRead::QuantityTimesPrice { price_unit }
+                    }
+                    portfolio::KindRead::Evaluation { column, part } => {
+                        tabular::KindRead::Evaluation { column, part }
+                    }
+                },
+            })
+            .collect(),
     }
 }
 
 /// The rows of an extraction as import rows. The price unit comes with a price only.
-fn import_rows(extraction: &tabular::Extraction, price_unit: u64) -> Vec<ImportRow> {
+fn import_rows(extraction: &tabular::Extraction) -> Vec<ImportRow> {
     extraction
         .rows
         .iter()
@@ -243,11 +259,7 @@ fn import_rows(extraction: &tabular::Extraction, price_unit: u64) -> Vec<ImportR
             value: r.value,
             quantity: r.quantity,
             price: r.price,
-            price_unit: if r.price.is_some() {
-                price_unit.max(1)
-            } else {
-                1
-            },
+            price_unit: r.price_unit,
         })
         .collect()
 }
@@ -563,7 +575,7 @@ impl AppState {
                 .ok_or_else(|| "No table is loaded.".to_owned())?;
             tabular::extract(&table.rows, mapping)
         };
-        let rows = import_rows(&extraction, mapping.price_unit);
+        let rows = import_rows(&extraction);
         let plan = self.plan_import(source, currency, &rows)?;
         Ok(TableImportPlan {
             plan,
@@ -707,7 +719,7 @@ impl AppState {
         }
 
         let extraction = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
-        let rows = import_rows(&extraction, recipe.mapping.price_unit);
+        let rows = import_rows(&extraction);
         let run = StoredRun {
             recipe: recipe.clone(),
             name: recipe.name.clone(),
@@ -1130,6 +1142,8 @@ mod tests {
             quantity: None,
             quantity_part: None,
             max_records: None,
+            kind_column: None,
+            kind_rules: Vec::new(),
         };
         let result = state.plan_table_import("Test", "JPY", &mapping).unwrap();
 
@@ -1524,6 +1538,8 @@ mod tests {
                         quantity_column: None,
                         quantity_part: None,
                         max_records: None,
+                        kind_column: None,
+                        kind_rules: Vec::new(),
                     },
                 },
             })
@@ -1595,6 +1611,8 @@ mod tests {
                 quantity_column: None,
                 quantity_part: None,
                 max_records: None,
+                kind_column: None,
+                kind_rules: Vec::new(),
             },
         }
     }
@@ -2254,8 +2272,12 @@ mod tests {
         };
         let holdings = vec![
             heading,
-            holding("Fund", "Alpha Fund", "5,000 口", "6,000 円\n+100 円"),
-            holding("Fund", "Beta Fund", "1,500 口", "3,000 円\n-50 円"),
+            holding("投資信託", "Alpha Fund", "5,000 口", "6,000 円\n+100 円"),
+            holding("投資信託", "Beta Fund", "1,500 口", "3,000 円\n-50 円"),
+            // A stock: its price is per share, so the value is the evaluation, not units x price.
+            holding("国内株式", "Gamma Corp", "100 株", "1,250 円\n+10 円"),
+            // A kind that no rule names is left out and reported.
+            holding("Other kind", "Delta Note", "1", "9 円"),
             row(&[""]),
         ];
         let page = browser::PageTables {
@@ -2274,9 +2296,15 @@ mod tests {
         );
         let result = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
 
-        // Every holding is read, whatever its kind; the empty row at the end is dropped when the
-        // table is made.
-        assert_eq!(result.skipped, vec![]);
+        // A row of a kind with no rule is reported (row 5: the heading is row 1); the empty row at
+        // the end is dropped when the table is made.
+        assert_eq!(
+            result.skipped,
+            vec![tabular::Skipped {
+                row: 5,
+                reason: tabular::SkipReason::UnknownKind
+            }]
+        );
         let got: Vec<(String, String, String)> = result
             .rows
             .iter()
@@ -2297,6 +2325,7 @@ mod tests {
                     "5000".to_owned()
                 ),
                 ("Beta Fund".to_owned(), "1800".to_owned(), "1500".to_owned()),
+                ("Gamma Corp".to_owned(), "1250".to_owned(), "100".to_owned()),
             ]
         );
     }

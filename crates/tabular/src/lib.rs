@@ -18,7 +18,9 @@ use serde::Serialize;
 
 pub use decode::{Encoding, decode};
 pub use error::Error;
-pub use mapping::{ColumnMapping, Extracted, Extraction, SkipReason, Skipped, extract};
+pub use mapping::{
+    ColumnMapping, Extracted, Extraction, KindRead, KindRule, SkipReason, Skipped, extract,
+};
 pub use parse::{Delimiter, parse};
 
 /// The largest input accepted, in bytes.

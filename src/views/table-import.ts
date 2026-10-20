@@ -24,6 +24,8 @@ function skipLabel(reason: SkipReason): string {
       return t("no name");
     case "not_a_number":
       return t("not a number");
+    case "unknown_kind":
+      return t("kind not in the rules");
     case "out_of_range":
       return t("negative or too large");
   }
@@ -381,6 +383,7 @@ export function tableImportPanel(ctx: Context): Panel {
       fail(t("Enter a source name and choose the columns first."));
       return;
     }
+    const kept = current?.portfolio.import_mappings.find((m) => m.source === source());
     void ctx.apply({
       type: "set_import_mapping",
       source: source(),
@@ -399,7 +402,9 @@ export function tableImportPanel(ctx: Context): Panel {
       quantity_column: chosen.quantity,
       quantity_part: chosen.quantity_part,
       // Not shown in this form: kept from the mapping that is being saved over.
-      max_records: current?.portfolio.import_mappings.find((m) => m.source === source())?.max_records ?? null,
+      max_records: kept?.max_records ?? null,
+      kind_column: kept?.kind_column ?? null,
+      kind_rules: kept?.kind_rules ?? [],
     });
   });
 
@@ -497,6 +502,8 @@ export function tableImportPanel(ctx: Context): Panel {
             quantity_part: chosen.quantity_part,
             // Not shown in this form: kept from the recipe that is being saved over.
             max_records: existing?.mapping.max_records ?? null,
+            kind_column: existing?.mapping.kind_column ?? null,
+            kind_rules: existing?.mapping.kind_rules ?? [],
           },
         },
       })

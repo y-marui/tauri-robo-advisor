@@ -21,6 +21,8 @@ fn mapping(name: usize, value: usize, header_rows: usize) -> ColumnMapping {
         quantity: None,
         quantity_part: None,
         max_records: None,
+        kind_column: None,
+        kind_rules: Vec::new(),
     }
 }
 
@@ -643,4 +645,153 @@ fn card_rows_with_different_line_counts_are_read_and_the_bad_ones_are_reported()
             }
         ]
     );
+}
+
+/// A made-up table that lists funds and stocks together: kind, name, units, price, evaluation.
+fn kinds_table() -> Vec<Vec<String>> {
+    grid(&[
+        &["Kind", "Name", "Units", "Price", "Value"],
+        &[
+            "Fund",
+            "Alpha Fund",
+            "20,000口",
+            "15,000円",
+            "30,000円\n+500円",
+        ],
+        &["Stock", "Beta Corp", "100株", "250円", "25,100円\n-40円"],
+        &["Bond", "Gamma Note", "1口", "1円", "1円"],
+        &["Fund", "Delta Fund", "10,000口", "n/a", "9,000円"],
+    ])
+}
+
+fn kinds_mapping() -> ColumnMapping {
+    ColumnMapping {
+        price: Some(3),
+        header_rows: 1,
+        loose_numbers: true,
+        kind_column: Some(0),
+        kind_rules: vec![
+            KindRule {
+                kind: "Fund".to_owned(),
+                read: KindRead::QuantityTimesPrice { price_unit: 10_000 },
+            },
+            KindRule {
+                kind: "Stock".to_owned(),
+                read: KindRead::Evaluation {
+                    column: 4,
+                    part: Some(0),
+                },
+            },
+        ],
+        ..mapping(1, 2, 1)
+    }
+}
+
+#[test]
+fn each_kind_is_read_by_its_own_rule() {
+    let result = extract(&kinds_table(), &kinds_mapping());
+    assert_eq!(result.rows.len(), 2);
+    let fund = &result.rows[0];
+    assert_eq!(fund.name, "Alpha Fund");
+    assert_eq!(fund.value, dec!(30000));
+    assert_eq!(fund.quantity, Some(dec!(20000)));
+    assert_eq!(fund.price, Some(dec!(15000)));
+    assert_eq!(fund.price_unit, 10_000);
+    let stock = &result.rows[1];
+    assert_eq!(stock.name, "Beta Corp");
+    assert_eq!(stock.value, dec!(25100));
+    assert_eq!(stock.quantity, Some(dec!(100)));
+    assert_eq!(stock.price, None);
+    assert_eq!(stock.price_unit, 1);
+}
+
+#[test]
+fn a_kind_without_a_rule_is_skipped_and_reported() {
+    let result = extract(&kinds_table(), &kinds_mapping());
+    // The bond row (row 4) has no rule; the last fund row has a price that is not a number.
+    assert_eq!(
+        result.skipped,
+        vec![
+            Skipped {
+                row: 4,
+                reason: SkipReason::UnknownKind
+            },
+            Skipped {
+                row: 5,
+                reason: SkipReason::NotANumber
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_row_too_short_for_the_kind_or_evaluation_column_is_missing_a_column() {
+    let table = grid(&[&["Stock", "Beta Corp", "100株", "250円"], &[]]);
+    let mapping = ColumnMapping {
+        header_rows: 0,
+        ..kinds_mapping()
+    };
+    let result = extract(&table, &mapping);
+    assert!(result.rows.is_empty());
+    assert!(
+        result
+            .skipped
+            .iter()
+            .all(|s| s.reason == SkipReason::MissingColumn)
+    );
+    assert_eq!(result.skipped.len(), 2);
+}
+
+#[test]
+fn without_a_kind_column_every_row_is_read_the_same_way() {
+    let plain = ColumnMapping {
+        price: Some(3),
+        price_unit: 10_000,
+        header_rows: 1,
+        loose_numbers: true,
+        ..mapping(1, 2, 1)
+    };
+    let result = extract(&kinds_table(), &plain);
+    // The kind column is not looked at: the bond and the stock are read as funds.
+    assert_eq!(result.rows.len(), 3);
+    assert_eq!(result.rows[1].value, dec!(2.5));
+    assert!(result.rows.iter().all(|r| r.price_unit == 10_000));
+}
+
+#[test]
+fn kind_rules_load_from_json_and_older_mappings_have_none() {
+    let json = r#"{"name":1,"value":2,"price":3,"kind_column":0,"kind_rules":[
+        {"kind":"Fund","read":{"type":"quantity_times_price","price_unit":10000}},
+        {"kind":"Stock","read":{"type":"evaluation","column":4}}]}"#;
+    let loaded: ColumnMapping = serde_json::from_str(json).unwrap();
+    assert_eq!(loaded.kind_column, Some(0));
+    assert_eq!(
+        loaded.kind_rules[1].read,
+        KindRead::Evaluation {
+            column: 4,
+            part: None
+        }
+    );
+    let old: ColumnMapping = serde_json::from_str(r#"{"name":0,"value":1}"#).unwrap();
+    assert_eq!(old.kind_column, None);
+    assert!(old.kind_rules.is_empty());
+}
+
+#[test]
+fn a_kind_cell_is_matched_with_its_whitespace_folded() {
+    let table = grid(&[&["Stock\n  Fund", "Beta Corp", "100", "250", "25,100"]]);
+    let mapping = ColumnMapping {
+        header_rows: 0,
+        kind_rules: vec![KindRule {
+            kind: "Stock Fund".to_owned(),
+            read: KindRead::Evaluation {
+                column: 4,
+                part: None,
+            },
+        }],
+        ..kinds_mapping()
+    };
+    let result = extract(&table, &mapping);
+    assert_eq!(result.skipped, vec![]);
+    assert_eq!(result.rows[0].value, dec!(25100));
 }
