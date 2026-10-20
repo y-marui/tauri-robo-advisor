@@ -1,5 +1,5 @@
 import { h } from "../dom.ts";
-import { amountField, checkboxField, deleteButton, selectField, textField } from "../fields.ts";
+import { amountField, checkboxField, deleteButton, orderButtons, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { AccountKind } from "../types.ts";
@@ -61,14 +61,11 @@ export function accountsPanel(ctx: Context): Panel {
         );
 
         // The order of the accounts is the order everywhere (the tabs, the tables, the choices).
-        const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
-        const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
-        up.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: true }));
-        down.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: false }));
-        // At an end there is nothing to move: the button is off (a move there would only save for nothing).
-        up.disabled = position === 0;
-        down.disabled = position === view.portfolio.accounts.length - 1;
-        const order = h("span", { class: "order" }, up, down);
+        const order = orderButtons(ctx, position, view.portfolio.accounts.length, (up) => ({
+          type: "move_account",
+          id,
+          up,
+        }));
 
         return h(
           "tr",

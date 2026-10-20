@@ -1,5 +1,5 @@
 import { h } from "../dom.ts";
-import { deleteButton, textField } from "../fields.ts";
+import { deleteButton, orderButtons, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Category, PortfolioView } from "../types.ts";
@@ -43,7 +43,7 @@ export function groupsPanel(ctx: Context): Panel {
     "Groups",
     (view) => view.portfolio.groups.map((g) => g.id).join(","),
     (view, bind) => {
-      const rows = view.portfolio.groups.map((group) => {
+      const rows = view.portfolio.groups.map((group, position) => {
         const id = group.id;
         return h(
           "tr",
@@ -59,7 +59,12 @@ export function groupsPanel(ctx: Context): Panel {
               edit: (text) => ({ type: "rename_group", id, name: text }),
             }),
           ),
-          h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_group", id }))),
+          h(
+            "td",
+            {},
+            orderButtons(ctx, position, view.portfolio.groups.length, (up) => ({ type: "move_group", id, up })),
+            deleteButton(() => void ctx.apply({ type: "remove_group", id })),
+          ),
         );
       });
 

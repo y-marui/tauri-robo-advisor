@@ -340,6 +340,9 @@ export const MESSAGES = {
   "Log in to your brokerage in that browser, open the holdings page, then fetch the tables.": {
     ja: "そのブラウザで証券会社にログインし、保有一覧のページを開いてから、表を取得してください。",
   },
+  "Log in to your brokerage in that browser, then fetch the recipes.": {
+    ja: "そのブラウザで証券会社にログインしてから、レシピを取得してください。",
+  },
   "No web page is open in the browser yet.": { ja: "ブラウザには、まだウェブページが開かれていません。" },
   "Open the holdings page in the browser first.": { ja: "先に、ブラウザで保有一覧のページを開いてください。" },
   "Reading the page…": { ja: "ページを読み取り中…" },

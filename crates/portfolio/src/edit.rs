@@ -43,6 +43,12 @@ pub enum Edit {
         name: String,
     },
     /// Removes a group; its categories stay and become ungrouped.
+    /// Moves a group one place up or down in the list (the order of the groups on the screens and
+    /// in the charts). At the end of the list nothing changes.
+    MoveGroup {
+        id: GroupId,
+        up: bool,
+    },
     RemoveGroup {
         id: GroupId,
     },
@@ -63,6 +69,12 @@ pub enum Edit {
     },
     RemoveCategory {
         id: CategoryId,
+    },
+    /// Moves a category one place up or down in the list (the order of the categories on the
+    /// screens and in the charts). At the end of the list nothing changes.
+    MoveCategory {
+        id: CategoryId,
+        up: bool,
     },
     AddProduct {
         name: String,
@@ -670,6 +682,14 @@ impl Portfolio {
                     group.name = new_name;
                 }
             }
+            Edit::MoveGroup { id, up } => {
+                self.group(id)?;
+                swap_with_neighbor(&mut self.groups, |g| g.id == id, up);
+            }
+            Edit::MoveCategory { id, up } => {
+                self.category(id)?;
+                swap_with_neighbor(&mut self.categories, |c| c.id == id, up);
+            }
             Edit::RemoveGroup { id } => {
                 self.group(id)?;
                 self.groups.retain(|g| g.id != id);
@@ -966,15 +986,7 @@ impl Portfolio {
             }
             Edit::MoveAccount { id, up } => {
                 self.account(id)?;
-                let index = self.accounts.iter().position(|a| a.id == id).unwrap_or(0);
-                let other = if up {
-                    index.checked_sub(1)
-                } else {
-                    Some(index + 1)
-                };
-                if let Some(other) = other.filter(|o| *o < self.accounts.len()) {
-                    self.accounts.swap(index, other);
-                }
+                swap_with_neighbor(&mut self.accounts, |a| a.id == id, up);
             }
             Edit::RemoveAccount { id } => {
                 self.account(id)?;
@@ -1382,5 +1394,21 @@ impl Portfolio {
             ));
         }
         Ok(())
+    }
+}
+
+/// Swaps the first item matching `is` with its neighbor above (`up`) or below; at an end of the
+/// list nothing changes.
+fn swap_with_neighbor<T>(list: &mut [T], is: impl Fn(&T) -> bool, up: bool) {
+    let Some(index) = list.iter().position(is) else {
+        return;
+    };
+    let other = if up {
+        index.checked_sub(1)
+    } else {
+        Some(index + 1)
+    };
+    if let Some(other) = other.filter(|o| *o < list.len()) {
+        list.swap(index, other);
     }
 }
