@@ -70,6 +70,7 @@ _最終更新: 2026-10-19_
 | `crates/suggest/src/types.rs`, `error.rs` | `Mode`、`Request`、`Suggestion`、`Note`、`Error` | `portfolio` |
 | `crates/browser/src/detect.rs` | Chrome・Edge・Brave のインストール先の検出（OS ごとの標準の場所） | — |
 | `crates/browser/src/launch.rs` | 専用プロファイルでの起動と、`DevToolsActivePort` の読み取り。動作中のブラウザは再利用する | — |
+| `crates/browser/src/cards.rs`, `crates/browser/js/read_cards.js` | 見出しの下のカードを行の組として読む固定の読み取り専用スクリプトと、返り値の検査・上限（Node のテストは `read_cards.test.mjs`） | — |
 | `crates/browser/src/cdp.rs` | DevTools プロトコルの最小のクライアント（ページ一覧、接続、読み取り専用のスクリプト実行、終了） | `tungstenite` |
 | `crates/tabular/src/decode.rs` | バイト列の文字コード判別（UTF-8 か Shift-JIS）。バイナリは拒否する | `encoding_rs` |
 | `crates/tabular/src/parse.rs` | CSV・タブ区切りの解析（引用符、サイズの上限） | — |

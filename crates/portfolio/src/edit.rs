@@ -4,8 +4,9 @@ use serde::Deserialize;
 use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
-    Account, AccountId, AccountKind, Alias, Category, CategoryId, Error, FetchLink, Group, GroupId,
-    Holding, ImportMapping, Portfolio, Product, ProductId, ProductTargeting, Recipe,
+    Account, AccountId, AccountKind, Alias, CardSource, Category, CategoryId, Error, FetchLink,
+    Group, GroupId, Holding, ImportMapping, Portfolio, Product, ProductId, ProductTargeting,
+    Recipe,
 };
 
 /// One user action. The frontend sends the intent and Rust validates it, assigns
@@ -427,10 +428,33 @@ impl Recipe {
         if clicks != 0 && (clicks != links.len() || self.allowed_sites.is_empty()) {
             return Err(Error::Invalid("a menu link is not acceptable".to_owned()));
         }
+        let cards = match self.cards {
+            Some(source) => {
+                let heading = source.heading.trim().to_owned();
+                if !self.table_starts_with.trim().is_empty()
+                    || self.all_tables
+                    || self.following_tables
+                    || heading.is_empty()
+                    || heading.chars().count() > MAX_LINK_TEXT_CHARS
+                    || heading.chars().any(char::is_control)
+                    || !(1..=3).contains(&source.item_depth)
+                {
+                    return Err(Error::Invalid(
+                        "the card source is not acceptable".to_owned(),
+                    ));
+                }
+                Some(Box::new(CardSource {
+                    heading,
+                    item_depth: source.item_depth,
+                }))
+            }
+            None => None,
+        };
         let table_starts_with = self.table_starts_with.trim().to_owned();
-        if table_starts_with.is_empty()
-            || table_starts_with.chars().count() > MAX_LINK_TEXT_CHARS
-            || table_starts_with.chars().any(char::is_control)
+        if cards.is_none()
+            && (table_starts_with.is_empty()
+                || table_starts_with.chars().count() > MAX_LINK_TEXT_CHARS
+                || table_starts_with.chars().any(char::is_control))
         {
             return Err(Error::Invalid(
                 "the table title is not acceptable".to_owned(),
@@ -443,6 +467,7 @@ impl Recipe {
             name: recipe_name,
             links,
             table_starts_with,
+            cards,
             allowed_sites,
             start_site,
             // Empty: the currency of each product the rows are linked to.
@@ -982,6 +1007,7 @@ impl Portfolio {
                     r.preset.is_none()
                         && r.account == account
                         && r.table_starts_with == recipe.table_starts_with
+                        && r.cards == recipe.cards
                         && r.mapping.source == recipe.mapping.source
                         && r.links
                             .iter()

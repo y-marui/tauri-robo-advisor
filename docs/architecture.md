@@ -30,7 +30,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 | `src-tauri/src/` | Rust 側。Tauri のセットアップとコマンド（薄い境界層） |
 | `crates/rebalance/` | リバランス計算。Tauri に依存しない純粋な Rust の crate（Cargo ワークスペースのメンバー） |
 | `crates/bitflyer/` | bitFlyer の読み取り専用 API クライアント。署名・残高取得・JPY 評価。Tauri に依存しない |
-| `crates/browser/` | Chrome・Edge・Brave の検出、専用プロファイルでの起動、DevTools プロトコル（localhost の WebSocket）での読み取り。ログインは利用者が手で行い、このクレートは認証情報に触れない。Tauri に依存しない。読む表は、ほかの表を含まない表と、中の表がどれも深い入れ子を持たない外側の表の 2 つの組（`PageTables`）で返し、どちらを使うかは書き出しに合うかで決まる（葉の表を先に探す。ほかの入れ子の表は、ページの配置用なので読まない） |
+| `crates/browser/` | Chrome・Edge・Brave の検出、専用プロファイルでの起動、DevTools プロトコル（localhost の WebSocket）での読み取り。ログインは利用者が手で行い、このクレートは認証情報に触れない。Tauri に依存しない。読む表は、ほかの表を含まない表と、中の表がどれも深い入れ子を持たない外側の表の 2 つの組（`PageTables`）で返し、どちらを使うかは書き出しに合うかで決まる（葉の表を先に探す。ほかの入れ子の表は、ページの配置用なので読まない）。表のないページ向けに、見出しの下のカード（同じ形のブロックの繰り返し）も、固定の読み取り専用スクリプト（`js/read_cards.js`）で行の組にして返し、以降は表と同じ流れに載せる（#76。仕様は `docs/specification.md`） |
 | `crates/tabular/` | CSV・貼り付けテキストの読み取り（UTF-8 / Shift-JIS）と、名前・評価額の列の選択。証券会社ごとのコードは持たない。Tauri に依存しない |
 | `crates/export/` | フルレコードのエクスポート（CSV・JSON・README の内容を作る）。Tauri に依存しない |
 | `crates/suggest/` | 4 つの提案モードの計算（水位配分、丸め、口座の制約）。`portfolio` に依存し、Tauri には依存しない |

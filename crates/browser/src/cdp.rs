@@ -587,7 +587,7 @@ impl Cdp {
         Ok(id)
     }
 
-    fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
+    pub(crate) fn evaluate(&mut self, session: &str, expression: &str) -> Result<Value, Error> {
         // A context that was destroyed by a navigation is made again, once. A mark left in the
         // old world is gone with it, which is what a new document means.
         let result = match self.evaluate_in_world(session, expression) {
