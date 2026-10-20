@@ -1,5 +1,5 @@
 import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
-import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
+import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, siteIsOpen, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -23,12 +23,7 @@ const NEW_ACCOUNT = "new";
 
 export function recipesPanel(ctx: Context): Panel {
   const list = h("div", { class: "recipe-list" });
-  const pageSelect = h("select", { "aria-label": t("Page") });
   const runButton = h("button", { type: "button" }, t("Fetch all"));
-  // The page to read is chosen here only for recipes that name no site.
-  const pageRow = h("div", { class: "add-row" }, h("span", { class: "note" }, t("Page to read for recipes that name no site:")), pageSelect);
-  // The list is read when the select is opened (there is no refresh button).
-  pageSelect.addEventListener("focus", () => void refreshPages());
   const message = h("p", { class: "note", role: "status" });
   const attention = h("div", { class: "recipe-attention" });
   const results = h("div", { class: "recipe-results", "aria-live": "polite" });
@@ -162,28 +157,15 @@ export function recipesPanel(ctx: Context): Panel {
     message.textContent = text;
   };
 
-  async function refreshPages(): Promise<void> {
-    let pages: BrowserPage[] = [];
-    try {
-      pages = await browserPages();
-    } catch {
-      // The browser is not open yet.
-    }
-    pageSelect.replaceChildren(
-      ...pages.map((p) => h("option", { value: p.id }, `${p.host} — ${p.title || t("(no title)")}`)),
-    );
-  }
-
   // The dedicated browser, started here as in "Fetch in browser" (same part, same remembered choice).
   const browser = browserControls({
     info,
     fail,
-    onOpened: async () => {
-      await refreshPages();
+    onOpened: () => {
       info(t("Log in to your brokerage in that browser, then fetch the recipes."));
     },
     compact: true,
-    onClosed: () => void refreshPages(),
+    onClosed: () => undefined,
   });
 
   /** Runs one recipe; returns a note for the user when it needs attention. */
@@ -249,22 +231,20 @@ export function recipesPanel(ctx: Context): Panel {
       return [];
     });
     /**
-     * The tabs a recipe may read, in the order to try: the open pages of its own site (the one
-     * chosen on the screen first), or the one chosen on the screen when it has no site. A site
-     * whose pages cannot be reached by a link can have several pages open at once (a list of
-     * holdings and a page of cash balances): the recipe reads the tab that has its table.
+     * The tabs a recipe may read: the open pages of its own site. A site whose pages cannot be
+     * reached by a link can have several pages open at once (a list of holdings and a page of
+     * cash balances): the recipe reads the tab that has its table.
      */
     const pagesFor = (recipe: Recipe): string[] => {
-      if (recipe.start_site) {
-        const site = recipe.start_site;
-        const within = (p: BrowserPage): boolean => p.host === site || p.host.endsWith(`.${site}`);
-        const chosen = open.find((p) => p.id === pageSelect.value && within(p));
-        const rest = open.filter((p) => within(p) && p !== chosen);
-        return [...(chosen ? [chosen] : []), ...rest].map((p) => p.id);
-      }
-      return pageSelect.value === "" ? [] : [pageSelect.value];
+      const site = recipe.start_site ?? "";
+      return open.filter((p) => siteIsOpen(site, [p.host])).map((p) => p.id);
     };
-    let wanted = view.recipes.filter((r) => !only || only.includes(r.name));
+    // A recipe with no site (stored by an older version) cannot be fetched: it has to be removed.
+    let wanted = view.recipes.filter((r) => (!only || only.includes(r.name)) && (r.start_site ?? "") !== "");
+    if (wanted.length === 0) {
+      info("");
+      return;
+    }
     // A site with no open page is not fetched: its login page is opened (the browser too, if
     // needed) and the person logs in by hand and presses Fetch again. The other sites go on.
     const toLogIn = sitesToLogIn(
@@ -278,7 +258,6 @@ export function recipesPanel(ctx: Context): Panel {
           return;
         }
         const result = await openLoginPages(toLogIn);
-        await refreshPages();
         open = await browserPages().catch(() => open);
         const parts: string[] = [];
         const held = recipesAfterLogin(wanted, toLogIn, result.unknown);
@@ -301,13 +280,7 @@ export function recipesPanel(ctx: Context): Panel {
         return;
       }
     }
-    if (wanted.every((r) => !r.start_site) && pageSelect.value === "") {
-      fail(t("Open the browser, log in, and open a page of the site first."));
-      return;
-    }
     const mine = ++sequence;
-    // The tabs are fixed for the whole batch: the selection cannot change under it.
-    pageSelect.disabled = true;
     // Whatever is on screen is out of date from now on, and must not be applied or redrawn.
     refresh++;
     if (applyButton) {
@@ -412,7 +385,6 @@ export function recipesPanel(ctx: Context): Panel {
       }
     } finally {
       runButton.disabled = false;
-      pageSelect.disabled = false;
     }
   }
 
@@ -493,6 +465,7 @@ export function recipesPanel(ctx: Context): Panel {
   /** A button that fetches just this recipe (the others keep what they already read). */
   function fetchOne(recipe: Recipe): HTMLElement {
     const button = h("button", { type: "button", title: t("Fetch this recipe") }, t("Fetch"));
+    button.disabled = (recipe.start_site ?? "") === "";
     button.addEventListener("click", () => void runAll([recipe.name]));
     return button;
   }
@@ -503,14 +476,12 @@ export function recipesPanel(ctx: Context): Panel {
         h("p", { class: "note" }, t("No recipes yet. Add a built-in recipe below, or fetch a table once by hand in “Import a table” and use “Save as a recipe”.")),
       );
       runButton.disabled = true;
-      pageRow.hidden = true;
       list.append(addForm);
       return;
     }
     runButton.disabled = false;
     const groups = groupBySite(view.recipes, presets);
     const fetchAll = h("div", { class: "recipe-fetch-all" }, runButton);
-    pageRow.hidden = !groups.some((g) => g.site === "");
     list.replaceChildren(
       fetchAll,
       ...groups.map((group) => {
@@ -520,8 +491,11 @@ export function recipesPanel(ctx: Context): Panel {
           "div",
           { class: "recipe-group" },
           group.site === ""
-            ? h("h3", {}, t("Other pages"))
+            ? h("h3", {}, t("No site"))
             : h("div", { class: "recipe-group-head" }, h("h3", {}, group.title), siteButton),
+          group.site === ""
+            ? h("p", { class: "note" }, t("These recipes name no site (an older version saved them), so they cannot be fetched. Delete them and save them again with a site."))
+            : null,
           ...group.recipes.map((recipe) => recipeRow(view, recipe)),
         );
       }),
@@ -607,13 +581,11 @@ export function recipesPanel(ctx: Context): Panel {
     list,
     h("h3", { class: "browser-heading" }, t("Browser settings")),
     browser.el,
-    pageRow,
     message,
     attention,
     results,
   );
 
-  void refreshPages();
   void clearFetchRuns();
 
   return {

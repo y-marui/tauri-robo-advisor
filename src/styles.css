@@ -488,7 +488,8 @@ textarea {
   display: contents;
 }
 
-.recipe-list > .note {
+.recipe-list > .note,
+.recipe-list .recipe-group > .note {
   grid-column: 1 / -1;
 }
 

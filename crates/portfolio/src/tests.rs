@@ -890,7 +890,7 @@ fn recipe_for(account: AccountId) -> Recipe {
         all_tables: false,
         following_tables: false,
         cards: None,
-        start_site: String::new(),
+        start_site: "example.test".to_owned(),
         allowed_sites: Vec::new(),
         preset: None,
     }
@@ -1335,6 +1335,33 @@ fn a_file_without_prices_loads_with_defaults() {
         (holding.quantity, holding.price, holding.price_unit),
         (None, None, 1)
     );
+}
+
+#[test]
+fn a_recipe_needs_a_site_to_be_saved() {
+    let (mut p, _, _, acc) = sample();
+    let mut recipe = recipe_for(acc);
+    recipe.start_site = " ".to_owned();
+    let before = p.clone();
+    let error = p.apply(Edit::SetRecipe { recipe }).unwrap_err();
+    assert!(error.to_string().contains("site"), "{error}");
+    assert_eq!(p, before);
+}
+
+#[test]
+fn a_stored_recipe_without_a_site_still_loads_and_can_be_removed_or_moved() {
+    let (mut p, _, _, a) = sample();
+    let b = account(&mut p, "Account 2");
+    let mut recipe = recipe_for(a);
+    recipe.start_site = String::new();
+    // What an older version could have stored.
+    recipe.name = "Old".to_owned();
+    p.recipes.push(recipe);
+    assert!(p.issues().iter().all(|i| !format!("{i:?}").contains("recipe")));
+    let name = "Old".to_owned();
+    apply(&mut p, Edit::SetRecipeAccount { name: name.clone(), account: b });
+    apply(&mut p, Edit::RemoveRecipe { name });
+    assert!(p.recipes.is_empty());
 }
 
 #[test]

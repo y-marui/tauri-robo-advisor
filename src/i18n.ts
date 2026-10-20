@@ -25,7 +25,12 @@ export const MESSAGES = {
   "Fetch": { ja: "取得" },
   "Add from a preset": { ja: "プリセットから追加" },
   "Browser settings": { ja: "ブラウザの設定" },
-  "Page to read for recipes that name no site:": { ja: "サイトを持たないレシピが読むページ:" },
+  "No site": { ja: "サイトなし" },
+  "These recipes name no site (an older version saved them), so they cannot be fetched. Delete them and save them again with a site.": {
+    ja: "これらのレシピにはサイトがありません（古い版が保存したものです）。取得できないので、削除して、サイトを付けて保存し直してください。",
+  },
+  "Site the recipe reads (for example example.co.jp)": { ja: "レシピが読むサイト（例: example.co.jp）" },
+  "Enter the site the recipe reads first.": { ja: "先に、レシピが読むサイトを入れてください。" },
   "Fetch all": { ja: "すべて取得" },
   "Recipe to add": { ja: "追加するレシピ" },
   "Choose a recipe and an account first.": { ja: "先にレシピと口座を選んでください。" },
@@ -42,7 +47,6 @@ export const MESSAGES = {
     ja: "レシピはまだありません。下の組み込みレシピを追加するか、「表を取り込む」で一度手で取得して「レシピとして保存」してください。",
   },
   "Fetch this site": { ja: "このサイトを取得" },
-  "Other pages": { ja: "そのほかのページ" },
   "Account of {recipe}": { ja: "{recipe} の口座" },
   "built-in": { ja: "組み込み" },
   "“Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. If a site has no open page, its login page is opened: log in by hand, then press Fetch again. Nothing changes until you confirm.": {
@@ -514,9 +518,6 @@ export const MESSAGES = {
   "Use this link": { ja: "このリンクを使う" },
   "Several different links say “{text}” (recipe “{recipe}”). Choose where it goes.": {
     ja: "「{text}」と書かれたリンクが、行き先の違うものとして複数あります（レシピ「{recipe}」）。行き先を選んでください。",
-  },
-  "Open the browser, log in, and open a page of the site first.": {
-    ja: "先にブラウザを開き、ログインして、そのサイトのページを開いてください。",
   },
   "Fetching “{recipe}”…": { ja: "「{recipe}」を取得中…" },
   "“{recipe}” failed: {reason}": { ja: "「{recipe}」に失敗しました: {reason}" },

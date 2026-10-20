@@ -1507,6 +1507,16 @@ impl Portfolio {
             }
             Edit::SetRecipe { recipe } => {
                 let recipe = recipe.validated(self)?;
+                // Every recipe says the site it reads (so the right tab is found and its login
+                // page can be opened). Only a recipe stored by an older version may lack one; it
+                // stays loadable, but cannot be saved again. (A recipe of a preset takes its site from the
+                // preset.)
+                if recipe.preset.is_none() && recipe.start_site.is_empty() {
+                    return Err(Error::Invalid(
+                        "the site the recipe reads is required (for example example.co.jp)"
+                            .to_owned(),
+                    ));
+                }
                 match self.recipes.iter_mut().find(|r| r.name == recipe.name) {
                     Some(existing) => *existing = recipe,
                     None => {
