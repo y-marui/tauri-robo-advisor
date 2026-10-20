@@ -10,7 +10,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 - `src-tauri/src/main.rs` — デスクトップのエントリポイント（`lib.rs` の `run` を呼ぶだけ）
 - `src-tauri/src/lib.rs` — Tauri のセットアップとコマンド登録（`propose_rebalance` は `rebalance` crate への薄い委譲）
 - `crates/rebalance/src/lib.rs` — リバランス計算（`propose`）
-- `crates/bitflyer/src/lib.rs` — bitFlyer クライアント（`Client`、`Credentials`、`Transport`）
+- `crates/bitflyer/src/lib.rs` — bitFlyer クライアント（`Client`、`Credentials`、`Transport`、価格ページの表を読む `PagePrices`）
 - `crates/export/src/lib.rs` — `build(portfolio, info)`。各ファイルの内容をバイト列で返す
 - `src-tauri/src/exporter.rs` — エクスポートのフォルダとファイルの書き込み（所有者のみの権限、上書きしない）
 - `crates/suggest/src/lib.rs` — `suggest(portfolio, request)`、`Mode`、`Suggestion`

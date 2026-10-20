@@ -12,6 +12,7 @@ mod client;
 mod credentials;
 mod error;
 mod model;
+mod page_prices;
 mod sign;
 mod transport;
 
@@ -19,5 +20,6 @@ pub use client::{Client, Holding, Holdings};
 pub use credentials::Credentials;
 pub use error::Error;
 pub use model::Balance;
+pub use page_prices::{PRICE_PAGE_URL, PagePrices, is_price_page};
 pub use sign::sign;
 pub use transport::{Request, ReqwestTransport, Response, Transport};

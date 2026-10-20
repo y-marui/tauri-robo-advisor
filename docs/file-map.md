@@ -55,6 +55,7 @@ _最終更新: 2026-10-19_
 | `Cargo.toml` | Cargo ワークスペース定義と共通のパッケージ情報 | — |
 | `crates/rebalance/src/lib.rs` | リバランス計算 `propose`、入力検証、テスト | `rust_decimal`, `serde`, `thiserror` |
 | `crates/bitflyer/src/client.rs` | `Client`：残高取得、JPY 評価、署名付きリクエスト生成 | `transport.rs`, `model.rs`, `sign.rs`, `rebalance` |
+| `crates/bitflyer/src/page_prices.rs` | 価格ページの表を通貨ごとの円の価格に読む（`PagePrices`）。`Client::holdings_with_page_prices` が使う | `rust_decimal` |
 | `crates/bitflyer/src/transport.rs` | `Transport` トレイトと HTTPS 実装（リダイレクトなし・サイズ上限） | `reqwest` |
 | `crates/bitflyer/src/model.rs` | 応答の解析と検証（通貨コード・金額・エラーメッセージ） | `serde_json`, `rust_decimal` |
 | `crates/bitflyer/src/sign.rs` | HMAC-SHA256 署名 | `hmac`, `sha2` |

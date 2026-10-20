@@ -257,6 +257,7 @@ export const MESSAGES = {
   "Account to update": { ja: "更新する口座" },
   "Fetch balances": { ja: "残高を取得" },
   "Fetching…": { ja: "取得中…" },
+  "Opening…": { ja: "開いています…" },
   "Could not fetch: {reason}": { ja: "取得できませんでした: {reason}" },
   "Link each name to a product. The choice is remembered.": {
     ja: "名前ごとに商品を選んでください。選んだ対応は記憶されます。",
@@ -269,6 +270,26 @@ export const MESSAGES = {
   },
   "Add a product first.": { ja: "先に商品を追加してください。" },
   "Value ({currency})": { ja: "評価額 ({currency})" },
+  Prices: { ja: "価格" },
+  "Prices: Lightning last price": { ja: "価格: Lightning の最終取引価格" },
+  "Prices: bitFlyer price page": { ja: "価格: bitFlyer の価格ページ" },
+  "Open the price page": { ja: "価格ページを開く" },
+  "Open the price page, wait until the prices are shown, then fetch the balances: the prices are read from that page. The app only shows the page in the browser and reads it; it does not connect to it.": {
+    ja: "価格ページを開き、価格が表示されてから残高を取得してください。価格はそのページから読みます。アプリはページをブラウザで表示して読むだけで、自分では接続しません。",
+  },
+  "Opened. Wait until the prices are shown, then fetch the balances.": {
+    ja: "開きました。価格が表示されてから、残高を取得してください。",
+  },
+  "Could not open the page: {reason}": { ja: "ページを開けませんでした: {reason}" },
+  "Not on the price page, so these could not be valued and are left out: {names}": {
+    ja: "価格ページにないため評価できず、除外します: {names}",
+  },
+  "Page price vs Lightning last price (for reference)": {
+    ja: "ページの価格と Lightning の最終取引価格（参考）",
+  },
+  "Page price": { ja: "ページの価格" },
+  "Lightning price": { ja: "Lightning の価格" },
+  Difference: { ja: "差" },
   "No JPY market, so these could not be valued and are left out: {names}": {
     ja: "円の市場がなく評価できないため、除外します: {names}",
   },

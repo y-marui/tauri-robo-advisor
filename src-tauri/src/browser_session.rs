@@ -455,6 +455,38 @@ impl BrowserSession {
         Ok(result)
     }
 
+    /// Sends the browser to the bitFlyer price page in a new tab, unless it is already open.
+    /// Nothing is typed or clicked; this is the same kind of step as opening a login page.
+    pub fn open_price_page(&self) -> Result<(), String> {
+        debug_assert!(browser::login_url_ok(bitflyer::PRICE_PAGE_URL));
+        let mut cdp = self.connect()?;
+        let open = cdp.pages().map_err(|e| e.to_string())?;
+        if !open.iter().any(|p| bitflyer::is_price_page(&p.url)) {
+            cdp.open_tab(bitflyer::PRICE_PAGE_URL)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// Reads the prices from the open tab of the price page (read-only).
+    pub fn read_price_page(&self) -> Result<bitflyer::PagePrices, String> {
+        let mut cdp = self.connect()?;
+        let page = cdp
+            .pages()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|p| bitflyer::is_price_page(&p.url))
+            .ok_or_else(|| {
+                "The bitFlyer price page is not open. Press \"Open the price page\" first."
+                    .to_owned()
+            })?;
+        let session = cdp.attach(&page).map_err(|e| e.to_string())?;
+        let raw = cdp.read_tables(&session).map_err(|e| e.to_string())?;
+        bitflyer::PagePrices::from_tables(&raw.into_all()).map_err(|e| {
+            format!("Could not read the prices from the page ({e}). Wait until the page has loaded, then try again.")
+        })
+    }
+
     /// The table the user chose from the last fetch.
     pub fn take_table(&self, index: usize) -> Result<Table, String> {
         lock(&self.fetched)?
