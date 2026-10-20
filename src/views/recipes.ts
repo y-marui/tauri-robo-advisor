@@ -575,12 +575,13 @@ export function recipesPanel(ctx: Context): Panel {
   const el = h(
     "section",
     { class: "card recipes" },
-    h("div", { class: "recipe-title" }, h("h2", {}, t("Fetch recipes")), runButton),
+    h("h2", {}, t("Fetch recipes")),
     h(
       "p",
       { class: "note" },
       t("“Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. If a site has no open page, its login page is opened: log in by hand, then press Fetch again. Nothing changes until you confirm."),
     ),
+    h("div", { class: "recipe-fetch-all" }, runButton),
     list,
     h("div", { class: "add-row" }, presetSelect, presetAccount, newAccountName, presetAdd),
     presetNote,

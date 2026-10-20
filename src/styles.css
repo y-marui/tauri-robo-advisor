@@ -465,7 +465,7 @@ textarea {
 }
 
 /* The three fetch buttons (card, site, recipe) share the third column, so they start at the same x. */
-.recipe-title,
+.recipe-fetch-all,
 .recipe-group-head,
 .recipe-row {
   display: grid;
@@ -474,12 +474,11 @@ textarea {
   gap: 8px;
 }
 
-.recipe-title h2,
 .recipe-group-head h3 {
   grid-column: 1 / 3;
 }
 
-.recipe-title button,
+.recipe-fetch-all button,
 .recipe-group-head button {
   grid-column: 3;
   justify-self: start;
