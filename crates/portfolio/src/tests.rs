@@ -661,6 +661,93 @@ fn plan_import_matches_only_confirmed_aliases_in_the_right_currency() {
 }
 
 #[test]
+fn plan_import_suggests_products_with_the_same_or_a_similar_name() {
+    let (mut p, cat, _, _) = sample();
+    for name in ["AAA", "Poly Gon", "B", "AAB Coin"] {
+        apply(
+            &mut p,
+            Edit::AddProduct {
+                name: name.to_owned(),
+                category: cat,
+                currency: "JPY".to_owned(),
+            },
+        );
+    }
+    apply(
+        &mut p,
+        Edit::AddProduct {
+            name: "ZZZ".to_owned(),
+            category: cat,
+            currency: "USD".to_owned(),
+        },
+    );
+    let id = |name: &str| p.products.iter().find(|x| x.name == name).unwrap().id;
+    let row = |name: &str| ImportRow {
+        account_type: None,
+        name: name.to_owned(),
+        value: dec!(10),
+        quantity: None,
+        price: None,
+        price_unit: 1,
+        computed: None,
+    };
+    let rows = [
+        row(" aaa "),
+        row("poly-gon"),
+        row("AAB"),
+        row("BBB"),
+        row("ZZZ"),
+        row("QQQ"),
+    ];
+
+    let plan = p.plan_import("src", "JPY", &rows);
+
+    assert_eq!(plan.unmatched.len(), 6);
+    let got = |name: &str| plan.suggestions.iter().find(|s| s.name == name);
+    // Exact: trimmed, ignoring case; the name is trimmed in the plan as in the row.
+    assert_eq!(got("aaa").unwrap().exact, Some(id("AAA")));
+    assert_eq!(got("aaa").unwrap().similar, None);
+    // Similar: the same ignoring spaces and symbols; one contains the other.
+    assert_eq!(got("poly-gon").unwrap().similar, Some(id("Poly Gon")));
+    assert_eq!(got("AAB").unwrap().similar, Some(id("AAB Coin")));
+    // A single letter hints nothing ("B" is inside "BBB"); another currency is not offered.
+    assert!(got("BBB").is_none());
+    assert!(got("ZZZ").is_none());
+    assert!(got("QQQ").is_none());
+    // Without a currency every product can be linked.
+    let any = p.plan_import("src", "", &[row("ZZZ")]);
+    assert_eq!(any.suggestions[0].exact, Some(id("ZZZ")));
+}
+
+#[test]
+fn plan_import_prefers_an_exact_name_to_a_similar_one() {
+    let (mut p, cat, _, _) = sample();
+    for name in ["AAA Plus", "AAA"] {
+        apply(
+            &mut p,
+            Edit::AddProduct {
+                name: name.to_owned(),
+                category: cat,
+                currency: "JPY".to_owned(),
+            },
+        );
+    }
+    let exact = p.products.iter().find(|x| x.name == "AAA").unwrap().id;
+    let row = ImportRow {
+        account_type: None,
+        name: "aaa".to_owned(),
+        value: dec!(1),
+        quantity: None,
+        price: None,
+        price_unit: 1,
+        computed: None,
+    };
+    let plan = p.plan_import("src", "JPY", &[row]);
+    assert_eq!(plan.suggestions[0].exact, Some(exact));
+    assert_eq!(plan.suggestions[0].similar, None);
+}
+
+#[test]
 fn plan_import_adds_up_names_linked_to_the_same_product() {
     let (mut p, _, prod, _) = sample();
     for name in ["BTC", "ETH"] {

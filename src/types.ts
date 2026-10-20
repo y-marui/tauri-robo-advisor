@@ -468,6 +468,18 @@ export interface ImportPlan {
   wrong_currency: ImportRow[];
   /** Rows whose evaluation differs from quantity x price by more than the smallest currency unit. */
   differences: ValueDifference[];
+  /** Hints for unmatched names that have a product of the same or a similar name. */
+  suggestions?: LinkSuggestion[];
+}
+
+/** Mirrors `portfolio::LinkSuggestion`: only a hint, never a link. */
+export interface LinkSuggestion {
+  /** The trimmed name of the unmatched row. */
+  name: string;
+  /** A product with the same name (trimmed, ignoring case). */
+  exact: number | null;
+  /** Else a product with a similar name. */
+  similar: number | null;
 }
 
 /** A row whose read value and computed value (quantity x price / unit) disagree. */

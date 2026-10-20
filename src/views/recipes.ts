@@ -1,6 +1,6 @@
 import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
 import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, resultsToDrop, siteIsOpen, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
-import { h } from "../dom.ts";
+import { h, infoIcon } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
@@ -525,20 +525,6 @@ export function recipesPanel(ctx: Context): Panel {
       }),
       addForm,
     );
-  }
-
-  /** A small "i" that shows `text` on hover and on keyboard focus (and to screen readers). */
-  function infoIcon(text: string): HTMLElement {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("aria-hidden", "true");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z");
-    path.setAttribute("fill", "currentColor");
-    svg.append(path);
-    const icon = h("span", { class: "info-icon", tabindex: 0, role: "img", "aria-label": text, "data-tip": text });
-    icon.append(svg);
-    return icon;
   }
 
   /** The route of a recipe in a sentence: where it starts, the links it follows, and the table it reads. */
