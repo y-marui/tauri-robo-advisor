@@ -18,7 +18,7 @@ Tauri 2 デスクトップアプリ。ロジックはすべて Rust 側に置き
 - `src-tauri/src/secrets.rs` — OS のキーチェーンへの API キーの保存（副作用はここに閉じ込める）
 - `src-tauri/src/store.rs` — ポートフォリオの JSON ファイルの読み書き（アトミックな書き込み）
 - `src-tauri/src/app_state.rs` — メモリ上のポートフォリオと保存先。コマンドから呼ばれ、Tauri なしでテストできる
-- 保存（JSON ファイル）も同様に、ファイルの読み書きという副作用を `src-tauri` の 1 モジュールに閉じ込め、モデルと提案の計算は Tauri に依存しない crate に置く（[specification.md](specification.md) の Storage 参照）
+- 保存（JSON ファイル）も同様に、ファイルの読み書きという副作用を `src-tauri` の 1 モジュールに閉じ込め、モデルと提案の計算は Tauri に依存しない crate に置く（[specification-data.md](specification-data.md) の Storage 参照）
 - `src/main.ts` — フロントエンドのエントリポイント
 - `index.html` — フロントエンドの HTML
 

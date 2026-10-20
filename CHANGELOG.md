@@ -17,6 +17,7 @@
 
 ### Changed
 
+- The oversized docs are split to fit doc-lint (#89), content unchanged: `docs/specification.md` is an index over `docs/specification-{import,browser,recipes,presets,suggestions,data}.md`, `docs/ui-design-settings.md` holds the settings tab, and the long Design Constraints, Tauri Notes, CI commands, licensing and tech stack sections of `AI_CONTEXT.md` moved to `docs/design-constraints.md` (`AI_CONTEXT.md` keeps the rule headlines and a pointer).
 - The Rakuten preset `rakuten-all` reads investment trusts (units x price per 10,000 units) and domestic stocks (the evaluation) by the kind cell, and reports rows of any other kind instead of valuing them wrongly. Stocks are covered by tests with made-up pages only; the kind labels are not checked against a real page.
 
 - `make deploy` and `make dmg` sign the app (and the DMG) with a `Developer ID Application` certificate from the keychain when one exists (`TEAM_ID` / `DEVELOPER_NAME` / `SIGN_IDENTITY`, see `.env.example`), so macOS keeps the app's permissions across deploys (#73). With no certificate the app is signed ad-hoc with a message. The signature is verified after the build. New `make bundle-app`.

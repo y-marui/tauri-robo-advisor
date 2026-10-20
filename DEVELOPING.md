@@ -47,7 +47,7 @@ Frontend tests are `src/*.test.ts`, run by Node's built-in test runner (no extra
 | `src/` | Frontend (TypeScript, CSS) |
 | `src-tauri/` | Tauri setup and thin command layer (Rust) |
 | `crates/` | Domain logic crates in the Cargo workspace (no Tauri dependency) |
-| `docs/` | Specification and knowledge base |
+| `docs/` | Specification (an index plus `specification-*.md`), UI design, design constraints (`design-constraints.md`), and the knowledge base |
 | `docs/dev-charter/` | Development charter (git subtree; never edit directly) |
 | `scripts/` | Check scripts distributed by dev-charter |
 
