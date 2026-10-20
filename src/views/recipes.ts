@@ -1,5 +1,5 @@
 import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
-import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, siteIsOpen, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
+import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, resultsToDrop, siteIsOpen, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -273,8 +273,28 @@ export function recipesPanel(ctx: Context): Panel {
         if (result.unknown.length > 0) {
           parts.push(t("No login page is known for: {sites}. Log in and open a page of the site by hand, then press Fetch again.", { sites: result.unknown.join(", ") }));
         }
+        // Held back or not, the earlier results of these recipes are out of date as soon as the
+        // person asked for a refresh: they must not stay applicable (a full run drops them all).
+        const heldNames = wanted.filter((r) => !held.run.includes(r)).map((r) => r.name);
+        const drop = resultsToDrop(only === undefined, heldNames);
+        refresh++;
+        if (applyButton) {
+          applyButton.disabled = true;
+        }
+        if (drop.clearAll) {
+          await clearFetchRuns();
+          hasRuns = false;
+          results.replaceChildren();
+        } else {
+          for (const name of drop.discard) {
+            await discardFetchRun(name).catch(() => undefined);
+          }
+        }
         wanted = held.run;
         if (wanted.length === 0) {
+          if (!drop.clearAll) {
+            await showResults();
+          }
           info(parts.join(" "));
           return;
         }

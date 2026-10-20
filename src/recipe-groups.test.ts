@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { setLanguage } from "./i18n.ts";
-import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, siteIsOpen, sitesToLogIn, withLoginHint } from "./recipe-groups.ts";
+import { availablePresets, canAddPreset, groupBySite, recipeDisplayName, recipesAfterLogin, resultsToDrop, siteIsOpen, sitesToLogIn, withLoginHint } from "./recipe-groups.ts";
 import type { PresetInfo, RecipeView } from "./types.ts";
 
 const preset = (id: string, label: string, site: string, company: string): PresetInfo => ({
@@ -77,4 +77,9 @@ test("Add needs a preset and an account, and a name for a new account", () => {
   assert.ok(canAddPreset("a", "1", ""));
   assert.ok(!canAddPreset("a", "new", "  "));
   assert.ok(canAddPreset("a", "new", "Main"));
+});
+
+test("a refresh that holds sites back drops the old results: all for a full run, the held ones otherwise", () => {
+  assert.deepEqual(resultsToDrop(true, ["a"]), { clearAll: true, discard: [] });
+  assert.deepEqual(resultsToDrop(false, ["a", "b"]), { clearAll: false, discard: ["a", "b"] });
 });

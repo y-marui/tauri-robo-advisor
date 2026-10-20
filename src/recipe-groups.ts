@@ -86,3 +86,8 @@ export function canAddPreset(preset: string, account: string, newAccountName: st
   }
   return account !== "new" || newAccountName.trim() !== "";
 }
+
+/** Which earlier results a refresh drops when sites are held back for a login: all for a full run, else the held recipes'. */
+export function resultsToDrop(fullRun: boolean, heldNames: string[]): { clearAll: boolean; discard: string[] } {
+  return fullRun ? { clearAll: true, discard: [] } : { clearAll: false, discard: heldNames };
+}
