@@ -2,9 +2,10 @@ import { clearTable, loadTableFile, loadTableText, planTableImport } from "../ap
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
-import type { CardSource, ColumnMapping, PortfolioView, SkipReason, TablePreview } from "../types.ts";
+import type { CardSource, ColumnMapping, PortfolioView, TablePreview } from "../types.ts";
 import { browserFetch } from "./browser-fetch.ts";
 import { importPlanView } from "./import-plan.ts";
+import { skippedText } from "./skipped.ts";
 
 // A generic table import: a CSV file or text copied from a brokerage page. The
 // user says which column holds the name and which the value; the choice is
@@ -14,23 +15,6 @@ import { importPlanView } from "./import-plan.ts";
 
 /** Files larger than this are refused here and again in Rust (2 MiB). */
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
-const SKIPPED_SHOWN = 8;
-
-function skipLabel(reason: SkipReason): string {
-  switch (reason) {
-    case "missing_column":
-      return t("column missing");
-    case "no_name":
-      return t("no name");
-    case "not_a_number":
-      return t("not a number");
-    case "unknown_kind":
-      return t("kind not in the rules");
-    case "out_of_range":
-      return t("negative or too large");
-  }
-}
-
 export function tableImportPanel(ctx: Context): Panel {
   const message = h("p", { class: "note", role: "status" });
   const sourceInput = h("input", {
@@ -438,20 +422,7 @@ export function tableImportPanel(ctx: Context): Panel {
     planned = true;
     const notes: HTMLElement[] = [];
     if (planResult.skipped.length > 0) {
-      const shown = planResult.skipped
-        .slice(0, SKIPPED_SHOWN)
-        .map((s) => `${t("row")} ${s.row} (${skipLabel(s.reason)})`)
-        .join(", ");
-      notes.push(
-        h(
-          "p",
-          { class: "note error" },
-          t("{count} rows were left out: {rows}", {
-            count: String(planResult.skipped.length),
-            rows: planResult.skipped.length > SKIPPED_SHOWN ? `${shown}, …` : shown,
-          }),
-        ),
-      );
+      notes.push(h("p", { class: "note error" }, skippedText(planResult.skipped)));
     }
     result.replaceChildren(
       h("p", { class: "muted" }, t("{count} rows read", { count: String(planResult.rows_read) })),

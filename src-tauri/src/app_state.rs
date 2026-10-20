@@ -1858,7 +1858,8 @@ mod tests {
             .collect();
         assert_eq!(recipes.len(), portfolio::presets().len());
         for recipe in &recipes {
-            assert!(recipe.all_tables || recipe.following_tables);
+            // A recipe reads tables (every table, or those after a heading) or cards.
+            assert!(recipe.all_tables || recipe.following_tables || recipe.cards.is_some());
             for link in &recipe.links {
                 assert_eq!(
                     browser::link_text_allowed(&link.text),
@@ -2262,13 +2263,14 @@ mod tests {
         let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
         let heading = {
             let mut cells = vec![recipe.table_starts_with.as_str()];
-            cells.resize(7, "");
+            cells.resize(8, "");
             row(&cells)
         };
         let holding = |kind: &str, name: &str, units: &str, value: &str| {
             row(&[
                 kind,
                 name,
+                "",
                 "Taxable",
                 units,
                 "5,000.00 円\n6,000 円",

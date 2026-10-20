@@ -7,8 +7,13 @@
 - Card reading, stage 1 (#76): a recipe can read repeated blocks ("cards") under a heading instead of a table (`Recipe::cards` = `CardSource { heading, item_depth }`, exclusive with the table title; presets can describe it as data). A fixed read-only script (`crates/browser/js/read_cards.js`, isolated world) finds exactly one visible heading that starts with the text, takes the blocks `item_depth` levels below the region after it, and returns one row per card with each text line as a cell, so the existing import mapping, aliases and replace flow are reused. A page cut at a limit (50 headings, 500 items, 20 lines, 1,000 characters) or with no card is refused; no class names, attributes or link targets are used and nothing is clicked. Schema version 12 (an older app refuses the file). No preset uses it yet.
 - Card reading, stage 2 (#76): "Fetch with the browser" lists the card lists of the page next to its tables (one candidate per heading, at the first item depth that gives cards; label "N cards × M lines: heading"); choosing one loads one row per card into the import, and "Save as recipe" stores `cards` (heading and item depth) instead of a table title. Running a cards recipe waits (up to 10 s) for the heading and cards and for two equal reads, then goes through the same extract, alias and replace flow as a table (`ReadSource` in `browser_session.rs`).
 
+- PayPay Securities preset (#76, stage 3), `paypay-sec-holdings` (provisional): reads the cards under 保有銘柄 on the page the person opens by hand after logging in (the mini app entry needs a click, which the app does not make; evaluation only: the page shows no quantity or price). Checked once against the structure of the real page with two holdings; "more" and many holdings are not checked. It has no login page address.
+
 ### Fixed
 
+- A saved link is recognized again when a session identifier is carried in the path (`/app/list.do;BV_SessionID=...`, as Rakuten Securities does): the volatile `;name=value` path parameters are left out of the destination fingerprint like the volatile query pairs (other path parameters are kept). A link saved before this change is asked for once.
+- Fetching again after "The page changed while the recipes were running" no longer fails the same way: the old starting page is forgotten when the batch stops. A tab that already shows the recipe's table (left on the page the links lead to) is read as it is without looking for the links.
+- The Rakuten preset `rakuten-all` reads the right columns again: the name cell spans two columns, so the reader pads an empty cell after it, and the units, price, and evaluation are one column to the right (every row was reported as "not a number").
 - An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
 
 ### Added
@@ -17,6 +22,8 @@
 
 ### Changed
 
+- Holdings tab columns are now price (with the product's currency), quantity, value (the stored value, in the product's currency), value (JPY), and share.
+- The rows left out of a fetch are listed with their reasons in the fetch result ("row 2 (not a number)"), as they were in the table import, instead of only a count.
 - The oversized docs are split to fit doc-lint (#89), content unchanged: `docs/specification.md` is an index over `docs/specification-{import,browser,recipes,presets,suggestions,data}.md`, `docs/ui-design-settings.md` holds the settings tab, and the long Design Constraints, Tauri Notes, CI commands, licensing and tech stack sections of `AI_CONTEXT.md` moved to `docs/design-constraints.md` (`AI_CONTEXT.md` keeps the rule headlines and a pointer).
 - The Rakuten preset `rakuten-all` reads investment trusts (units x price per 10,000 units) and domestic stocks (the evaluation) by the kind cell, and reports rows of any other kind instead of valuing them wrongly. Stocks are covered by tests with made-up pages only; the kind labels are not checked against a real page.
 

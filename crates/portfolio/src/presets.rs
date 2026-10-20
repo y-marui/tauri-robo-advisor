@@ -187,8 +187,9 @@ const PRESETS: &[Preset] = &[
     // links to it with a plain link on the same host (the pages of the company are spread over
     // several hosts). The holdings of every kind are one table, found by its heading cells (its
     // cells are outer-table cells: some hold small tables, see `browser::PageTables`). After the
-    // heading row, a holding is one visible row: the kind, name, account type, units, cost, price,
-    // and a cell with the evaluation (first line) and the profit. The page also has a summary
+    // heading row, a holding is one visible row: the kind, name (the name cell spans two columns,
+    // so the reader pads an empty cell after it), account type, units, cost, price, and a cell
+    // with the evaluation (first line) and the profit. The page also has a summary
     // table by kind with hidden detail rows, which does not start with the same cells. Only the
     // units and the price are read, and the value is the units times the price per 10,000 units
     // for an investment trust row; a domestic stock row (its price is per share) reads the
@@ -214,8 +215,8 @@ const PRESETS: &[Preset] = &[
         layout: Layout {
             source: "Rakuten",
             name_column: 1,
-            value_column: 3,
-            price_column: Some(5),
+            value_column: 4,
+            price_column: Some(6),
             // Each kind sets its own unit (see `kinds`).
             price_unit: 1,
             price_part: None,
@@ -235,7 +236,7 @@ const PRESETS: &[Preset] = &[
                 (
                     "国内株式",
                     KindRead::Evaluation {
-                        column: 6,
+                        column: 7,
                         part: Some(0),
                     },
                 ),
@@ -317,6 +318,44 @@ const PRESETS: &[Preset] = &[
             loose_numbers: false,
             quantity_column: None,
             max_records: Some(1),
+            kind_column: None,
+            kinds: &[],
+        },
+    },
+    // PayPay Securities (provisional): the logged-in top page lists each holding as a card under
+    // the heading 保有銘柄 (the evaluation, the gain, then the name; no quantity or price is
+    // shown), so only the evaluation is read. Checked against the structure of the real page
+    // once; the page after "more" or with many holdings is not.
+    Preset {
+        id: "paypay-sec-holdings",
+        label: "PayPay Securities: holdings (provisional)",
+        description: "Reads the cards under 保有銘柄 of PayPay Securities (evaluation only: the page shows no quantity or price). After logging in, open the page that shows the holdings by hand (it is a web app that needs a click on the mini app entry, which this app does not make), then fetch.",
+        links: &[],
+        menu: None,
+        table_starts_with: "",
+        allowed_sites: &[],
+        start_site: "paypay-sec.co.jp",
+        following_tables: false,
+        cards: Some(PresetCards {
+            heading: "保有銘柄",
+            item_depth: 1,
+        }),
+        login_url: "",
+        currency: "",
+        layout: Layout {
+            source: "PayPay",
+            name_column: 2,
+            value_column: 0,
+            price_column: None,
+            price_unit: 1,
+            price_part: None,
+            header_rows: 0,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            loose_numbers: false,
+            quantity_column: None,
+            max_records: None,
             kind_column: None,
             kinds: &[],
         },

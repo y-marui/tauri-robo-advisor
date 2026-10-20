@@ -60,7 +60,7 @@ Built-in presets read the holdings tables of a logged-in browser page (you log i
 | Rakuten Securities | Investment trusts in yen | Verified. Domestic stocks are read by the kind column (#88); they are covered by tests with made-up pages only, and the kind labels are not checked against a real page |
 | Daiwa Connect Securities | Domestic stocks, cash (yen) | Verified for the stock list; the cash page is not recorded as verified |
 | bitFlyer | Balances through the REST API (read-only key in the OS keychain) | Covered by tests with a fake transport; no record of a check against the real service |
-| PayPay Securities | Manual entry (the holdings are shown as cards, which the table reader cannot read yet; see #76) | Not supported |
+| PayPay Securities | Holdings cards (evaluation only; the page shows no quantity or price). Provisional preset | Structure checked on the real page (two holdings). "More" and many holdings are not checked (#76) |
 
 Other sources: import a CSV or pasted table with your own column mapping, or enter holdings by hand.
 

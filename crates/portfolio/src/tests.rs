@@ -2341,7 +2341,7 @@ fn the_rakuten_preset_reads_trusts_and_stocks_by_kind_and_a_reference_keeps_none
         vec![
             KindRead::QuantityTimesPrice { price_unit: 10_000 },
             KindRead::Evaluation {
-                column: 6,
+                column: 7,
                 part: Some(0)
             }
         ]

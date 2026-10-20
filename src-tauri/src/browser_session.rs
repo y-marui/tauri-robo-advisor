@@ -269,6 +269,9 @@ impl BrowserSession {
             match pinned.get(page_id) {
                 // The same page, though a session identifier or the query may have changed.
                 Some(href) if browser::page_identity(href) != browser::page_identity(&start) => {
+                    // The batch stops here, so the old start is forgotten: fetching again starts
+                    // from the page the tab is on now instead of failing the same way every time.
+                    pinned.remove(page_id);
                     return Err(format!(
                         "{STOP_BATCH}The page changed while the recipes were running. Fetch again."
                     ));
@@ -282,6 +285,13 @@ impl BrowserSession {
         // Only the allowed sites that contain the host this recipe starts on count; a recipe can
         // reach the other hosts of its own site, never another company's.
         let sites = browser::sites_covering(&browser::origin_of(&start), allowed_sites);
+        // A tab that already shows the recipe's table (it was left on the page the links lead to)
+        // is read as it is: the links are not looked for, since that page may not have them.
+        let links: &[FetchLink] = if self.shows_table(&mut cdp, &session, &source) {
+            &[]
+        } else {
+            links
+        };
         let mut references = Vec::with_capacity(links.len());
         let mut clicked = false;
         for (index, link) in links.iter().enumerate() {
@@ -398,6 +408,20 @@ impl BrowserSession {
         restored.map_err(|e| format!("{STOP_BATCH}Could not return to the starting page: {e}"))?;
         let table = read?;
         Ok(RecipeRead::Table { table, references })
+    }
+
+    /// Whether the page the tab is on already has the table a table recipe reads. Only reads.
+    fn shows_table(&self, cdp: &mut Cdp, session: &str, source: &ReadSource) -> bool {
+        let ReadSource::Table { title, .. } = source else {
+            return false;
+        };
+        let title_words = squash(title);
+        cdp.read_tables(session).is_ok_and(|page| {
+            page.leaf
+                .iter()
+                .chain(page.outer.iter())
+                .any(|t| title_matches(t, &title_words))
+        })
     }
 
     /// Forgets the page a batch started from; the next run pins its own.
