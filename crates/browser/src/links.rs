@@ -72,6 +72,17 @@ const ACTION_TEXT: &[&str] = &[
     "redemption",
     "liquidate",
     "liquidation",
+    "パスワード",
+    "暗証番号",
+    "再発行",
+    "リセット",
+    "ダウンロード",
+    "アップロード",
+    "password",
+    "passwd",
+    "unsubscribe",
+    "download",
+    "upload",
 ];
 
 /// Order and money words. They can also name a view ("注文照会", "出金履歴", "Payment history"),
@@ -135,6 +146,12 @@ const ACTION_HREF: &[&str] = &[
     "redemption",
     "liquidate",
     "liquidation",
+    "password",
+    "passwd",
+    "unsubscribe",
+    "パスワード",
+    "暗証番号",
+    "再発行",
     "取消",
     "取り消し",
     "削除",
@@ -190,7 +207,9 @@ const VIEW_HREF: &[&str] = &[
 ];
 
 /// Words that count only as a whole word ("add" is an action, "address" is not).
-const ACTION_WHOLE_WORD: &[&str] = &["add", "adds", "close", "closing", "closure"];
+const ACTION_WHOLE_WORD: &[&str] = &[
+    "add", "adds", "close", "closing", "closure", "reset", "resets", "pwd",
+];
 
 fn has_whole_word(text: &str, words: &[&str]) -> bool {
     tokens(text).iter().any(|t| words.contains(&t.as_str()))
@@ -783,6 +802,22 @@ mod tests {
         ] {
             assert_eq!(link_text_allowed(out), Err(Error::LinkRefused), "{out}");
         }
+        for more in [
+            "Change password",
+            "パスワード照会",
+            "暗証番号",
+            "Reset",
+            "Unsubscribe",
+            "Download history",
+            "CSVダウンロード",
+            "再発行",
+        ] {
+            assert_eq!(link_text_allowed(more), Err(Error::LinkRefused), "{more}");
+        }
+        assert!(
+            link_text_allowed("Preset balance").is_ok(),
+            "reset is a whole word only"
+        );
         for ja in ["買う", "売る", "今すぐ買う"] {
             assert_eq!(link_text_allowed(ja), Err(Error::LinkRefused), "{ja}");
         }
@@ -860,6 +895,17 @@ mod tests {
         assert!(!candidate("/app#/history/delete", true, false).allowed(&[]));
         assert!(candidate("/app#/orderhistory", true, false).allowed(&[]));
         assert!(!candidate("/app#!/logout", true, false).allowed(&[]));
+        for acts in [
+            "/my/password",
+            "/my/ChangePasswd.do",
+            "/mail/unsubscribe",
+            "/app?page=pwd",
+            "/app?mode=reset",
+            "/app#/パスワード",
+        ] {
+            assert!(!candidate(acts, true, false).allowed(&[]), "{acts}");
+        }
+        assert!(candidate("/app/presets", true, false).allowed(&[]));
         assert!(candidate("/orderhistory/list", true, false).allowed(&[]));
         assert!(
             !candidate("/ETGate/", false, false).allowed(&[]),
@@ -918,6 +964,19 @@ mod tests {
         assert_ne!(fingerprint("/a"), fingerprint("/b"));
         assert_eq!(fingerprint("/a"), fingerprint("/a"));
         assert_eq!(normalize_href("/x?"), "/x");
+        // Decision (#39): a 13+ digit number or a 24+ hex value is dropped whatever its name,
+        // because such a value is far more often made for one visit than part of a destination,
+        // and a link that changed every visit would never be found again. Two links with the same
+        // text that differ only by such a value are therefore one destination; the page it opens
+        // is still checked by the recipe's table title. Shorter values are kept.
+        assert_eq!(
+            normalize_href("/h?account=1234567890123"),
+            normalize_href("/h?account=2234567890123"),
+        );
+        assert_ne!(
+            normalize_href("/h?account=123456789012"),
+            normalize_href("/h?account=223456789012"),
+        );
     }
 
     #[test]
