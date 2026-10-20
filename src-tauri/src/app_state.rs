@@ -252,7 +252,7 @@ fn column_mapping(mapping: &ImportMapping) -> ColumnMapping {
 }
 
 /// The rows of an extraction as import rows. The price unit comes with a price only.
-fn import_rows(extraction: &tabular::Extraction) -> Vec<ImportRow> {
+fn import_rows(extraction: &tabular::Extraction, account_type: Option<&str>) -> Vec<ImportRow> {
     extraction
         .rows
         .iter()
@@ -263,8 +263,47 @@ fn import_rows(extraction: &tabular::Extraction) -> Vec<ImportRow> {
             price: r.price,
             price_unit: r.price_unit,
             computed: r.computed,
+            account_type: account_type.map(str::to_owned),
         })
         .collect()
+}
+
+/// Reads the records of a table. When the recipe has title rules and the page was read as several
+/// tables, each table is read on its own (the others no longer have their heading rows) and its
+/// records get the type its title stands for; a table whose title fits no rule is read without a
+/// type. Row numbers of skipped rows are those of the whole table.
+fn read_rows(
+    table: &Table,
+    sections: &[crate::browser_session::Section],
+    recipe: &Recipe,
+) -> (Vec<ImportRow>, Vec<Skipped>) {
+    let mapping = column_mapping(&recipe.mapping);
+    if recipe.type_rules.is_empty() || sections.is_empty() {
+        let extraction = tabular::extract(&table.rows, &mapping);
+        return (import_rows(&extraction, None), extraction.skipped);
+    }
+    let mut rows = Vec::new();
+    let mut skipped = Vec::new();
+    for (n, section) in sections.iter().enumerate() {
+        let end = sections
+            .get(n + 1)
+            .map_or(table.rows.len(), |next| next.start);
+        let mut section_mapping = mapping.clone();
+        if n > 0 {
+            // The title and heading rows of the others were left out when the tables were put together.
+            section_mapping.header_rows = 0;
+        }
+        let extraction = tabular::extract(&table.rows[section.start..end], &section_mapping);
+        rows.extend(import_rows(
+            &extraction,
+            recipe.type_of_title(&section.title),
+        ));
+        skipped.extend(extraction.skipped.into_iter().map(|s| Skipped {
+            row: s.row + section.start,
+            ..s
+        }));
+    }
+    (rows, skipped)
 }
 
 /// How many rows and how many characters per cell the preview shows.
@@ -578,7 +617,7 @@ impl AppState {
                 .ok_or_else(|| "No table is loaded.".to_owned())?;
             tabular::extract(&table.rows, mapping)
         };
-        let rows = import_rows(&extraction);
+        let rows = import_rows(&extraction, None);
         let plan = self.plan_import(source, currency, &rows)?;
         Ok(TableImportPlan {
             plan,
@@ -701,12 +740,16 @@ impl AppState {
         let read = self
             .browser
             .run_recipe(page, &recipe.links, source, &recipe.allowed_sites)?;
-        let (table, references) = match read {
+        let ((table, sections), references) = match read {
             RecipeRead::NeedsChoice { link, choices } => {
                 return Ok(RecipeOutcome::NeedsChoice { link, choices });
             }
             RecipeRead::LinkChanged { link } => return Ok(RecipeOutcome::LinkChanged { link }),
-            RecipeRead::Table { table, references } => (table, references),
+            RecipeRead::Table {
+                table,
+                sections,
+                references,
+            } => ((table, sections), references),
         };
 
         // Only fill in the references if the recipe is still the one that ran: an edit made
@@ -727,8 +770,7 @@ impl AppState {
             }
         }
 
-        let extraction = tabular::extract(&table.rows, &column_mapping(&recipe.mapping));
-        let rows = import_rows(&extraction);
+        let (rows, skipped) = read_rows(&table, &sections, &recipe);
         let run = StoredRun {
             recipe: recipe.clone(),
             name: recipe.name.clone(),
@@ -736,7 +778,7 @@ impl AppState {
             source: recipe.mapping.source.clone(),
             currency: recipe.currency.clone(),
             rows,
-            skipped: extraction.skipped,
+            skipped,
         };
         let view = self.run_view(&run)?;
         let mut runs = self.lock_runs()?;
@@ -871,12 +913,42 @@ impl AppState {
                 missing.join(", ")
             ));
         }
-        let mut per_account: BTreeMap<AccountId, BTreeMap<ProductId, HoldingInput>> =
-            BTreeMap::new();
+        // What an account's recipes cover: the whole account (a recipe without type rules reads no
+        // types), or only the types named by the rules of all of its recipes (and records without
+        // a type, for a table whose title fits no rule).
+        let mut scope: BTreeMap<AccountId, Option<Vec<Option<String>>>> = BTreeMap::new();
+        let mut per_account: BTreeMap<
+            AccountId,
+            BTreeMap<(ProductId, Option<String>), HoldingInput>,
+        > = BTreeMap::new();
         for view in &views {
+            let recipe = snapshot.recipes.iter().find(|r| r.name == view.name);
+            let types: Option<Vec<Option<String>>> = recipe
+                .and_then(|r| r.effective().ok())
+                .filter(|r| !r.type_rules.is_empty())
+                .map(|r| {
+                    let mut types: Vec<Option<String>> = vec![None];
+                    types.extend(r.type_rules.iter().map(|t| Some(t.account_type.clone())));
+                    types
+                });
+            match (scope.get_mut(&view.account), types) {
+                (None, types) => {
+                    scope.insert(view.account, types);
+                }
+                // One recipe that reads the whole account makes the whole account the scope.
+                (Some(held), None) => *held = None,
+                (Some(Some(held)), Some(types)) => {
+                    for t in types {
+                        if !held.contains(&t) {
+                            held.push(t);
+                        }
+                    }
+                }
+                (Some(None), Some(_)) => {}
+            }
             let products = per_account.entry(view.account).or_default();
             for row in &view.plan.matched {
-                match products.get_mut(&row.product) {
+                match products.get_mut(&(row.product, row.account_type.clone())) {
                     // Another recipe feeds the same product: the values and quantities are
                     // added up, and the price is kept only if it is the same.
                     Some(held) => {
@@ -892,9 +964,9 @@ impl AppState {
                     }
                     None => {
                         products.insert(
-                            row.product,
+                            (row.product, row.account_type.clone()),
                             HoldingInput {
-                                account_type: None,
+                                account_type: row.account_type.clone(),
                                 product: row.product,
                                 value: row.value,
                                 quantity: row.quantity,
@@ -932,6 +1004,7 @@ impl AppState {
                 next.apply(Edit::ReplaceHoldings {
                     account,
                     holdings: products.into_values().collect(),
+                    types: scope.remove(&account).flatten(),
                 })
                 .map_err(|e| e.to_string())?;
             }
@@ -1410,6 +1483,7 @@ mod tests {
             rows: rows
                 .iter()
                 .map(|(n, v)| ImportRow {
+                    account_type: None,
                     name: (*n).to_owned(),
                     value: rust_decimal::Decimal::from(*v),
                     quantity: None,
@@ -1474,6 +1548,169 @@ mod tests {
         );
     }
 
+    fn typed_recipe(name: &str, account: AccountId, types: &[(&str, &str)]) -> Recipe {
+        Recipe {
+            name: name.to_owned(),
+            all_tables: true,
+            type_rules: types
+                .iter()
+                .map(|(title, id)| portfolio::TypeRule {
+                    title: (*title).to_owned(),
+                    account_type: (*id).to_owned(),
+                })
+                .collect(),
+            ..domestic_recipe(account)
+        }
+    }
+
+    #[test]
+    fn a_fetch_replaces_per_account_and_type_and_leaves_the_other_types_alone() {
+        let (state, main, _, stock, fund) = recipe_state("per-type");
+        link(&state, stock, "Stock A");
+        link(&state, fund, "Fund X");
+        for (product, ty, value) in [
+            (stock, Some("nisa"), 10),
+            (stock, Some("specific"), 20),
+            (fund, Some("old_nisa"), 30),
+            (fund, None, 40),
+        ] {
+            state
+                .apply(Edit::SetHolding {
+                    account_type: ty.map(str::to_owned),
+                    account: main,
+                    product,
+                    value: rust_decimal::Decimal::from(value),
+                    quantity: None,
+                })
+                .unwrap();
+        }
+        let recipe = typed_recipe(
+            "Typed",
+            main,
+            &[("Stocks (NISA)", "nisa"), ("Stocks (taxable)", "specific")],
+        );
+        state
+            .apply(Edit::SetRecipe {
+                recipe: recipe.clone(),
+            })
+            .unwrap();
+        let mut run = stored("Typed", main, &[("Stock A", 111), ("Stock A", 222)]);
+        run.recipe = recipe;
+        run.rows[0].account_type = Some("nisa".to_owned());
+        run.rows[1].account_type = Some("specific".to_owned());
+        *state.runs.lock().unwrap() = vec![run];
+
+        state.apply_fetch_all().unwrap();
+
+        let mut rows: Vec<_> = state
+            .view()
+            .unwrap()
+            .portfolio
+            .holdings
+            .iter()
+            .map(|h| (h.product, h.account_type.clone(), h.value))
+            .collect();
+        rows.sort();
+        let d = rust_decimal::Decimal::from;
+        let mut expected = vec![
+            (stock, Some("nisa".to_owned()), d(111)),
+            (stock, Some("specific".to_owned()), d(222)),
+            // Not covered by the recipe's rules: untouched ...
+            (fund, Some("old_nisa".to_owned()), d(30)),
+            // ... but the records without a type are covered (a table with an unknown title).
+            // The untyped fund record is replaced by nothing here: no row read for it.
+        ];
+        expected.sort();
+        assert_eq!(rows, expected);
+    }
+
+    #[test]
+    fn a_recipe_without_type_rules_makes_the_whole_account_the_scope() {
+        let (state, main, _, stock, fund) = recipe_state("whole");
+        link(&state, stock, "Stock A");
+        state
+            .apply(Edit::SetHolding {
+                account_type: Some("nisa".to_owned()),
+                account: main,
+                product: fund,
+                value: rust_decimal::Decimal::from(5),
+                quantity: None,
+            })
+            .unwrap();
+        let typed = typed_recipe("Typed", main, &[("Stocks (NISA)", "nisa")]);
+        state
+            .apply(Edit::SetRecipe {
+                recipe: typed.clone(),
+            })
+            .unwrap();
+        save_recipe(&state, "Plain", main);
+        let mut run = stored("Typed", main, &[("Stock A", 1)]);
+        run.recipe = typed;
+        *state.runs.lock().unwrap() = vec![run, stored("Plain", main, &[("Stock A", 2)])];
+
+        state.apply_fetch_all().unwrap();
+
+        // The fund record of another type is gone: one recipe reads the whole account.
+        assert_eq!(
+            held(&state, main),
+            vec![(stock, rust_decimal::Decimal::from(3))]
+        );
+    }
+
+    #[test]
+    fn a_table_title_gives_the_type_to_the_records_below_it() {
+        let table = |rows: &[&[&str]]| tabular::Table {
+            rows: rows
+                .iter()
+                .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
+                .collect(),
+            encoding: None,
+            delimiter: None,
+        };
+        let recipe = typed_recipe(
+            "Typed",
+            AccountId(1),
+            &[("Stocks (NISA)", "nisa"), ("Stocks (taxable)", "specific")],
+        );
+        // Two tables put together: the first whole (title, heading, records), the second without
+        // its title and heading rows; a third with a title that no rule names.
+        let merged = table(&[
+            &["Stocks (taxable)"],
+            &["Name", "Value"],
+            &["A", "10"],
+            &["x", "y"],
+            &["B", "20"],
+            &["C", "30"],
+        ]);
+        let sections = [
+            ("Stocks (taxable)", 0),
+            ("Stocks (NISA)", 4),
+            ("Stocks (other)", 5),
+        ]
+        .map(|(title, start)| crate::browser_session::Section {
+            title: title.to_owned(),
+            start,
+        });
+        let mut recipe_one_header = recipe.clone();
+        recipe_one_header.mapping.header_rows = 2;
+        let (rows, skipped) = read_rows(&merged, &sections, &recipe_one_header);
+        let read: Vec<_> = rows
+            .iter()
+            .map(|r| (r.name.as_str(), r.account_type.as_deref()))
+            .collect();
+        assert_eq!(
+            read,
+            vec![("A", Some("specific")), ("B", Some("nisa")), ("C", None)]
+        );
+        // "x y" is not a number; its row number is that of the whole table.
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0].row, 4);
+
+        // Without rules the whole table is read as before, with no types.
+        let (rows, _) = read_rows(&merged, &[], &domestic_recipe(AccountId(1)));
+        assert!(rows.iter().all(|r| r.account_type.is_none()));
+    }
+
     #[test]
     fn an_account_with_no_linked_row_is_left_alone() {
         let (state, main, other, stock, _) = recipe_state("untouched");
@@ -1524,6 +1761,7 @@ mod tests {
         state
             .apply(Edit::SetRecipe {
                 recipe: Recipe {
+                    type_rules: Vec::new(),
                     name: "Domestic".to_owned(),
                     links: Vec::new(),
                     table_starts_with: "Stocks".to_owned(),
@@ -1599,6 +1837,7 @@ mod tests {
 
     fn domestic_recipe(account: AccountId) -> Recipe {
         Recipe {
+            type_rules: Vec::new(),
             name: "Domestic".to_owned(),
             links: Vec::new(),
             table_starts_with: "Stocks".to_owned(),
@@ -1722,6 +1961,7 @@ mod tests {
         use portfolio::FetchLink;
         let (state, main, _, _, _) = recipe_state("reference");
         let recipe = Recipe {
+            type_rules: Vec::new(),
             links: vec![FetchLink {
                 text: "List".to_owned(),
                 reference: None,

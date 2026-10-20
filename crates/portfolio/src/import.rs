@@ -19,6 +19,9 @@ pub struct ImportRow {
     /// quantity x price / unit, to check the value against.
     #[serde(default)]
     pub computed: Option<Decimal>,
+    /// The type the table title said the record has (see `Recipe::type_rules`); `None`: not read.
+    #[serde(default)]
+    pub account_type: Option<String>,
 }
 
 fn one() -> u64 {
@@ -38,6 +41,8 @@ pub struct MatchedRow {
     /// The price, when every row had the same one (rows at different prices have no single price).
     pub price: Option<Decimal>,
     pub price_unit: u64,
+    /// The type the rows were read with; rows of one product but of two types are two matches.
+    pub account_type: Option<String>,
 }
 
 /// What an import would do. Nothing here changes the portfolio.
@@ -103,7 +108,11 @@ impl Portfolio {
                 Some(p) if !currency.is_empty() && p.currency != currency => {
                     plan.wrong_currency.push(row.clone());
                 }
-                Some(p) => match plan.matched.iter_mut().find(|m| m.product == p.id) {
+                Some(p) => match plan
+                    .matched
+                    .iter_mut()
+                    .find(|m| m.product == p.id && m.account_type == row.account_type)
+                {
                     Some(existing) => {
                         existing.names.push(name.to_owned());
                         existing.value += row.value;
@@ -123,6 +132,7 @@ impl Portfolio {
                         quantity: row.quantity,
                         price: row.price,
                         price_unit: row.price_unit,
+                        account_type: row.account_type.clone(),
                     }),
                 },
             }

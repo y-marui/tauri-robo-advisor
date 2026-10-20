@@ -1003,6 +1003,34 @@ fn overview_lists_each_holding_with_its_share() {
     assert_eq!(main_stock.share, dec!(0.7778));
 }
 
+#[test]
+fn overview_totals_each_type_and_they_add_up_to_the_whole() {
+    let mut f = fixture();
+    let (account, product) = (f.main, f.s1);
+    f.portfolio
+        .apply(Edit::SetHolding {
+            account_type: Some("nisa".to_owned()),
+            account,
+            product,
+            value: dec!(100000),
+            quantity: None,
+        })
+        .unwrap();
+
+    let o = overview(&f.portfolio).unwrap();
+
+    let sum: Decimal = o.types.iter().map(|t| t.value).sum();
+    assert_eq!(sum, o.total);
+    let nisa = o
+        .types
+        .iter()
+        .find(|t| t.account_type.as_deref() == Some("nisa"))
+        .unwrap();
+    assert_eq!(nisa.value, dec!(100000));
+    // The records without a type are listed too, first.
+    assert_eq!(o.types[0].account_type, None);
+}
+
 // ---- account balance ------------------------------------------------------
 
 /// One category with products A (weight 3) and B (weight 1); the account

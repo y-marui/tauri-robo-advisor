@@ -26,7 +26,8 @@ pub use account_balance::{AccountBalance, CategoryBalance, ProductBalance, accou
 pub use engine::suggest;
 pub use error::Error;
 pub use overview::{
-    AccountOverview, CategoryOverview, GroupOverview, HoldingOverview, Overview, overview,
+    AccountOverview, CategoryOverview, GroupOverview, HoldingOverview, Overview, TypeOverview,
+    overview,
 };
 pub use types::{CategoryLine, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 

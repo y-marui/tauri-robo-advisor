@@ -4,7 +4,7 @@ import { getLanguage, t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Category, Holding, Overview, PortfolioView } from "../types.ts";
 import { groupEntries, groupName } from "./groups.ts";
-import { recordKey, typeLabel } from "./labels.ts";
+import { matchesTypeFilter, NO_TYPE, recordKey, typeFilterKey, typeLabel } from "./labels.ts";
 
 // The center panel: holding records grouped by category (or by account), each group opened by
 // a subtotal row. The table only shows: names, categories and amounts (in the product's own
@@ -31,7 +31,11 @@ export function holdingsTablePanel(ctx: Context): Panel {
   // The group subtotals; the key is the group id, or "none" for the ungrouped categories.
   let groupCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
   const note = h("p", { class: "note", role: "status" });
-  let groupBy: "category" | "account" = "category";
+  const inFilter = (record: Holding): boolean => matchesTypeFilter(record.account_type, typeFilter);
+  let groupBy: "category" | "account" | "type" = "category";
+  // Show only the records of one type: a type id, "none" for the records without a type, "" for all.
+  let typeFilter = "";
+  let typeCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
   let lastView: PortfolioView | null = null;
   let lastOverview: Overview | null = null;
 
@@ -46,6 +50,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
     (view) =>
       [
         groupBy,
+        typeFilter,
+        (view.portfolio.custom_types ?? []).map((c) => `${c.id}:${c.name}`).join(","),
         view.portfolio.accounts.map((a) => `${a.id}:${a.name}`).join(","),
         view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.group ?? ""}`).join(","),
         view.portfolio.groups.map((g) => `${g.id}:${g.name}`).join(","),
@@ -58,10 +64,14 @@ export function holdingsTablePanel(ctx: Context): Panel {
       categoryCells = new Map();
       groupCells = new Map();
       accountCells = new Map();
-      const { categories, products, accounts, holdings } = view.portfolio;
-      if (holdings.length === 0) {
+      typeCells = new Map();
+      const { categories, products, accounts } = view.portfolio;
+      if (view.portfolio.holdings.length === 0) {
         return [h("p", { class: "note" }, t("No holdings yet.")), editButton()];
       }
+      // A subtotal is the figure of the whole portfolio, so with a filter on the subtotals are
+      // left empty (the rows below them are only some of the records).
+      const holdings = view.portfolio.holdings.filter(inFilter);
 
       let current: PortfolioView = view;
       // The quantity and price cells follow every refresh (an import or an edit changes them
@@ -156,6 +166,30 @@ export function holdingsTablePanel(ctx: Context): Panel {
               "tr",
               { class: "group" },
               h("th", { scope: "rowgroup", colspan: 4 }, account.name),
+              h("td", {}),
+              h("td", {}),
+              h("td", {}),
+              subtotal.value,
+              subtotal.share,
+            ),
+          );
+          for (const record of records) {
+            recordRow(record);
+          }
+        }
+      } else if (groupBy === "type") {
+        const ids = [...new Set(holdings.map((x) => x.account_type ?? null))].sort((a, b) =>
+          typeLabel(a, view.portfolio.custom_types).localeCompare(typeLabel(b, view.portfolio.custom_types)),
+        );
+        for (const id of ids) {
+          const records = holdings.filter((x) => (x.account_type ?? null) === id);
+          const subtotal = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
+          typeCells.set(typeFilterKey(id), subtotal);
+          rows.push(
+            h(
+              "tr",
+              { class: "group" },
+              h("th", { scope: "rowgroup", colspan: 4 }, typeLabel(id, view.portfolio.custom_types)),
               h("td", {}),
               h("td", {}),
               h("td", {}),
@@ -266,9 +300,35 @@ export function holdingsTablePanel(ctx: Context): Panel {
     { "aria-label": t("Group by") },
     h("option", { value: "category" }, t("By category")),
     h("option", { value: "account" }, t("By account")),
+    h("option", { value: "type" }, t("By type")),
   );
+  const filter = h("select", { "aria-label": t("Show type") });
+  const refill = (view: PortfolioView): void => {
+    const present = [...new Set(view.portfolio.holdings.map((x) => typeFilterKey(x.account_type)))];
+    const options = [
+      { value: "", label: t("All types") },
+      ...present.map((key) => ({
+        value: key,
+        label: typeLabel(key === NO_TYPE ? null : key, view.portfolio.custom_types),
+      })),
+    ];
+    // A type that no record has any more cannot stay selected.
+    if (typeFilter !== "" && !present.includes(typeFilter)) {
+      typeFilter = "";
+    }
+    filter.replaceChildren(
+      ...options.map((o) => h("option", { value: o.value, selected: o.value === typeFilter }, o.label)),
+    );
+  };
+  filter.addEventListener("change", () => {
+    typeFilter = filter.value;
+    redraw();
+  });
   switcher.addEventListener("change", () => {
-    groupBy = switcher.value === "account" ? "account" : "category";
+    groupBy = switcher.value === "account" ? "account" : switcher.value === "type" ? "type" : "category";
+    redraw();
+  });
+  function redraw(): void {
     if (lastView) {
       table.render(lastView);
       // The rebuilt cells are empty until the valuation is put into them again.
@@ -276,8 +336,14 @@ export function holdingsTablePanel(ctx: Context): Panel {
         showOverview(lastView, lastOverview);
       }
     }
-  });
-  table.el.querySelector("h2")?.after(h("label", { class: "group-by" }, `${t("Group by")} `, switcher), editButton());
+  }
+  table.el
+    .querySelector("h2")
+    ?.after(
+      h("label", { class: "group-by" }, `${t("Group by")} `, switcher),
+      h("label", { class: "group-by" }, `${t("Show type")} `, filter),
+      editButton(),
+    );
 
   function showOverview(_view: PortfolioView, overview: Overview): void {
     lastOverview = overview;
@@ -290,23 +356,30 @@ export function holdingsTablePanel(ctx: Context): Panel {
         cells.share.textContent = percent(record.share);
       }
     }
+    for (const type of overview.types) {
+      const cells = typeCells.get(typeFilterKey(type.account_type));
+      if (cells && typeFilter === "") {
+        cells.value.textContent = yen(type.value);
+        cells.share.textContent = percent(type.share);
+      }
+    }
     for (const account of overview.accounts) {
       const cells = accountCells.get(account.account);
-      if (cells) {
+      if (cells && typeFilter === "") {
         cells.value.textContent = yen(account.value);
         cells.share.textContent = percent(account.share);
       }
     }
     for (const group of overview.groups) {
       const cells = groupCells.get(group.group === null ? "none" : String(group.group));
-      if (cells) {
+      if (cells && typeFilter === "") {
         cells.value.textContent = yen(group.current);
         cells.share.textContent = percent(group.current_share);
       }
     }
     for (const category of overview.categories) {
       const cells = categoryCells.get(category.category);
-      if (cells) {
+      if (cells && typeFilter === "") {
         cells.value.textContent = yen(category.current);
         cells.share.textContent = percent(category.current_share);
       }
@@ -319,6 +392,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
       lastView = view;
       // A valuation belongs to the state it was worked out from.
       lastOverview = null;
+      refill(view);
       table.render(view);
     },
     showOverview,

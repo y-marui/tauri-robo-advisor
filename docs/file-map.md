@@ -13,7 +13,7 @@ _最終更新: 2026-10-19_
 | `src/decimal.ts` | 十進数の文字列の変換（％ ↔ 小数、桁区切り表示）。浮動小数点を使わない | — |
 | `src/i18n.ts` | 画面の文言（英語がキー、日本語は翻訳） | — |
 | `src/panel.ts`, `src/fields.ts`, `src/dom.ts` | パネルの描画、入力部品、DOM の補助 | `src/i18n.ts` |
-| `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別の一覧、グループとカテゴリの小計（表示だけ。編集は全レコードのカード） | `src/panel.ts`, `src/views/groups.ts` |
+| `src/views/holdings-table.ts` | 保有タブの表。カテゴリ別・口座別・種別ごとの一覧と種別での絞り込み、グループとカテゴリの小計（表示だけ。編集は全レコードのカード） | `src/panel.ts`, `src/views/groups.ts` |
 | `src/views/account-types.ts` | 設定タブの「口座の種類」カード。追加した種別の追加・名前・売却可・削除 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/records.ts` | 設定タブの「全レコード」カード。商品とレコード（口座・商品・種別）の編集、レコードと商品の追加、商品名の絞り込み | `src/panel.ts`, `src/fields.ts`, `src/views/holdings-table.ts`（`priceText`） |
 | `src/views/groups.ts` | グループのカード（追加・名前の変更・削除）と、グループの表示の順序・名前の補助 | `src/panel.ts`, `src/fields.ts` |
@@ -25,7 +25,7 @@ _最終更新: 2026-10-19_
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/browser-controls.ts` | ブラウザの選択・プロファイルのフォルダ・開く・閉じる（「ブラウザで取得」と取得レシピで共有。最後の選択を初期値にする） | `src/api.ts`, `src/browser-defaults.ts` |
 | `src/views/browser-fetch.ts` | 「ブラウザで取得」。ページと表の選択（ブラウザの起動は `browser-controls.ts`） | `src/api.ts` |
-| `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表（とカード一覧）の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
+| `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表（とカード一覧）の保持。ページはホストとタイトルだけを返す。つなげた表の各表の位置とタイトル（`Section`）も返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
 | `src/views/data-folder.ts` | データの保存場所のカードと、同期に関する知らせ | `src/api.ts` |
 | `src-tauri/src/browser_settings.rs` | 最後に使ったブラウザの種類とプロファイルのフォルダ（ローカルの `browser-settings.json`。ポートフォリオのデータには入れない） | — |
 | `src-tauri/src/data_folder.rs` | 保存先のフォルダの選択（ポインタファイル）、競合のコピーと未ダウンロードの検出、iCloud Drive のフォルダ | — |
@@ -68,7 +68,7 @@ _最終更新: 2026-10-19_
 | `crates/portfolio/src/validate.rs` | 入力の検査、`validate_integrity`（読み込み時の整合性）、`issues`（提案をブロックする不備） | `error.rs` |
 | `crates/portfolio/src/error.rs` | `Error` と `Issue` | `thiserror` |
 | `crates/suggest/src/engine.rs` | 評価額の換算、4 つのモード、結果の組み立て | `fill.rs`, `round.rs`, `portfolio` |
-| `crates/suggest/src/overview.rs` | グループごと（目標はカテゴリの合計）、カテゴリごと、保有ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
+| `crates/suggest/src/overview.rs` | グループごと（目標はカテゴリの合計）、カテゴリごと、保有ごと、種別ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/account_balance.rs` | 口座内の商品バランス（商品比率に対する現在額と不足・超過） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/fill.rs` | 水位配分（目標を最も下回るものから足す。売りは符号を反転して同じ関数を使う） | `rust_decimal` |
 | `crates/suggest/src/round.rs` | 丸め単位への丸め（合計を保つ最大剰余法。上限つき） | `rust_decimal` |
@@ -80,8 +80,8 @@ _最終更新: 2026-10-19_
 | `crates/tabular/src/decode.rs` | バイト列の文字コード判別（UTF-8 か Shift-JIS）。バイナリは拒否する | `encoding_rs` |
 | `crates/tabular/src/parse.rs` | CSV・タブ区切りの解析（引用符、サイズの上限） | — |
 | `crates/tabular/src/mapping.rs` | 名前・評価額の列の選択と、金額の読み取り。読めない行は理由つきで返す | `rust_decimal` |
-| `crates/portfolio/src/presets.rs` | 組み込みのレシピ（プリセット）のデータ。口座を渡すレシピの定義と、レシピが指すプリセットの定義を返す `Recipe::effective` | `portfolio` |
-| `crates/portfolio/src/import.rs` | 取り込んだ行を別名で商品へ対応づける（`plan_import`） | `portfolio` |
+| `crates/portfolio/src/presets.rs` | 組み込みのレシピ（プリセット）のデータ。口座を渡すレシピの定義（SBI の表タイトルと種別の規則 `types` を含む）と、レシピが指すプリセットの定義を返す `Recipe::effective`、表のタイトルから種別を引く `Recipe::type_of_title` | `portfolio` |
+| `crates/portfolio/src/import.rs` | 取り込んだ行を別名で商品へ対応づける（`plan_import`。商品と種別の組ごと） | `portfolio` |
 | `crates/export/src/lib.rs` | 保有・カテゴリ・商品・別名・口座・設定の CSV、全データの JSON、README の生成 | `portfolio` |
 | `crates/export/src/csv.rs` | CSV の書き出し（BOM、CRLF、引用、数式の無効化） | — |
 | `src-tauri/src/exporter.rs` | 新しいフォルダへの書き込み、UTC の日時の文字列 | `crates/export` |

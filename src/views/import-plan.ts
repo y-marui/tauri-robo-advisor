@@ -4,6 +4,7 @@ import { getLanguage, t } from "../i18n.ts";
 import type { Context } from "../panel.ts";
 import { differenceLines } from "./differences.ts";
 import type { Edit, ImportPlan, PortfolioView } from "../types.ts";
+import { typeLabel } from "./labels.ts";
 
 // The result of an import, shared by every source (bitFlyer, a table file or
 // pasted text): the rows linked to products, a way to link the others by hand,
@@ -50,6 +51,8 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
     return button;
   };
 
+  // The type column shows only when a table title gave a type to some row.
+  const typed = plan.matched.some((row) => row.account_type);
   if (plan.matched.length > 0) {
     parts.push(
       h(
@@ -66,6 +69,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
               {},
               h("th", {}, t("Name")),
               h("th", {}, t("Product")),
+              ...(typed ? [h("th", {}, t("Type"))] : []),
               h("th", {}, currency === "" ? t("Value") : t("Value ({currency})", { currency })),
               h("th", {}, ""),
             ),
@@ -79,6 +83,9 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
                 {},
                 h("th", { scope: "row" }, row.names.join(", ")),
                 h("td", {}, productName(row.product)),
+                ...(typed
+                  ? [h("td", {}, row.account_type ? typeLabel(row.account_type, view.portfolio.custom_types) : "")]
+                  : []),
                 h("td", { class: "num" }, yen(row.value)),
                 h("td", {}, ...row.names.map((name) => unlink(row.product, name))),
               ),
