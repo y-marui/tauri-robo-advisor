@@ -26,6 +26,8 @@ interface Options {
   onOpened(): Promise<void> | void;
   /** Called after the browser was closed. */
   onClosed(): void;
+  /** Only the browser and the profile folder (no Open/Close buttons): the browser is started by the fetch. */
+  compact?: boolean;
 }
 
 export interface BrowserControls {
@@ -45,7 +47,7 @@ export function browserControls(options: Options): BrowserControls {
   });
   const openButton = h("button", { type: "button" }, t("Open browser"));
   const closeButton = h("button", { type: "button" }, t("Close browser"));
-  const row = h("div", { class: "add-row" }, browserSelect, profileInput, openButton, closeButton);
+  const row = h("div", { class: "add-row" }, browserSelect, profileInput, ...(options.compact ? [] : [openButton, closeButton]));
   row.hidden = true;
   const none = h("p", { class: "note" }, t("No Chrome, Edge, or Brave was found on this computer."));
   none.hidden = true;

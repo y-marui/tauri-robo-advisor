@@ -24,10 +24,11 @@ const NEW_ACCOUNT = "new";
 export function recipesPanel(ctx: Context): Panel {
   const list = h("div", { class: "recipe-list" });
   const pageSelect = h("select", { "aria-label": t("Page") });
-  const refreshButton = h("button", { type: "button" }, t("Refresh pages"));
   const runButton = h("button", { type: "button" }, t("Fetch all"));
   // The page to read is chosen here only for recipes that name no site.
-  const pageRow = h("div", { class: "add-row" }, pageSelect, refreshButton);
+  const pageRow = h("div", { class: "add-row" }, h("span", { class: "note" }, t("Page to read for recipes that name no site:")), pageSelect);
+  // The list is read when the select is opened (there is no refresh button).
+  pageSelect.addEventListener("focus", () => void refreshPages());
   const message = h("p", { class: "note", role: "status" });
   const attention = h("div", { class: "recipe-attention" });
   const results = h("div", { class: "recipe-results", "aria-live": "polite" });
@@ -46,6 +47,16 @@ export function recipesPanel(ctx: Context): Panel {
       newAccountName.focus();
     }
   });
+  const addForm = h(
+    "div",
+    { class: "recipe-add" },
+    h("h3", {}, t("Add from a preset")),
+    presetSelect,
+    presetAccount,
+    presetAdd,
+    newAccountName,
+    presetNote,
+  );
   let presets: PresetInfo[] = [];
   let presetAccountsSignature = "";
   let presetRecipesSignature = "";
@@ -163,6 +174,7 @@ export function recipesPanel(ctx: Context): Panel {
       await refreshPages();
       info(t("Log in to your brokerage in that browser, then fetch the recipes."));
     },
+    compact: true,
     onClosed: () => void refreshPages(),
   });
 
@@ -288,7 +300,6 @@ export function recipesPanel(ctx: Context): Panel {
     const mine = ++sequence;
     // The tabs are fixed for the whole batch: the selection cannot change under it.
     pageSelect.disabled = true;
-    refreshButton.disabled = true;
     // Whatever is on screen is out of date from now on, and must not be applied or redrawn.
     refresh++;
     if (applyButton) {
@@ -394,7 +405,6 @@ export function recipesPanel(ctx: Context): Panel {
     } finally {
       runButton.disabled = false;
       pageSelect.disabled = false;
-      refreshButton.disabled = false;
     }
   }
 
@@ -470,7 +480,6 @@ export function recipesPanel(ctx: Context): Panel {
     );
   }
 
-  refreshButton.addEventListener("click", () => void refreshPages());
   runButton.addEventListener("click", () => void runAll());
 
   /** A button that fetches just this recipe (the others keep what they already read). */
@@ -487,6 +496,7 @@ export function recipesPanel(ctx: Context): Panel {
       );
       runButton.disabled = true;
       pageRow.hidden = true;
+      list.append(addForm);
       return;
     }
     runButton.disabled = false;
@@ -507,6 +517,7 @@ export function recipesPanel(ctx: Context): Panel {
           ...group.recipes.map((recipe) => recipeRow(view, recipe)),
         );
       }),
+      addForm,
     );
   }
 
@@ -586,8 +597,7 @@ export function recipesPanel(ctx: Context): Panel {
       t("“Fetch” follows each recipe’s links (they only show other pages), reads its table, and shows the result. If a site has no open page, its login page is opened: log in by hand, then press Fetch again. Nothing changes until you confirm."),
     ),
     list,
-    h("div", { class: "add-row" }, presetSelect, presetAccount, newAccountName, presetAdd),
-    presetNote,
+    h("h3", { class: "browser-heading" }, t("Browser settings")),
     browser.el,
     pageRow,
     message,

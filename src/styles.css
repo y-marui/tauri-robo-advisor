@@ -482,6 +482,7 @@ textarea {
 
 .recipe-list .recipe-group,
 .recipe-list .recipe-group-head,
+.recipe-list .recipe-add,
 .recipe-list .recipe-row,
 .recipe-list .recipe-fetch-all {
   display: contents;
@@ -503,15 +504,19 @@ textarea {
 }
 
 .recipe-list .recipe-name,
+.recipe-list .recipe-add > h3,
+.recipe-list .recipe-add > select:first-of-type,
 .recipe-list .recipe-group h3 {
   grid-column: 1;
 }
 
+.recipe-list .recipe-add > h3,
 .recipe-list .recipe-group h3 {
   margin: 8px 0 0;
   font-size: 0.95rem;
 }
 
+.recipe-list .recipe-add > select,
 .recipe-list .recipe-row select {
   width: 100%;
   min-width: 0;
@@ -844,4 +849,24 @@ details.product-tools summary {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+/* The add form uses the same columns: preset in the name column, account next, "Add" in the delete column. */
+.recipe-list .recipe-add > button {
+  grid-column: 4;
+  justify-self: stretch;
+}
+
+.recipe-list .recipe-add > input {
+  grid-column: 1 / 3;
+}
+
+.recipe-list .recipe-add > .note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.browser-heading {
+  margin: 12px 0 4px;
+  font-size: 0.95rem;
 }
