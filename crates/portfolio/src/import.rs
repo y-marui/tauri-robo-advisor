@@ -56,6 +56,58 @@ pub struct ImportPlan {
     /// Rows whose evaluation differs from quantity x price by more than the smallest unit of the
     /// currency. The evaluation stays the value; the person looks before applying.
     pub differences: Vec<ValueDifference>,
+    /// For unmatched names that have a product of the same or a similar name: a hint for the
+    /// link step. Only a suggestion; nothing is linked by it.
+    pub suggestions: Vec<LinkSuggestion>,
+}
+
+/// An existing product that an unmatched name may belong to (see `name_match`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LinkSuggestion {
+    pub name: String,
+    /// A product with the same name (trimmed, ignoring case).
+    pub exact: Option<ProductId>,
+    /// Else a product whose name is similar; offered first, never linked on its own.
+    pub similar: Option<ProductId>,
+}
+
+/// Letters and digits only, lowercased: "Poly-gon" and "poly gon" both become "polygon".
+fn normalized(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// How a name relates to a product name. `Exact`: equal after trimming, ignoring case.
+/// `Similar`: equal after dropping everything but letters and digits, or one contains the other
+/// (the shorter one needs two characters, so a single letter hints nothing). Deliberately
+/// simple: it is a hint for a person, not a decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum NameMatch {
+    Containing,
+    Normalized,
+    Exact,
+}
+
+fn name_match(name: &str, product: &str) -> Option<NameMatch> {
+    let (name, product) = (name.trim(), product.trim());
+    if name.to_lowercase() == product.to_lowercase() {
+        return Some(NameMatch::Exact);
+    }
+    let (a, b) = (normalized(name), normalized(product));
+    if a.is_empty() || b.is_empty() {
+        return None;
+    }
+    if a == b {
+        return Some(NameMatch::Normalized);
+    }
+    let (short, long) = if a.len() <= b.len() {
+        (&a, &b)
+    } else {
+        (&b, &a)
+    };
+    (short.chars().count() >= 2 && long.contains(short.as_str())).then_some(NameMatch::Containing)
 }
 
 /// A row whose read value and computed value (quantity x price / unit) disagree.
@@ -67,6 +119,28 @@ pub struct ValueDifference {
 }
 
 impl Portfolio {
+    /// The products an unmatched name may belong to: only products that could be linked
+    /// (those in `currency`, when it is set). The best relation wins, the first product on a tie.
+    fn suggest(&self, name: &str, currency: &str) -> Option<LinkSuggestion> {
+        let mut best: Option<(NameMatch, ProductId)> = None;
+        for p in &self.products {
+            if !currency.is_empty() && p.currency != currency {
+                continue;
+            }
+            if let Some(m) = name_match(name, &p.name)
+                && best.is_none_or(|(b, _)| m > b)
+            {
+                best = Some((m, p.id));
+            }
+        }
+        let (m, id) = best?;
+        Some(LinkSuggestion {
+            name: name.to_owned(),
+            exact: (m == NameMatch::Exact).then_some(id),
+            similar: (m != NameMatch::Exact).then_some(id),
+        })
+    }
+
     /// Links imported rows to products by alias. Names are matched exactly (after
     /// trimming); a name is never guessed. `currency` is the currency of the
     /// rows' values: a product in another currency would be valued wrongly, so
@@ -78,6 +152,7 @@ impl Portfolio {
             unmatched: Vec::new(),
             wrong_currency: Vec::new(),
             differences: Vec::new(),
+            suggestions: Vec::new(),
         };
         for row in rows {
             let name = row.name.trim();
@@ -104,7 +179,10 @@ impl Portfolio {
                 }
             }
             match product {
-                None => plan.unmatched.push(row.clone()),
+                None => {
+                    plan.suggestions.extend(self.suggest(name, currency));
+                    plan.unmatched.push(row.clone());
+                }
                 Some(p) if !currency.is_empty() && p.currency != currency => {
                     plan.wrong_currency.push(row.clone());
                 }

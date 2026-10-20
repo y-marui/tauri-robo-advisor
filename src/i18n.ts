@@ -302,6 +302,11 @@ export const MESSAGES = {
   "Fetching…": { ja: "取得中…" },
   "Opening…": { ja: "開いています…" },
   "Could not fetch: {reason}": { ja: "取得できませんでした: {reason}" },
+  "A product with this name already exists. Link to it instead.": {
+    ja: "同じ名前の商品がすでにあります。その商品に対応づけてください。",
+  },
+  "A product with this name exists: {name}": { ja: "同じ名前の商品があります: {name}" },
+  "A product with a similar name exists: {name}": { ja: "似た名前の商品があります: {name}" },
   "Link each name to a product. The choice is remembered.": {
     ja: "名前ごとに商品を選んでください。選んだ対応は記憶されます。",
   },

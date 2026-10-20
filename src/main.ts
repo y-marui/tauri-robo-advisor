@@ -125,8 +125,12 @@ function renderAll(): void {
 // Set by `build()`, which owns the tabs.
 let openRecords: () => void = () => {};
 
+let lastError = "";
+
 const context: Context = {
+  lastError: () => lastError,
   async apply(edit, at) {
+    lastError = "";
     // The edit is tied to the data location of the view it was made from; Rust refuses it if
     // the data folder was switched meanwhile.
     const location = at ?? view?.data.location;
@@ -146,7 +150,8 @@ const context: Context = {
       } catch {
         // Keep showing the last state.
       }
-      showStatus(t("Could not save: {reason}", { reason: String(error) }), true);
+      lastError = String(error);
+      showStatus(t("Could not save: {reason}", { reason: lastError }), true);
       renderAll(); // puts the saved values back into the controls
       return false;
     }
