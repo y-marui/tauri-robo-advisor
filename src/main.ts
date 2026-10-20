@@ -120,6 +120,9 @@ function renderAll(): void {
     });
 }
 
+// Set by `build()`, which owns the tabs.
+let openRecords: () => void = () => {};
+
 const context: Context = {
   async apply(edit) {
     try {
@@ -143,6 +146,9 @@ const context: Context = {
   fail(message) {
     showStatus(message, true);
     renderAll();
+  },
+  showRecords() {
+    openRecords();
   },
   setView(next, message) {
     view = next;
@@ -315,6 +321,10 @@ function build(): void {
     buttons.set(name, button);
   }
   select(readTab());
+  openRecords = () => {
+    select("settings");
+    records.reveal?.();
+  };
   app.replaceChildren(
     h("header", { class: "top" }, h("h1", {}, t("Portfolio")), h("div", { class: "tools" }, exportButton, language)),
     h("div", { class: "tabs main-tabs", role: "tablist", "aria-label": t("Main sections") }, ...buttons.values()),

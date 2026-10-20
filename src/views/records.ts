@@ -380,12 +380,20 @@ export function recordsPanel(ctx: Context): Panel {
     h(
       "p",
       { class: "note" },
-      t("Every product and every record, as saved. Edit them here."),
+      t("Every product and every record, as saved. Edit here; the Holdings tab only shows them."),
       " ",
       t("Amounts are in each product’s currency."),
+      " ",
+      t("Category and group names are edited in the Categories and Groups cards."),
     ),
     filter,
   );
   card.el.insertBefore(tools, card.el.querySelector(".card-body"));
-  return card;
+  return {
+    ...card,
+    reveal() {
+      card.el.scrollIntoView({ block: "start" });
+      filter.focus({ preventScroll: true });
+    },
+  };
 }

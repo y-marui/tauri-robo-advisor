@@ -10,6 +10,8 @@ export interface Context {
   fail(message: string): void;
   /** Takes a new state that did not come from an edit (for example after the data folder changed). */
   setView(view: PortfolioView, message: string): void;
+  /** Switches to the Settings tab and brings the Records card into view (where names, categories and amounts are edited). */
+  showRecords(): void;
 }
 
 /** Copies the current state into a control, unless the user is typing in it. */
@@ -22,6 +24,8 @@ export interface Panel {
   showOverview?(view: PortfolioView, overview: Overview): void;
   /** The valuation could not be computed. */
   overviewFailed?(error: unknown): void;
+  /** Scrolls the card into view and puts the focus in it. */
+  reveal?(): void;
 }
 
 /**
