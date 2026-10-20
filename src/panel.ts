@@ -6,6 +6,8 @@ import type { Edit, Overview, PortfolioView } from "./types.ts";
 export interface Context {
   /** Sends an edit (tied to the given data location, or the one shown now); the app shows the result and refreshes every panel. Resolves to whether it was accepted. */
   apply(edit: Edit, location?: number): Promise<boolean>;
+  /** Like `apply`, but says why an edit was refused, for showing next to the control that sent it. */
+  tryApply(edit: Edit, location?: number): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** Shows a message without sending anything. */
   fail(message: string): void;
   /** Takes a new state that did not come from an edit (for example after the data folder changed). */

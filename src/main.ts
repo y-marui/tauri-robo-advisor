@@ -127,6 +127,9 @@ let openRecords: () => void = () => {};
 
 const context: Context = {
   async apply(edit, at) {
+    return (await context.tryApply(edit, at)).ok;
+  },
+  async tryApply(edit, at) {
     // The edit is tied to the data location of the view it was made from; Rust refuses it if
     // the data folder was switched meanwhile.
     const location = at ?? view?.data.location;
@@ -137,7 +140,7 @@ const context: Context = {
       view = await applyEdit(edit, location);
       renderAll();
       showStatus(t("Saved."), false);
-      return true;
+      return { ok: true };
     } catch (error) {
       // The file may have been changed on another computer: look at it again so
       // the controls show what is really saved.
@@ -146,9 +149,10 @@ const context: Context = {
       } catch {
         // Keep showing the last state.
       }
-      showStatus(t("Could not save: {reason}", { reason: String(error) }), true);
+      const reason = String(error);
+      showStatus(t("Could not save: {reason}", { reason }), true);
       renderAll(); // puts the saved values back into the controls
-      return false;
+      return { ok: false, reason };
     }
   },
   fail(message) {

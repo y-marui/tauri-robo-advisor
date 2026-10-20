@@ -1,6 +1,7 @@
 import { formatAmount } from "../decimal.ts";
-import { h } from "../dom.ts";
+import { h, infoIcon } from "../dom.ts";
 import { getLanguage, t } from "../i18n.ts";
+import { isNameConflict, offerFirst, suggestedProduct, suggestionFor } from "../link-hints.ts";
 import type { Context } from "../panel.ts";
 import { differenceLines } from "./differences.ts";
 import type { Edit, ImportPlan, PortfolioView } from "../types.ts";
@@ -11,6 +12,10 @@ import { typeLabel } from "./labels.ts";
 // and the confirmed replacement of an account's holdings. Names are never
 // linked automatically: the user picks the product and the choice is remembered
 // as an alias of this source.
+
+// Why a link or create was refused, kept per name so that the reason stays next to the row when
+// the view is drawn again (the plan is rebuilt after every edit and refresh).
+const rowErrors = new Map<string, string>();
 
 const yen = (amount: string): string => formatAmount(amount, getLanguage());
 
@@ -36,6 +41,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
   const ctx = {
     ...options.ctx,
     apply: (edit: Edit) => options.ctx.apply(edit, view.data.location),
+    tryApply: (edit: Edit) => options.ctx.tryApply(edit, view.data.location),
   };
   const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
   const parts: (HTMLElement | null)[] = [];
@@ -102,8 +108,8 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
     const candidates = view.portfolio.products.filter((p) => currency === "" || p.currency === currency);
     // Every row needs its own option elements: appending one element to a second
     // select would move it out of the first.
-    const optionsFor = (): HTMLOptionElement[] =>
-      candidates.map((p) => h("option", { value: String(p.id) }, currency === "" ? `${p.name} (${p.currency})` : p.name));
+    const optionsFor = (first: number | undefined): HTMLOptionElement[] =>
+      offerFirst(candidates, first).map((p) => h("option", { value: String(p.id) }, currency === "" ? `${p.name} (${p.currency})` : p.name));
     // A name that has no product yet can become one here: the name, a category, and a currency
     // (the one the table was imported in, or another), then it is linked in the same step.
     const categories = view.portfolio.categories;
@@ -114,18 +120,58 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
     parts.push(
       h("p", { class: "note" }, t("Link each name to a product. The choice is remembered.")),
       ...plan.unmatched.map((row) => {
-        const select = h("select", { "aria-label": `${row.name} → ${t("Product")}` }, ...optionsFor());
+        // The hint comes from the plan (Rust decides what is the same or similar). It only
+        // chooses what is selected and offered first; linking still takes a click.
+        const suggestion = suggestionFor(plan.suggestions, row.name);
+        const suggested = suggestedProduct(suggestion);
+        const known = candidates.some((p) => p.id === suggested);
+        const select = h(
+          "select",
+          { "aria-label": `${row.name} → ${t("Product")}` },
+          ...optionsFor(known ? suggested : undefined),
+        );
+        const errorKey = `${source}\u0000${row.name}`;
+        const errorLine = h("p", { class: "note error", role: "alert" });
+        const showError = (message: string | undefined): void => {
+          if (message === undefined) {
+            rowErrors.delete(errorKey);
+          } else {
+            rowErrors.set(errorKey, message);
+          }
+          errorLine.textContent = message ?? "";
+          errorLine.hidden = message === undefined;
+        };
+        showError(rowErrors.get(errorKey));
+        // A refused edit is explained next to the row. A name conflict means the product exists:
+        // say so, and select it so that one click links to it.
+        // The suggestion is for the imported name, so it is the conflicting product only when the
+        // new product kept that name; otherwise the message cannot point at a product.
+        const refused = (reason: string, kept: boolean): void => {
+          if (isNameConflict(reason)) {
+            if (known && kept && suggestion?.exact != null) {
+              select.value = String(suggested);
+              showError(t("A product with this name already exists. Link to it instead."));
+            } else {
+              showError(t("A product with this name already exists."));
+            }
+          } else {
+            showError(t("Could not save: {reason}", { reason }));
+          }
+        };
         const link = h("button", { type: "button" }, t("Link"));
         link.disabled = candidates.length === 0;
         link.addEventListener("click", () => {
-          void ctx.apply({
-            type: "add_alias",
-            product: Number(select.value),
-            source: source,
-            name: row.name,
-          });
+          showError(undefined);
+          void ctx
+            .tryApply({
+              type: "add_alias",
+              product: Number(select.value),
+              source: source,
+              name: row.name,
+            })
+            .then((result) => (result.ok ? undefined : refused(result.reason, false)));
         });
-        const productName = h("input", { type: "text", autocomplete: "off", value: row.name, "aria-label": t("Name of the new product") });
+        const newName = h("input", { type: "text", autocomplete: "off", value: row.name, "aria-label": t("Name of the new product") });
         const categorySelect = h(
           "select",
           { "aria-label": t("Category of the new product") },
@@ -146,26 +192,39 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
         const create = h("button", { type: "button" }, t("Create a product and link"));
         create.disabled = categories.length === 0;
         create.addEventListener("click", () => {
-          void ctx.apply({
-            type: "add_product_with_alias",
-            name: productName.value.trim(),
-            category: Number(categorySelect.value),
-            currency: currencySelect.value.trim().toUpperCase(),
-            source: source,
-            alias: row.name,
-          });
+          showError(undefined);
+          const kept = newName.value.trim().toLowerCase() === row.name.trim().toLowerCase();
+          void ctx
+            .tryApply({
+              type: "add_product_with_alias",
+              name: newName.value.trim(),
+              category: Number(categorySelect.value),
+              currency: currencySelect.value.trim().toUpperCase(),
+              source: source,
+              alias: row.name,
+            })
+            .then((result) => (result.ok ? undefined : refused(result.reason, kept)));
         });
+        const hint = known
+          ? infoIcon(
+              suggestion?.exact != null
+                ? t("A product with this name exists: {name}", { name: productName(suggested as number) })
+                : t("A product with a similar name exists: {name}", { name: productName(suggested as number) }),
+            )
+          : null;
         return h(
           "div",
-          { class: "unmatched" },
+          { class: known ? "unmatched similar" : "unmatched" },
           h(
             "div",
             { class: "add-row" },
             h("span", {}, `${row.name} (${yen(row.value)}${currency === "" ? "" : ` ${currency}`})`),
+            hint,
             select,
             link,
           ),
-          h("div", { class: "add-row" }, productName, categorySelect, currencySelect, currencyList, create),
+          h("div", { class: "add-row" }, newName, categorySelect, currencySelect, currencyList, create),
+          errorLine,
         );
       }),
       candidates.length === 0

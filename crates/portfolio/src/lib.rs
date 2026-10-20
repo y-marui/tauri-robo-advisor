@@ -18,7 +18,7 @@ mod valuation;
 
 pub use edit::{Edit, HoldingInput, MergeConflict};
 pub use error::{Error, Issue};
-pub use import::{ImportPlan, ImportRow, MatchedRow, ValueDifference};
+pub use import::{ImportPlan, ImportRow, LinkSuggestion, MatchedRow, ValueDifference};
 pub use migrate::parse;
 pub use model::*;
 pub use money::{ShownValue, minor_units, round_for_display};
