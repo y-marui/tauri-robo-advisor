@@ -2959,3 +2959,77 @@ fn a_newer_file_is_refused() {
         Err(Error::UnsupportedVersion { found: 15 })
     ));
 }
+
+#[test]
+fn setting_the_category_of_many_products_moves_them_all() {
+    let (mut p, c, a, _) = sample();
+    let c2 = category(&mut p, "Bonds", dec!(0));
+    let b = product(&mut p, "Fund Y", c);
+    let other = product(&mut p, "Fund Z", c);
+
+    apply(
+        &mut p,
+        Edit::SetProductsCategory {
+            products: vec![a, b, b],
+            category: Some(c2),
+            new_category: None,
+        },
+    );
+
+    let cat = |id| p.products.iter().find(|x| x.id == id).unwrap().category;
+    assert_eq!((cat(a), cat(b), cat(other)), (c2, c2, c));
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn setting_the_category_can_make_a_new_one_in_the_same_edit() {
+    let (mut p, _, a, _) = sample();
+    let count = p.categories.len();
+
+    apply(
+        &mut p,
+        Edit::SetProductsCategory {
+            products: vec![a],
+            category: None,
+            new_category: Some("  Gold ".to_owned()),
+        },
+    );
+
+    assert_eq!(p.categories.len(), count + 1);
+    let made = p.categories.last().unwrap();
+    assert_eq!(made.name, "Gold");
+    assert_eq!((made.group, made.target_weight), (None, dec!(0)));
+    assert_eq!(
+        p.products.iter().find(|x| x.id == a).unwrap().category,
+        made.id
+    );
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn setting_the_category_refuses_bad_input_and_changes_nothing() {
+    let (mut p, c, a, _) = sample();
+    let existing = p.categories[0].name.clone();
+    let before = p.clone();
+    let cases = [
+        (vec![], Some(c), None),
+        (vec![ProductId(9999)], Some(c), None),
+        (vec![a], Some(CategoryId(9999)), None),
+        (vec![a], None, None),
+        (vec![a], Some(c), Some("Both".to_owned())),
+        (vec![a], None, Some(existing)),
+        (vec![a], None, Some("   ".to_owned())),
+        (vec![a, ProductId(9999)], None, Some("New".to_owned())),
+    ];
+    for (products, category, new_category) in cases {
+        assert!(
+            p.apply(Edit::SetProductsCategory {
+                products,
+                category,
+                new_category,
+            })
+            .is_err()
+        );
+        assert_eq!(p, before);
+    }
+}

@@ -308,6 +308,7 @@ export type Edit =
   | { type: "detach_preset_recipe"; name: string }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "add_product_with_alias"; name: string; category: number; currency: string; source: string; alias: string }
+  | { type: "set_products_category"; products: number[]; category?: number; new_category?: string }
   | { type: "merge_products"; keep: number; remove: number; on_conflict: "keep" | "take" }
   | { type: "split_product"; product: number; source: string; alias: string; name: string; accounts: number[] }
   | { type: "remove_alias"; product: number; source: string; name: string }
@@ -456,7 +457,18 @@ export interface ImportPlan {
 
 /** What the bitFlyer command returns: balances in JPY, and what could not be valued. */
 export interface BitflyerHoldings {
-  holdings: { symbol: string; value: string; /** How much of the currency is held. */ amount: string }[];
+  holdings: {
+    symbol: string;
+    value: string;
+    /** How much of the currency is held. */
+    amount: string;
+    /** The yen price from the price page the value was worked out with (page prices only). */
+    price?: string | null;
+    /** The Lightning last price, for comparison only. */
+    api_price?: string | null;
+    /** (page price - API price) / API price in percent, for reference. */
+    difference_percent?: string | null;
+  }[];
   unpriced: string[];
 }
 

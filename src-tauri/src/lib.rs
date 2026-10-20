@@ -56,15 +56,67 @@ async fn delete_bitflyer_credentials() -> Result<(), String> {
 
 #[tauri::command]
 async fn fetch_bitflyer_holdings() -> Result<Holdings, String> {
+    let client = bitflyer_client().await?;
+    client.holdings().await.map_err(|e| e.to_string())
+}
+
+// Quantities from the API, prices from the public price page: the table of the open price
+// page is read in the browser the person started (read-only), and gives one yen price per
+// currency. The app opens no connection to the page itself.
+#[tauri::command]
+async fn fetch_bitflyer_holdings_with_page_prices(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Holdings, String> {
+    let prices = {
+        let state = Arc::clone(&state);
+        tauri::async_runtime::spawn_blocking(move || state.browser.read_price_page())
+            .await
+            .map_err(|e| e.to_string())??
+    };
+    let client = bitflyer_client().await?;
+    client
+        .holdings_with_page_prices(&prices)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// Starts the browser (the last one used, or the first one found; a running one is reused)
+// and sends it to the price page. Nothing is typed or clicked there.
+#[tauri::command]
+async fn open_bitflyer_price_page(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let settings = browser_settings::load(&app_data);
+    let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let kind = match settings.kind {
+            Some(kind) => kind,
+            None => BrowserSession::installed()
+                .first()
+                .map(|b| b.kind)
+                .ok_or_else(|| browser::Error::NoBrowser.to_string())?,
+        };
+        let profile = if settings.profile.is_empty() {
+            browser_session::default_profile(&app_data)
+        } else {
+            std::path::PathBuf::from(&settings.profile)
+        };
+        state.browser.open(kind, &profile)?;
+        state.browser.open_price_page()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+async fn bitflyer_client() -> Result<Client<ReqwestTransport>, String> {
     let credentials = tauri::async_runtime::spawn_blocking(secrets::load_bitflyer)
         .await
         .map_err(|e| e.to_string())??
         .ok_or_else(|| "No bitFlyer API credentials are saved.".to_owned())?;
     let transport = ReqwestTransport::new().map_err(|e| e.to_string())?;
-    Client::new(transport, credentials)
-        .holdings()
-        .await
-        .map_err(|e| e.to_string())
+    Ok(Client::new(transport, credentials))
 }
 
 // The portfolio lives in Rust. The frontend asks for a snapshot and sends
@@ -434,6 +486,8 @@ pub fn run() {
             has_bitflyer_credentials,
             delete_bitflyer_credentials,
             fetch_bitflyer_holdings,
+            fetch_bitflyer_holdings_with_page_prices,
+            open_bitflyer_price_page,
             get_portfolio,
             apply_portfolio_edit,
             get_overview,

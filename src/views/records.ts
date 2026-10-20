@@ -4,6 +4,7 @@ import { deleteButton, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Holding, PortfolioView } from "../types.ts";
+import { bulkCategoryBar } from "./bulk-category.ts";
 import { productTools } from "./merge-split.ts";
 import { priceText } from "./holdings-table.ts";
 import { recordKey, typeOptions } from "./labels.ts";
@@ -25,6 +26,9 @@ export function recordsPanel(ctx: Context): Panel {
   let current: PortfolioView | null = null;
   let blocks: { product: number; el: HTMLElement; category: HTMLElement }[] = [];
   let pendingFocus: FocusTarget | null = null;
+  // The selected products survive a rebuild of the card (a product that is gone is dropped).
+  const selected = new Set<number>();
+  let syncSelection: () => void = () => {};
 
   // The filter sits outside the part that is rebuilt, so rebuilding does not clear it.
   const filter = h("input", {
@@ -66,6 +70,12 @@ export function recordsPanel(ctx: Context): Panel {
     (view, bind) => {
       const { categories, accounts, products } = view.portfolio;
       blocks = [];
+      const boxes = new Map<number, HTMLInputElement>();
+      for (const id of [...selected]) {
+        if (!products.some((p) => p.id === id)) {
+          selected.delete(id);
+        }
+      }
       if (categories.length === 0) {
         return [h("p", { class: "note" }, t("Add a category first."))];
       }
@@ -276,6 +286,15 @@ export function recordsPanel(ctx: Context): Panel {
         return form;
       };
 
+      const shown = (): Set<number> =>
+        new Set(blocks.filter((b) => !b.el.hidden).map((b) => b.product));
+      syncSelection = (): void => {
+        for (const [id, box] of boxes) {
+          box.checked = selected.has(id);
+        }
+        bar.refresh();
+      };
+      const bar = bulkCategoryBar(ctx, categories, products, selected, shown, () => syncSelection());
       const bodies: HTMLElement[] = [];
       for (const category of categories) {
         const weighted = category.targeting === "weighted";
@@ -307,9 +326,24 @@ export function recordsPanel(ctx: Context): Panel {
             input.addEventListener("input", fit);
             return input;
           };
+          const box = h("input", {
+            type: "checkbox",
+            "aria-label": `${product.name}: ${t("Select")}`,
+            checked: selected.has(id),
+          });
+          box.addEventListener("change", () => {
+            if (box.checked) {
+              selected.add(id);
+            } else {
+              selected.delete(id);
+            }
+            bar.refresh();
+          });
+          boxes.set(id, box);
           const head = h(
             "div",
             { class: "record-head" },
+            box,
             nameField(),
             selectField({
               ctx,
@@ -402,6 +436,7 @@ export function recordsPanel(ctx: Context): Panel {
       }
 
       return [
+        bar.el,
         h(
           "div",
           { class: "table-wrap" },

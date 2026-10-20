@@ -8,6 +8,7 @@ use crate::credentials::Credentials;
 use crate::model::{
     Balance, parse_balances, parse_error_message, parse_last_price, validate_currency_code,
 };
+use crate::page_prices::PagePrices;
 use crate::sign::sign;
 use crate::transport::{Request, Response, Transport};
 
@@ -21,6 +22,17 @@ pub struct Holding {
     pub value: Decimal,
     /// How much of the currency is held (kept so an import can record the quantity).
     pub amount: Decimal,
+    /// The yen price the value was worked out with, when the prices came from the price
+    /// page (so an import can record the price next to the quantity).
+    #[serde(default)]
+    pub price: Option<Decimal>,
+    /// The Lightning last price, read for comparison only (a currency with a Lightning market).
+    #[serde(default)]
+    pub api_price: Option<Decimal>,
+    /// (page price - API price) / API price, in percent, rounded to 2 places. For reference:
+    /// the two prices differ in meaning and timing, so a difference is not an error.
+    #[serde(default)]
+    pub difference_percent: Option<Decimal>,
 }
 
 /// Balances valued in JPY.
@@ -85,6 +97,56 @@ impl<T: Transport> Client<T> {
                 symbol: balance.currency_code,
                 value,
                 amount: balance.amount,
+                price: None,
+                api_price: None,
+                difference_percent: None,
+            });
+        }
+        holdings.sort_by(|a, b| a.symbol.cmp(&b.symbol));
+        unpriced.sort();
+        Ok(Holdings { holdings, unpriced })
+    }
+
+    /// Fetches balances and values each one with the price from the price page, one price
+    /// basis for every currency. The Lightning last price is read too, only to show the
+    /// difference: a failure to read it (or no market) leaves the comparison empty and never
+    /// stops the import. A currency the page does not list is not valued with the API price
+    /// (that would mix two bases); it is reported in `unpriced`. Zero balances are skipped.
+    pub async fn holdings_with_page_prices(&self, page: &PagePrices) -> Result<Holdings, Error> {
+        let mut holdings = Vec::new();
+        let mut unpriced = Vec::new();
+        for balance in self.balances().await? {
+            if balance.amount.is_zero() {
+                continue;
+            }
+            if balance.currency_code == JPY {
+                holdings.push(Holding {
+                    symbol: balance.currency_code,
+                    value: balance.amount,
+                    amount: balance.amount,
+                    price: None,
+                    api_price: None,
+                    difference_percent: None,
+                });
+                continue;
+            }
+            let Some(price) = page.get(&balance.currency_code) else {
+                unpriced.push(balance.currency_code);
+                continue;
+            };
+            let value = balance.amount.checked_mul(price).ok_or(Error::Overflow)?;
+            let api_price = self
+                .last_price_jpy(&balance.currency_code)
+                .await
+                .ok()
+                .flatten();
+            holdings.push(Holding {
+                value,
+                amount: balance.amount,
+                price: Some(price),
+                api_price,
+                difference_percent: api_price.and_then(|api| difference_percent(price, api)),
+                symbol: balance.currency_code,
             });
         }
         holdings.sort_by(|a, b| a.symbol.cmp(&b.symbol));
@@ -128,6 +190,11 @@ impl<T: Transport> Client<T> {
             ],
         }
     }
+}
+
+fn difference_percent(price: Decimal, api: Decimal) -> Option<Decimal> {
+    let ratio = price.checked_sub(api)?.checked_div(api)?;
+    Some(ratio.checked_mul(Decimal::ONE_HUNDRED)?.round_dp(2))
 }
 
 fn body_text(response: Response) -> Result<String, Error> {
@@ -261,16 +328,92 @@ mod tests {
                 Holding {
                     symbol: "BTC".to_owned(),
                     value: dec!(2000000),
-                    amount: dec!(0.5)
+                    amount: dec!(0.5),
+                    price: None,
+                    api_price: None,
+                    difference_percent: None,
                 },
                 Holding {
                     symbol: "JPY".to_owned(),
                     value: dec!(100000),
-                    amount: dec!(100000)
+                    amount: dec!(100000),
+                    price: None,
+                    api_price: None,
+                    difference_percent: None,
                 },
             ]
         );
         assert_eq!(result.unpriced, vec!["XYM".to_owned()]);
+    }
+
+    fn page(rows: &[(&str, &str)]) -> PagePrices {
+        let mut table = vec![vec!["通貨ペア".to_owned(), "価格".to_owned()]];
+        table.extend(
+            rows.iter()
+                .map(|(pair, price)| vec![(*pair).to_owned(), format!("{price} 円")]),
+        );
+        PagePrices::from_table(&table).unwrap()
+    }
+
+    #[test]
+    fn page_prices_value_every_currency_on_one_basis_and_compare_with_the_api() {
+        // XYM has no Lightning market but is on the page; BTC is on both.
+        let fake = FakeTransport::new(&[
+            ("/v1/me/getbalance", 200, BALANCES),
+            ("/v1/ticker?product_code=BTC_JPY", 200, r#"{"ltp":4000000}"#),
+            ("/v1/ticker?product_code=XYM_JPY", 400, "{}"),
+        ]);
+        let prices = page(&[("BTC/JPY", "4,040,000"), ("XYM/JPY", "10.5")]);
+
+        let result = block_on(client(&fake).holdings_with_page_prices(&prices)).unwrap();
+
+        let by = |s: &str| result.holdings.iter().find(|h| h.symbol == s).unwrap();
+        assert_eq!(by("BTC").value, dec!(2020000));
+        assert_eq!(by("BTC").price, Some(dec!(4040000)));
+        assert_eq!(by("BTC").api_price, Some(dec!(4000000)));
+        assert_eq!(by("BTC").difference_percent, Some(dec!(1)));
+        assert_eq!(by("XYM").value, dec!(105));
+        assert_eq!(by("XYM").api_price, None);
+        assert_eq!(by("XYM").difference_percent, None);
+        assert_eq!(by("JPY").value, dec!(100000));
+        assert!(result.unpriced.is_empty());
+    }
+
+    #[test]
+    fn a_currency_missing_from_the_page_is_unpriced_even_with_a_lightning_market() {
+        let fake = FakeTransport::new(&[("/v1/me/getbalance", 200, BALANCES)]);
+        let prices = page(&[("XYM/JPY", "10")]);
+
+        let result = block_on(client(&fake).holdings_with_page_prices(&prices)).unwrap();
+
+        assert_eq!(result.unpriced, vec!["BTC".to_owned()]);
+        assert!(result.holdings.iter().all(|h| h.symbol != "BTC"));
+        // the API price is not even requested for it
+        assert!(
+            fake.seen
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|r| !r.path_and_query.contains("BTC_JPY"))
+        );
+    }
+
+    #[test]
+    fn a_failing_comparison_price_does_not_stop_the_import() {
+        let fake = FakeTransport::new(&[
+            (
+                "/v1/me/getbalance",
+                200,
+                r#"[{"currency_code":"BTC","amount":2,"available":2}]"#,
+            ),
+            ("/v1/ticker?product_code=BTC_JPY", 500, "oops"),
+        ]);
+        let prices = page(&[("BTC/JPY", "100")]);
+
+        let result = block_on(client(&fake).holdings_with_page_prices(&prices)).unwrap();
+
+        assert_eq!(result.holdings[0].value, dec!(200));
+        assert_eq!(result.holdings[0].api_price, None);
     }
 
     #[test]
