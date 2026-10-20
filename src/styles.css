@@ -156,9 +156,12 @@ button:disabled {
   opacity: 0.6;
 }
 
+button.danger {
+  color: var(--error);
+}
+
 button.danger.armed {
   border-color: var(--error);
-  color: var(--error);
   font-weight: 600;
 }
 
