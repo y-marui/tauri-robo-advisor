@@ -22,9 +22,11 @@ _最終更新: 2026-10-19_
 | `src/views/account-tabs.ts` | 保有タブの副タブ「口座ごと」。口座ごとのタブ、口座内の商品バランス、口座への追加の提案 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「提案」の副タブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
-| `src/views/browser-fetch.ts` | 「ブラウザで取得」。ブラウザの選択・起動、ページと表の選択、閉じる | `src/api.ts` |
+| `src/views/browser-controls.ts` | ブラウザの選択・プロファイルのフォルダ・開く・閉じる（「ブラウザで取得」と取得レシピで共有。最後の選択を初期値にする） | `src/api.ts`, `src/browser-defaults.ts` |
+| `src/views/browser-fetch.ts` | 「ブラウザで取得」。ページと表の選択（ブラウザの起動は `browser-controls.ts`） | `src/api.ts` |
 | `src-tauri/src/browser_session.rs` | 専用ブラウザの接続先と、取得した表（とカード一覧）の保持。ページはホストとタイトルだけを返す。終了時に閉じる | `crates/browser`, `crates/tabular` |
 | `src/views/data-folder.ts` | データの保存場所のカードと、同期に関する知らせ | `src/api.ts` |
+| `src-tauri/src/browser_settings.rs` | 最後に使ったブラウザの種類とプロファイルのフォルダ（ローカルの `browser-settings.json`。ポートフォリオのデータには入れない） | — |
 | `src-tauri/src/data_folder.rs` | 保存先のフォルダの選択（ポインタファイル）、競合のコピーと未ダウンロードの検出、iCloud Drive のフォルダ | — |
 | `src/views/recipes.ts` | 取得レシピのカード（一覧、すべて取得、リンクの選択、反映） | `src/views/import-plan.ts` |
 | `crates/browser/src/links.rs` | リンクをたどる規則（押してよいリンク、行き先の参照、安全な文字列の受け渡し） | — |

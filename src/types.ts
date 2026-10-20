@@ -246,6 +246,8 @@ export type Edit =
   | { type: "set_tradable"; id: number; products: number[] | null }
   | { type: "remove_account"; id: number }
   | { type: "move_account"; id: number; up: boolean }
+  | { type: "move_group"; id: number; up: boolean }
+  | { type: "move_category"; id: number; up: boolean }
   | {
       type: "set_holding";
       account: number;
@@ -473,6 +475,13 @@ export interface TableImportPlan {
 }
 
 export type BrowserKind = "chrome" | "edge" | "brave";
+
+/** The browser and profile folder last used, as the app kept them. */
+export interface BrowserSettings {
+  kind: BrowserKind | null;
+  /** Empty: the default folder inside the app's data folder. */
+  profile: string;
+}
 
 export interface BrowserInfo {
   kind: BrowserKind;
