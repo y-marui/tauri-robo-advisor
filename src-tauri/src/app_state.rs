@@ -416,6 +416,7 @@ impl AppState {
             None => self.app_data.clone(),
         };
         let target = target_dir.join(DATA_FILE);
+        let mut switched = false;
         if target != disk.path {
             // The data in memory is replaced only after the pointer is written, so a failure
             // leaves the old file and the old data exactly as they were.
@@ -458,12 +459,20 @@ impl AppState {
             }
             disk.path = target;
             disk.location += 1;
-            // Rows read for the old data must not be applied to the new data.
-            self.runs_generation.fetch_add(1, Ordering::SeqCst);
             disk.warning = None;
+            switched = true;
         }
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
-        Ok(PortfolioView::new(portfolio, self.data_info(&disk)))
+        let view = PortfolioView::new(portfolio, self.data_info(&disk));
+        drop(disk); // `run_recipe` takes the runs lock before the disk lock: never hold both here
+        drop(guard);
+        if switched {
+            // Rows read for the old data must not be applied to the new data.
+            self.lock_runs()?.clear();
+            *lock_shown(&self.shown)? = None;
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
+        }
+        Ok(view)
     }
 
     /// Builds the full-record export from the current portfolio.
@@ -1232,6 +1241,23 @@ mod tests {
 
         state.apply_at(add_account("Fresh"), after).unwrap();
         assert_eq!(account_names(&state), vec!["Other computer", "Fresh"]);
+    }
+
+    #[test]
+    fn switching_the_folder_drops_the_fetched_rows() {
+        let local = temp_path("runs-local");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local);
+        state
+            .lock_runs()
+            .unwrap()
+            .push(stored("r", AccountId(1), &[("A", 100)]));
+        let before = state.runs_generation.load(Ordering::SeqCst);
+        state
+            .set_data_folder(Some(local_dir.join("shared-runs")), false)
+            .unwrap();
+        assert!(state.lock_runs().unwrap().is_empty());
+        assert_ne!(state.runs_generation.load(Ordering::SeqCst), before);
     }
 
     #[test]
