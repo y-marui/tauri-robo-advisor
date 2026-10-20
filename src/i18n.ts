@@ -305,6 +305,7 @@ export const MESSAGES = {
   "A product with this name already exists. Link to it instead.": {
     ja: "同じ名前の商品がすでにあります。その商品に対応づけてください。",
   },
+  "A product with this name already exists.": { ja: "同じ名前の商品がすでにあります。" },
   "A product with this name exists: {name}": { ja: "同じ名前の商品があります: {name}" },
   "A product with a similar name exists: {name}": { ja: "似た名前の商品があります: {name}" },
   "Link each name to a product. The choice is remembered.": {

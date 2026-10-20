@@ -41,6 +41,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
   const ctx = {
     ...options.ctx,
     apply: (edit: Edit) => options.ctx.apply(edit, view.data.location),
+    tryApply: (edit: Edit) => options.ctx.tryApply(edit, view.data.location),
   };
   const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
   const parts: (HTMLElement | null)[] = [];
@@ -143,13 +144,16 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
         showError(rowErrors.get(errorKey));
         // A refused edit is explained next to the row. A name conflict means the product exists:
         // say so, and select it so that one click links to it.
-        const refused = (): void => {
-          const reason = ctx.lastError();
+        // The suggestion is for the imported name, so it is the conflicting product only when the
+        // new product kept that name; otherwise the message cannot point at a product.
+        const refused = (reason: string, kept: boolean): void => {
           if (isNameConflict(reason)) {
-            if (known) {
+            if (known && kept && suggestion?.exact != null) {
               select.value = String(suggested);
+              showError(t("A product with this name already exists. Link to it instead."));
+            } else {
+              showError(t("A product with this name already exists."));
             }
-            showError(t("A product with this name already exists. Link to it instead."));
           } else {
             showError(t("Could not save: {reason}", { reason }));
           }
@@ -159,13 +163,13 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
         link.addEventListener("click", () => {
           showError(undefined);
           void ctx
-            .apply({
+            .tryApply({
               type: "add_alias",
               product: Number(select.value),
               source: source,
               name: row.name,
             })
-            .then((ok) => (ok ? undefined : refused()));
+            .then((result) => (result.ok ? undefined : refused(result.reason, false)));
         });
         const newName = h("input", { type: "text", autocomplete: "off", value: row.name, "aria-label": t("Name of the new product") });
         const categorySelect = h(
@@ -189,8 +193,9 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
         create.disabled = categories.length === 0;
         create.addEventListener("click", () => {
           showError(undefined);
+          const kept = newName.value.trim().toLowerCase() === row.name.trim().toLowerCase();
           void ctx
-            .apply({
+            .tryApply({
               type: "add_product_with_alias",
               name: newName.value.trim(),
               category: Number(categorySelect.value),
@@ -198,7 +203,7 @@ export function importPlanView(options: ImportPlanOptions): HTMLElement {
               source: source,
               alias: row.name,
             })
-            .then((ok) => (ok ? undefined : refused()));
+            .then((result) => (result.ok ? undefined : refused(result.reason, kept)));
         });
         const hint = known
           ? infoIcon(
