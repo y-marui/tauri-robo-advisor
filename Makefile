@@ -1,4 +1,4 @@
-.PHONY: install dev lint format test build all deploy dmg update-charter
+.PHONY: bundle-app install dev lint format test build all deploy dmg update-charter
 
 # Local settings (not committed): for example DEPLOY_DIR=/Applications in .env installs the app
 # directly under /Applications instead of /Applications/My Tauri.
@@ -19,6 +19,13 @@ DEPLOY_OPEN ?= true
 DEPLOY_DMG ?= false
 DMG_DEST ?=
 DMG_DIR = $(patsubst ~/%,$(HOME)/%,$(DMG_DEST))
+# Code signing, like the swift-* repositories: a Developer ID Application certificate of this team found
+# in the keychain signs the app (a stable signature, so macOS keeps the permissions across deploys).
+# Override TEAM_ID / DEVELOPER_NAME in .env, or set SIGN_IDENTITY to use one certificate explicitly.
+# With no certificate the app is signed ad-hoc and a message says so (the build does not fail).
+TEAM_ID ?= 7TEQWKRRX7
+DEVELOPER_NAME ?= Yukihiro Marui
+SIGN_IDENTITY ?= $(shell TEAM_ID="$(TEAM_ID)" DEVELOPER_NAME="$(DEVELOPER_NAME)" bash scripts/sign-identity.sh 2>/dev/null)
 
 install:
 	npm ci
@@ -43,10 +50,17 @@ build:
 
 all: lint test
 
+# Build the .app (signed with $(SIGN_IDENTITY) when there is one, otherwise ad-hoc) and verify it.
+bundle-app:
+	@if [ -n "$(SIGN_IDENTITY)" ]; then echo "Signing with: $(SIGN_IDENTITY)"; \
+	else echo "No Developer ID Application certificate found: signing ad-hoc (permissions are asked again after every build). Set TEAM_ID / DEVELOPER_NAME or SIGN_IDENTITY in .env."; fi
+	APPLE_SIGNING_IDENTITY="$(or $(SIGN_IDENTITY),-)" npm run tauri build -- --bundles app
+	bash scripts/verify-signature.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app"
+
 # Build the .app and install it into $(DEPLOY_DIR) (macOS only).
 deploy:
 	@test "$$(uname)" = "Darwin" || { echo "deploy is for macOS only."; exit 1; }
-	npm run tauri build -- --bundles app
+	$(MAKE) bundle-app
 	@if pgrep -x "$(PROCESS_NAME)" >/dev/null; then \
 	  osascript -e 'tell application "$(APP_NAME)" to quit'; \
 	  i=0; while pgrep -x "$(PROCESS_NAME)" >/dev/null && [ $$i -lt 20 ]; do sleep 0.5; i=$$((i+1)); done; \
@@ -62,8 +76,8 @@ deploy:
 # it as $(DMG_DEST)/$(APP_NAME).dmg for install-my-apps.
 dmg:
 	@test "$$(uname)" = "Darwin" || { echo "dmg is for macOS only."; exit 1; }
-	npm run tauri build -- --bundles app
-	bash scripts/build-dmg.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(BUNDLE_DIR)/dmg/$(APP_NAME).dmg"
+	$(MAKE) bundle-app
+	SIGN_IDENTITY="$(SIGN_IDENTITY)" bash scripts/build-dmg.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(BUNDLE_DIR)/dmg/$(APP_NAME).dmg"
 	@if [ -n "$(DMG_DIR)" ]; then \
 	  mkdir -p "$(DMG_DIR)" && cp -f "$(BUNDLE_DIR)/dmg/$(APP_NAME).dmg" "$(DMG_DIR)/$(APP_NAME).dmg" && echo "Published: $(DMG_DIR)/$(APP_NAME).dmg"; \
 	else \

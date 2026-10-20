@@ -21,9 +21,20 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 | `make test` | `npm test` (frontend unit tests) and `cargo test` |
 | `make build` | Build the app without bundling |
 | `make deploy` | Build the `.app` and install it into `/Applications/My Tauri` (override with `DEPLOY_DIR`, on the command line or in `.env`; `DEPLOY_DIR=/Applications` installs directly under `/Applications`; `DEPLOY_OPEN=false` skips launching it; `DEPLOY_DMG=true` also runs `make dmg` afterwards, like the `swift-*` repositories; it waits for a running copy to quit); macOS only |
+| `make bundle-app` | Build the `.app` and verify its signature (used by `deploy` and `dmg`); see Code signing below; macOS only |
 | `make dmg` | Build the DMG; when `DMG_DEST` is set (in `.env`, see `.env.example`), publish it there as `<app>.dmg` for `install-my-apps`, normally the iCloud `Build/Tauri` folder; macOS only |
 | `make all` | `lint` and `test` |
 | `make update-charter` | Update the dev-charter subtree |
+
+### Code signing (macOS)
+
+`make deploy` and `make dmg` sign the app with a `Developer ID Application` certificate found in the login keychain (`security find-identity -v -p codesigning`, filtered by `DEVELOPER_NAME` and `TEAM_ID`, as in the `swift-*` repositories; `scripts/sign-identity.sh`). It is passed to Tauri as `APPLE_SIGNING_IDENTITY`, so Tauri signs the bundle (no notarization unless `APPLE_ID` and friends are set, which this repository does not do). The DMG is signed with the same identity. The signature is then checked with `codesign --verify --deep --strict` (`scripts/verify-signature.sh`), which also prints whether it is ad-hoc.
+
+Why: macOS ties permissions (App Management, keychain access) to the code signature. An ad-hoc signature changes with every build, so permissions are asked again after each deploy; the certificate-based designated requirement stays the same (`codesign -d -r- <app>`).
+
+- `TEAM_ID` and `DEVELOPER_NAME` are `?=` variables in the Makefile (not secret); override them in `.env`. Set `SIGN_IDENTITY` in `.env` to use one certificate explicitly.
+- Without a matching certificate the build does not fail: the app is signed ad-hoc and the message says so.
+- No key, password, or certificate file belongs in the repository; the private key stays in the keychain. The first signing may show a keychain prompt: choose "Always Allow".
 
 The keychain round-trip test in `src-tauri/src/secrets.rs` touches the real OS keychain (with dummy values only), so it is ignored by default. Run it on a desktop with `cargo test -p tauri-robo-advisor -- --ignored`.
 
