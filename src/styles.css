@@ -728,3 +728,10 @@ details.product-tools summary {
   cursor: pointer;
   color: var(--muted);
 }
+
+.bulk-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}

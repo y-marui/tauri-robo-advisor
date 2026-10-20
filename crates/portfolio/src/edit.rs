@@ -101,6 +101,15 @@ pub enum Edit {
     RemoveProduct {
         id: ProductId,
     },
+    /// Gives many products one category in one step: an existing `category`, or a `new_category`
+    /// made here (no target, no group). Exactly one of the two. All or nothing.
+    SetProductsCategory {
+        products: Vec<ProductId>,
+        #[serde(default)]
+        category: Option<CategoryId>,
+        #[serde(default)]
+        new_category: Option<String>,
+    },
     /// Merges the product `remove` into `keep` (the same currency): its aliases and records move to
     /// `keep`, and `remove` is deleted. Where an account holds a record of both, `on_conflict` says
     /// which one stays.
@@ -830,6 +839,51 @@ impl Portfolio {
                 }
                 if let Some(c) = code {
                     product.currency = c;
+                }
+            }
+            Edit::SetProductsCategory {
+                products,
+                category,
+                new_category,
+            } => {
+                if products.is_empty() {
+                    return Err(Error::Invalid("choose at least one product".to_owned()));
+                }
+                // Everything is checked before anything changes.
+                for id in &products {
+                    self.product(*id)?;
+                }
+                let target = match (category, new_category) {
+                    (Some(id), None) => {
+                        self.category(id)?;
+                        id
+                    }
+                    (None, Some(new_name)) => {
+                        self.check_capacity(self.categories.len())?;
+                        let new_name = name(&new_name, "category")?;
+                        self.ensure_category_name_free(&new_name, None)?;
+                        let id = CategoryId(self.take_id());
+                        self.categories.push(Category {
+                            id,
+                            name: new_name,
+                            group: None,
+                            target_weight: Decimal::ZERO,
+                            targeting: ProductTargeting::default(),
+                        });
+                        id
+                    }
+                    _ => {
+                        return Err(Error::Invalid(
+                            "choose an existing category or a new one, not both".to_owned(),
+                        ));
+                    }
+                };
+                for product in self
+                    .products
+                    .iter_mut()
+                    .filter(|p| products.contains(&p.id))
+                {
+                    product.category = target;
                 }
             }
             Edit::RemoveProduct { id } => {

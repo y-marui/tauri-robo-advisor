@@ -288,6 +288,7 @@ export type Edit =
   | { type: "detach_preset_recipe"; name: string }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "add_product_with_alias"; name: string; category: number; currency: string; source: string; alias: string }
+  | { type: "set_products_category"; products: number[]; category?: number; new_category?: string }
   | { type: "merge_products"; keep: number; remove: number; on_conflict: "keep" | "take" }
   | { type: "split_product"; product: number; source: string; alias: string; name: string; accounts: number[] }
   | { type: "remove_alias"; product: number; source: string; name: string }
