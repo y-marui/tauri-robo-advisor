@@ -5,6 +5,7 @@ import type {
   BrowserInfo,
   BrowserKind,
   BrowserPage,
+  BrowserSettings,
   FetchedTables,
   BitflyerHoldings,
   Edit,
@@ -127,6 +128,11 @@ export function planTableImport(
 /** The Chrome, Edge, and Brave found on this computer. */
 export function listBrowsers(): Promise<BrowserInfo[]> {
   return invoke<BrowserInfo[]>("list_browsers");
+}
+
+/** The browser and profile folder last used (kept in a local file, not in the portfolio data). */
+export function getBrowserSettings(): Promise<BrowserSettings> {
+  return invoke<BrowserSettings>("get_browser_settings");
 }
 
 /** Starts the browser with a profile of its own (or reuses one that is running). */

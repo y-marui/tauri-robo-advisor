@@ -1,6 +1,7 @@
 import { h } from "../dom.ts";
-import { amountField, checkboxField, deleteButton, selectField, textField } from "../fields.ts";
+import { amountField, checkboxField, deleteButton, orderButtons, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
+import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { AccountKind } from "../types.ts";
 import { KINDS, kindLabel } from "./labels.ts";
@@ -61,18 +62,16 @@ export function accountsPanel(ctx: Context): Panel {
         );
 
         // The order of the accounts is the order everywhere (the tabs, the tables, the choices).
-        const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
-        const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
-        up.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: true }));
-        down.addEventListener("click", () => void ctx.apply({ type: "move_account", id, up: false }));
-        // At an end there is nothing to move: the button is off (a move there would only save for nothing).
-        up.disabled = position === 0;
-        down.disabled = position === view.portfolio.accounts.length - 1;
-        const order = h("span", { class: "order" }, up, down);
+        const order = orderButtons(ctx, position, view.portfolio.accounts.length, (up) => ({
+          type: "move_account",
+          id,
+          up,
+        }), { list: "accounts", id });
 
         return h(
           "tr",
           {},
+          h("td", { class: "grip-cell" }, grip()),
           h(
             "td",
             {},
@@ -123,6 +122,14 @@ export function accountsPanel(ctx: Context): Panel {
         );
       });
 
+      const tbody = h("tbody", {}, ...rows);
+      makeSortable({
+        list: "accounts",
+        tbody,
+        ids: view.portfolio.accounts.map((x) => x.id),
+        move: (id, index) => void ctx.apply({ type: "move_account_to", id, index }),
+      });
+
       const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off" });
       const kind = h(
         "select",
@@ -161,6 +168,7 @@ export function accountsPanel(ctx: Context): Panel {
               h(
                 "tr",
                 {},
+                h("th", {}),
                 h("th", {}, t("Name")),
                 h("th", {}, t("Type")),
                 h("th", {}, t("Sellable")),
@@ -169,7 +177,7 @@ export function accountsPanel(ctx: Context): Panel {
                 h("th", {}),
               ),
             ),
-            h("tbody", {}, ...rows),
+            tbody,
           ),
         ),
         form,

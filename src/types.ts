@@ -246,6 +246,11 @@ export type Edit =
   | { type: "set_tradable"; id: number; products: number[] | null }
   | { type: "remove_account"; id: number }
   | { type: "move_account"; id: number; up: boolean }
+  | { type: "move_group"; id: number; up: boolean }
+  | { type: "move_category"; id: number; up: boolean }
+  | { type: "move_account_to"; id: number; index: number }
+  | { type: "move_group_to"; id: number; index: number }
+  | { type: "move_category_to"; id: number; index: number }
   | {
       type: "set_holding";
       account: number;
@@ -283,6 +288,8 @@ export type Edit =
   | { type: "detach_preset_recipe"; name: string }
   | { type: "add_alias"; product: number; source: string; name: string }
   | { type: "add_product_with_alias"; name: string; category: number; currency: string; source: string; alias: string }
+  | { type: "merge_products"; keep: number; remove: number; on_conflict: "keep" | "take" }
+  | { type: "split_product"; product: number; source: string; alias: string; name: string; accounts: number[] }
   | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
   | { type: "set_tolerances"; category: string; product: string }
@@ -484,6 +491,13 @@ export interface TableImportPlan {
 }
 
 export type BrowserKind = "chrome" | "edge" | "brave";
+
+/** The browser and profile folder last used, as the app kept them. */
+export interface BrowserSettings {
+  kind: BrowserKind | null;
+  /** Empty: the default folder inside the app's data folder. */
+  profile: string;
+}
 
 export interface BrowserInfo {
   kind: BrowserKind;

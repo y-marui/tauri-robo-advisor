@@ -9,6 +9,17 @@ use crate::{
     ProductTargeting, Recipe,
 };
 
+/// Which record stays when a merge finds a record of both products in one account.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeConflict {
+    /// The record of the product that is kept stays.
+    #[default]
+    Keep,
+    /// The record of the product that is removed replaces it.
+    Take,
+}
+
 /// One user action. The frontend sends the intent and Rust validates it, assigns
 /// ids, and applies it, so no rule lives in the UI.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -32,6 +43,18 @@ pub enum Edit {
         name: String,
     },
     /// Removes a group; its categories stay and become ungrouped.
+    /// Moves a group one place up or down in the list (the order of the groups on the screens and
+    /// in the charts). At the end of the list nothing changes.
+    MoveGroup {
+        id: GroupId,
+        up: bool,
+    },
+    /// Moves a group to a given place in the list: `index` is the place it has afterwards (0 is
+    /// the top). An index past the end is refused; the same place changes nothing.
+    MoveGroupTo {
+        id: GroupId,
+        index: usize,
+    },
     RemoveGroup {
         id: GroupId,
     },
@@ -53,6 +76,17 @@ pub enum Edit {
     RemoveCategory {
         id: CategoryId,
     },
+    /// Moves a category one place up or down in the list (the order of the categories on the
+    /// screens and in the charts). At the end of the list nothing changes.
+    MoveCategory {
+        id: CategoryId,
+        up: bool,
+    },
+    /// Moves a category to a given place in the list, like `MoveGroupTo`.
+    MoveCategoryTo {
+        id: CategoryId,
+        index: usize,
+    },
     AddProduct {
         name: String,
         category: CategoryId,
@@ -66,6 +100,24 @@ pub enum Edit {
     },
     RemoveProduct {
         id: ProductId,
+    },
+    /// Merges the product `remove` into `keep` (the same currency): its aliases and records move to
+    /// `keep`, and `remove` is deleted. Where an account holds a record of both, `on_conflict` says
+    /// which one stays.
+    MergeProducts {
+        keep: ProductId,
+        remove: ProductId,
+        #[serde(default)]
+        on_conflict: MergeConflict,
+    },
+    /// Cuts an alias of a product out as a new product (with the category and the currency of the
+    /// original). A record has no source name, so the records to move are picked by account.
+    SplitProduct {
+        product: ProductId,
+        source: String,
+        alias: String,
+        name: String,
+        accounts: Vec<AccountId>,
     },
     AddAlias {
         product: ProductId,
@@ -92,6 +144,11 @@ pub enum Edit {
         id: AccountId,
         /// `None` means the account can buy any product.
         products: Option<Vec<ProductId>>,
+    },
+    /// Moves an account to a given place in the list, like `MoveGroupTo`.
+    MoveAccountTo {
+        id: AccountId,
+        index: usize,
     },
     RemoveAccount {
         id: AccountId,
@@ -641,6 +698,26 @@ impl Portfolio {
                     group.name = new_name;
                 }
             }
+            Edit::MoveGroup { id, up } => {
+                self.group(id)?;
+                swap_with_neighbor(&mut self.groups, |g| g.id == id, up);
+            }
+            Edit::MoveCategory { id, up } => {
+                self.category(id)?;
+                swap_with_neighbor(&mut self.categories, |c| c.id == id, up);
+            }
+            Edit::MoveGroupTo { id, index } => {
+                self.group(id)?;
+                move_to(&mut self.groups, |g| g.id == id, index)?;
+            }
+            Edit::MoveCategoryTo { id, index } => {
+                self.category(id)?;
+                move_to(&mut self.categories, |c| c.id == id, index)?;
+            }
+            Edit::MoveAccountTo { id, index } => {
+                self.account(id)?;
+                move_to(&mut self.accounts, |a| a.id == id, index)?;
+            }
             Edit::RemoveGroup { id } => {
                 self.group(id)?;
                 self.groups.retain(|g| g.id != id);
@@ -765,6 +842,97 @@ impl Portfolio {
                     }
                 }
             }
+            Edit::MergeProducts {
+                keep,
+                remove,
+                on_conflict,
+            } => {
+                if keep == remove {
+                    return Err(Error::Invalid("choose two different products".to_owned()));
+                }
+                let from = self.product(remove)?.clone();
+                let into = self.product(keep)?;
+                if from.currency != into.currency {
+                    return Err(Error::Invalid(
+                        "products in different currencies cannot be merged".to_owned(),
+                    ));
+                }
+                if into.aliases.len() + from.aliases.len() > MAX_ALIASES_PER_PRODUCT {
+                    return Err(Error::Invalid(
+                        "too many aliases for one product".to_owned(),
+                    ));
+                }
+                let kept = |h: &Holding| h.product == keep;
+                for h in std::mem::take(&mut self.holdings) {
+                    let mut h = h;
+                    if h.product == remove {
+                        let clash = self
+                            .holdings
+                            .iter()
+                            .any(|o| kept(o) && o.account == h.account);
+                        h.product = keep;
+                        if clash {
+                            if on_conflict == MergeConflict::Keep {
+                                continue;
+                            }
+                            self.holdings
+                                .retain(|o| !(kept(o) && o.account == h.account));
+                        }
+                    }
+                    self.holdings.push(h);
+                }
+                for account in &mut self.accounts {
+                    if let Some(tradable) = &mut account.tradable {
+                        if tradable.contains(&remove) && !tradable.contains(&keep) {
+                            tradable.push(keep);
+                        }
+                        tradable.retain(|p| *p != remove);
+                    }
+                }
+                self.product_mut(keep)?.aliases.extend(from.aliases);
+                self.products.retain(|p| p.id != remove);
+            }
+            Edit::SplitProduct {
+                product,
+                source,
+                alias,
+                name: new_name,
+                accounts,
+            } => {
+                self.check_capacity(self.products.len())?;
+                let new_name = name(&new_name, "product")?;
+                self.ensure_product_name_free(&new_name, None)?;
+                let original = self.product(product)?.clone();
+                let position = original
+                    .aliases
+                    .iter()
+                    .position(|a| a.source == source.trim() && a.name == alias.trim())
+                    .ok_or(Error::NotFound("alias"))?;
+                for account in &accounts {
+                    self.account(*account)?;
+                }
+                let id = ProductId(self.take_id());
+                let moved = self.product_mut(product)?.aliases.remove(position);
+                self.products.push(Product {
+                    id,
+                    name: new_name,
+                    category: original.category,
+                    currency: original.currency,
+                    aliases: vec![moved],
+                });
+                for h in &mut self.holdings {
+                    if h.product == product && accounts.contains(&h.account) {
+                        h.product = id;
+                    }
+                }
+                for account in &mut self.accounts {
+                    if let Some(tradable) = &mut account.tradable
+                        && tradable.contains(&product)
+                    {
+                        tradable.push(id);
+                    }
+                }
+            }
             Edit::AddAlias {
                 product,
                 source,
@@ -846,15 +1014,7 @@ impl Portfolio {
             }
             Edit::MoveAccount { id, up } => {
                 self.account(id)?;
-                let index = self.accounts.iter().position(|a| a.id == id).unwrap_or(0);
-                let other = if up {
-                    index.checked_sub(1)
-                } else {
-                    Some(index + 1)
-                };
-                if let Some(other) = other.filter(|o| *o < self.accounts.len()) {
-                    self.accounts.swap(index, other);
-                }
+                swap_with_neighbor(&mut self.accounts, |a| a.id == id, up);
             }
             Edit::RemoveAccount { id } => {
                 self.account(id)?;
@@ -1262,5 +1422,33 @@ impl Portfolio {
             ));
         }
         Ok(())
+    }
+}
+
+/// Moves the first item matching `is` so that it ends up at `index`; the others keep their order.
+fn move_to<T>(list: &mut Vec<T>, is: impl Fn(&T) -> bool, index: usize) -> Result<(), Error> {
+    if index >= list.len() {
+        return Err(Error::Invalid("the position is out of range".to_owned()));
+    }
+    if let Some(from) = list.iter().position(is) {
+        let item = list.remove(from);
+        list.insert(index, item);
+    }
+    Ok(())
+}
+
+/// Swaps the first item matching `is` with its neighbor above (`up`) or below; at an end of the
+/// list nothing changes.
+fn swap_with_neighbor<T>(list: &mut [T], is: impl Fn(&T) -> bool, up: bool) {
+    let Some(index) = list.iter().position(is) else {
+        return;
+    };
+    let other = if up {
+        index.checked_sub(1)
+    } else {
+        Some(index + 1)
+    };
+    if let Some(other) = other.filter(|o| *o < list.len()) {
+        list.swap(index, other);
     }
 }

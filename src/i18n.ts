@@ -98,6 +98,22 @@ export const MESSAGES = {
   "No records": { ja: "レコードはありません" },
   "Filter products": { ja: "商品を絞り込む" },
   "Delete product": { ja: "商品を削除" },
+  "Merge or split": { ja: "統合・分割" },
+  "Merge into": { ja: "統合先" },
+  "Merge": { ja: "統合" },
+  "Record in both": { ja: "両方にあるレコード" },
+  "Keep the record of the other product": { ja: "統合先のレコードを残す" },
+  "Take the record of this product": { ja: "この商品のレコードを使う" },
+  "Merging moves the aliases and the records to the other product and deletes this one.": {
+    ja: "統合すると、別名とレコードが統合先に移り、この商品は削除されます。",
+  },
+  "Alias to split off": { ja: "切り出す別名" },
+  "Name of the new product": { ja: "新しい商品の名前" },
+  "Split off": { ja: "切り出す" },
+  "Enter a name for the new product.": { ja: "新しい商品の名前を入力してください。" },
+  "Splitting cuts an alias out as a new product. Tick the accounts whose records move with it.": {
+    ja: "分割すると、別名が新しい商品として切り出されます。一緒に移すレコードの口座にチェックを入れてください。",
+  },
   "Every product and every record, as saved. Edit here; the Holdings tab only shows them.": {
     ja: "保存されている商品とレコードのすべて。編集はここで行い、保有タブは表示だけです。",
   },
@@ -339,6 +355,9 @@ export const MESSAGES = {
   "Log in to your brokerage in that browser, open the holdings page, then fetch the tables.": {
     ja: "そのブラウザで証券会社にログインし、保有一覧のページを開いてから、表を取得してください。",
   },
+  "Log in to your brokerage in that browser, then fetch the recipes.": {
+    ja: "そのブラウザで証券会社にログインしてから、レシピを取得してください。",
+  },
   "No web page is open in the browser yet.": { ja: "ブラウザには、まだウェブページが開かれていません。" },
   "Open the holdings page in the browser first.": { ja: "先に、ブラウザで保有一覧のページを開いてください。" },
   "Reading the page…": { ja: "ページを読み取り中…" },
@@ -414,7 +433,6 @@ export const MESSAGES = {
   "No recipe says which site it reads, so there is no login page to open.": {
     ja: "どのサイトを読むかが決まったレシピがないので、開くログインのページがありません。",
   },
-  "Name of the new product": { ja: "新しい商品の名前" },
   "Category of the new product": { ja: "新しい商品のカテゴリ" },
   "Currency of the new product": { ja: "新しい商品の通貨" },
   "Create a product and link": { ja: "商品を作って結びつける" },
@@ -433,6 +451,7 @@ export const MESSAGES = {
   },
   "Move up": { ja: "上へ" },
   "Move down": { ja: "下へ" },
+  "Drag to reorder": { ja: "ドラッグして並べ替え" },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Detach as a custom recipe": { ja: "自分のレシピにする" },

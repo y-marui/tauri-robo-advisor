@@ -1,5 +1,6 @@
 import { cleanDecimal, fractionToPercent, percentToFraction } from "./decimal.ts";
 import { h } from "./dom.ts";
+import { markMoved } from "./sortable.ts";
 import { t } from "./i18n.ts";
 import type { Bind, Context } from "./panel.ts";
 import type { Edit, PortfolioView } from "./types.ts";
@@ -108,6 +109,33 @@ export function checkboxField(opts: CheckboxOptions): HTMLInputElement {
     box.checked = opts.get(view);
   });
   return box;
+}
+
+/**
+ * The up/down buttons of a list that has an order. At an end there is nothing to move, so that
+ * button is off (a move there would only save for nothing).
+ */
+export function orderButtons(
+  ctx: Context,
+  position: number,
+  count: number,
+  move: (up: boolean) => Edit,
+  /** The list and row, so the row is highlighted after it moved. */
+  mark?: { list: string; id: number },
+): HTMLElement {
+  const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
+  const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
+  const send = (edit: Edit) => {
+    if (mark) {
+      markMoved(mark.list, mark.id);
+    }
+    void ctx.apply(edit);
+  };
+  up.addEventListener("click", () => send(move(true)));
+  down.addEventListener("click", () => send(move(false)));
+  up.disabled = position === 0;
+  down.disabled = position === count - 1;
+  return h("span", { class: "order" }, up, down);
 }
 
 /**

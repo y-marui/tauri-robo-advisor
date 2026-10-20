@@ -535,7 +535,13 @@ tbody.record-product td.record-head-cell {
 
 .record-head input.product-name {
   width: 12rem;
+  max-width: 100%;
   text-overflow: ellipsis;
+}
+
+/* The choices of the merge and the split show whole names (td select is clipped to 11rem). */
+details.product-tools select {
+  max-width: 100%;
 }
 
 table.records input.number {
@@ -652,4 +658,73 @@ table.records td.clip {
 
 .step.done .step-state {
   font-weight: 600;
+}
+
+/* Reordering rows by dragging (src/sortable.ts). */
+.grip-cell {
+  width: 1.5rem;
+  padding-right: 0;
+}
+
+.grip {
+  display: inline-block;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  letter-spacing: -2px;
+  opacity: 0.6;
+}
+
+.grip:hover {
+  opacity: 1;
+}
+
+tbody.sorting,
+tbody.sorting .grip {
+  cursor: grabbing;
+  user-select: none;
+}
+
+tr.dragging {
+  opacity: 0.45;
+  background: var(--field);
+}
+
+tr.drop-before > td {
+  box-shadow: inset 0 2px 0 var(--strong);
+}
+
+tr.drop-after > td {
+  box-shadow: inset 0 -2px 0 var(--strong);
+}
+
+tr.just-moved > td {
+  animation: just-moved 1.5s ease-out;
+}
+
+@keyframes just-moved {
+  from {
+    background: var(--field);
+    box-shadow: inset 0 0 0 2px var(--strong);
+  }
+  to {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tr.just-moved > td {
+    animation: none;
+    background: var(--field);
+  }
+}
+
+details.product-tools {
+  flex-basis: 100%;
+}
+
+details.product-tools summary {
+  cursor: pointer;
+  color: var(--muted);
 }

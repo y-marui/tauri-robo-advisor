@@ -1748,6 +1748,108 @@ fn an_account_moves_up_and_down_and_stops_at_the_ends() {
     assert_eq!(p, before);
 }
 
+#[test]
+fn groups_and_categories_move_up_and_down_and_stop_at_the_ends() {
+    let mut p = Portfolio::default();
+    let a = add_group(&mut p, "A");
+    let b = add_group(&mut p, "B");
+    let c = add_group(&mut p, "C");
+    let order = |p: &Portfolio| p.groups.iter().map(|x| x.id).collect::<Vec<_>>();
+    apply(&mut p, Edit::MoveGroup { id: c, up: true });
+    assert_eq!(order(&p), vec![a, c, b]);
+    apply(&mut p, Edit::MoveGroup { id: c, up: true });
+    apply(&mut p, Edit::MoveGroup { id: c, up: true });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveGroup { id: b, up: false });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveGroup { id: c, up: false });
+    assert_eq!(order(&p), vec![a, c, b]);
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::MoveGroup {
+            id: GroupId(9999),
+            up: true
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+
+    let x = category(&mut p, "X", rust_decimal::Decimal::ZERO);
+    let y = category(&mut p, "Y", rust_decimal::Decimal::ZERO);
+    let z = category(&mut p, "Z", rust_decimal::Decimal::ZERO);
+    let corder = |p: &Portfolio| p.categories.iter().map(|x| x.id).collect::<Vec<_>>();
+    apply(&mut p, Edit::MoveCategory { id: z, up: true });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    apply(&mut p, Edit::MoveCategory { id: x, up: true });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    apply(&mut p, Edit::MoveCategory { id: y, up: false });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    // The opposite move undoes a move.
+    apply(&mut p, Edit::MoveCategory { id: x, up: false });
+    apply(&mut p, Edit::MoveCategory { id: x, up: true });
+    assert_eq!(corder(&p), vec![x, z, y]);
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::MoveCategory {
+            id: CategoryId(9999),
+            up: true
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn rows_move_to_a_given_position() {
+    let mut p = Portfolio::default();
+    let a = account(&mut p, "A", AccountKind::Taxable);
+    let b = account(&mut p, "B", AccountKind::Taxable);
+    let c = account(&mut p, "C", AccountKind::Taxable);
+    let order = |p: &Portfolio| p.accounts.iter().map(|x| x.id).collect::<Vec<_>>();
+    apply(&mut p, Edit::MoveAccountTo { id: c, index: 0 });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveAccountTo { id: c, index: 2 });
+    assert_eq!(order(&p), vec![a, b, c]);
+    // The same place changes nothing.
+    apply(&mut p, Edit::MoveAccountTo { id: b, index: 1 });
+    assert_eq!(order(&p), vec![a, b, c]);
+    let before = p.clone();
+    assert!(p.apply(Edit::MoveAccountTo { id: a, index: 3 }).is_err());
+    assert!(
+        p.apply(Edit::MoveAccountTo {
+            id: AccountId(9999),
+            index: 0
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+
+    let g1 = add_group(&mut p, "G1");
+    let g2 = add_group(&mut p, "G2");
+    let g3 = add_group(&mut p, "G3");
+    apply(&mut p, Edit::MoveGroupTo { id: g1, index: 2 });
+    let gorder = |p: &Portfolio| p.groups.iter().map(|x| x.id).collect::<Vec<_>>();
+    assert_eq!(gorder(&p), vec![g2, g3, g1]);
+    assert!(p.apply(Edit::MoveGroupTo { id: g1, index: 3 }).is_err());
+    assert!(
+        p.apply(Edit::MoveGroupTo {
+            id: GroupId(9999),
+            index: 0
+        })
+        .is_err()
+    );
+
+    let x = category(&mut p, "X", rust_decimal::Decimal::ZERO);
+    let y = category(&mut p, "Y", rust_decimal::Decimal::ZERO);
+    let z = category(&mut p, "Z", rust_decimal::Decimal::ZERO);
+    apply(&mut p, Edit::MoveCategoryTo { id: x, index: 1 });
+    let corder = |p: &Portfolio| p.categories.iter().map(|x| x.id).collect::<Vec<_>>();
+    assert_eq!(corder(&p), vec![y, x, z]);
+    assert!(p.apply(Edit::MoveCategoryTo { id: x, index: 3 }).is_err());
+    p.validate_integrity().unwrap();
+}
+
 fn weight_edit(
     account: AccountId,
     product: ProductId,
@@ -2348,4 +2450,229 @@ fn the_rakuten_preset_reads_trusts_and_stocks_by_kind_and_a_reference_keeps_none
     );
     // The effective recipe passes the same validation as a recipe the user writes.
     effective.mapping.clone().validated().unwrap();
+}
+
+fn hold(p: &mut Portfolio, account: AccountId, product: ProductId, value: rust_decimal::Decimal) {
+    apply(
+        p,
+        Edit::SetHolding {
+            account,
+            product,
+            value,
+            quantity: None,
+        },
+    );
+}
+
+fn alias(p: &mut Portfolio, product: ProductId, name: &str) {
+    apply(
+        p,
+        Edit::AddAlias {
+            product,
+            source: "Source".to_owned(),
+            name: name.to_owned(),
+        },
+    );
+}
+
+#[test]
+fn merging_moves_aliases_and_records_and_removes_the_product() {
+    let (mut p, c, a, acc1) = sample();
+    let b = product(&mut p, "Fund X dup", c);
+    let acc2 = account(&mut p, "Account 2", AccountKind::Taxable);
+    alias(&mut p, b, "FUND X");
+    hold(&mut p, acc2, b, dec!(300));
+    apply(
+        &mut p,
+        Edit::SetTradable {
+            id: acc2,
+            products: Some(vec![b]),
+        },
+    );
+
+    apply(
+        &mut p,
+        Edit::MergeProducts {
+            keep: a,
+            remove: b,
+            on_conflict: MergeConflict::Keep,
+        },
+    );
+
+    assert!(p.products.iter().all(|x| x.id != b));
+    assert_eq!(
+        p.products.iter().find(|x| x.id == a).unwrap().aliases.len(),
+        1
+    );
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account == acc2 && h.product == a)
+    );
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account == acc1 && h.product == a)
+    );
+    assert_eq!(p.accounts[1].tradable, Some(vec![a]));
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn merging_resolves_a_record_in_the_same_account_as_asked() {
+    for (policy, expected) in [
+        (MergeConflict::Keep, dec!(1000)),
+        (MergeConflict::Take, dec!(300)),
+    ] {
+        let (mut p, c, a, acc) = sample();
+        let b = product(&mut p, "Fund X dup", c);
+        hold(&mut p, acc, b, dec!(300));
+
+        apply(
+            &mut p,
+            Edit::MergeProducts {
+                keep: a,
+                remove: b,
+                on_conflict: policy,
+            },
+        );
+
+        let own: Vec<_> = p.holdings.iter().filter(|h| h.account == acc).collect();
+        assert_eq!(own.len(), 1);
+        assert_eq!((own[0].product, own[0].value), (a, expected));
+        p.validate_integrity().unwrap();
+    }
+}
+
+#[test]
+fn merging_refuses_different_currencies_and_the_same_product() {
+    let (mut p, c, a, _) = sample();
+    let b = product(&mut p, "Fund Y", c);
+    apply(
+        &mut p,
+        Edit::UpdateProduct {
+            id: b,
+            name: None,
+            category: None,
+            currency: Some("USD".to_owned()),
+        },
+    );
+    let before = p.clone();
+
+    assert!(
+        p.apply(Edit::MergeProducts {
+            keep: a,
+            remove: b,
+            on_conflict: MergeConflict::Keep
+        })
+        .is_err()
+    );
+    assert!(
+        p.apply(Edit::MergeProducts {
+            keep: a,
+            remove: a,
+            on_conflict: MergeConflict::Keep
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+}
+
+#[test]
+fn splitting_cuts_out_an_alias_with_the_picked_records() {
+    let (mut p, _, a, acc1) = sample();
+    let acc2 = account(&mut p, "Account 2", AccountKind::Taxable);
+    hold(&mut p, acc2, a, dec!(200));
+    alias(&mut p, a, "Name 1");
+    alias(&mut p, a, "Name 2");
+    apply(
+        &mut p,
+        Edit::SetTradable {
+            id: acc1,
+            products: Some(vec![a]),
+        },
+    );
+
+    apply(
+        &mut p,
+        Edit::SplitProduct {
+            product: a,
+            source: "Source".to_owned(),
+            alias: "Name 2".to_owned(),
+            name: "Fund Z".to_owned(),
+            accounts: vec![acc2],
+        },
+    );
+
+    let z = p.products.iter().find(|x| x.name == "Fund Z").unwrap();
+    assert_eq!(z.aliases.len(), 1);
+    assert_eq!(z.aliases[0].name, "Name 2");
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account == acc2 && h.product == z.id)
+    );
+    assert!(
+        p.holdings
+            .iter()
+            .any(|h| h.account == acc1 && h.product == a)
+    );
+    assert_eq!(
+        p.products.iter().find(|x| x.id == a).unwrap().aliases.len(),
+        1
+    );
+    assert_eq!(p.accounts[0].tradable, Some(vec![a, z.id]));
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn a_split_is_undone_by_merging_the_new_product_back() {
+    let (mut p, _, a, acc) = sample();
+    alias(&mut p, a, "Name 1");
+    let before = p.clone();
+
+    apply(
+        &mut p,
+        Edit::SplitProduct {
+            product: a,
+            source: "Source".to_owned(),
+            alias: "Name 1".to_owned(),
+            name: "Fund Z".to_owned(),
+            accounts: vec![acc],
+        },
+    );
+    let z = p.products.iter().find(|x| x.name == "Fund Z").unwrap().id;
+    apply(
+        &mut p,
+        Edit::MergeProducts {
+            keep: a,
+            remove: z,
+            on_conflict: MergeConflict::Keep,
+        },
+    );
+
+    assert_eq!(p.products, before.products);
+    assert_eq!(p.holdings, before.holdings);
+}
+
+#[test]
+fn a_split_with_an_unknown_alias_taken_name_or_account_is_refused() {
+    let (mut p, _, a, acc) = sample();
+    alias(&mut p, a, "Name 1");
+    let before = p.clone();
+    let split = |alias: &str, name: &str, accounts: Vec<AccountId>| Edit::SplitProduct {
+        product: a,
+        source: "Source".to_owned(),
+        alias: alias.to_owned(),
+        name: name.to_owned(),
+        accounts,
+    };
+
+    assert!(p.apply(split("Nope", "Fund Z", vec![acc])).is_err());
+    assert!(p.apply(split("Name 1", "Fund X", vec![acc])).is_err());
+    assert!(
+        p.apply(split("Name 1", "Fund Z", vec![AccountId(9999)]))
+            .is_err()
+    );
+    assert_eq!(p, before);
 }

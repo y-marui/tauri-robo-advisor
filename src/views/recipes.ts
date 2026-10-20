@@ -5,6 +5,7 @@ import { t, type MessageKey } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import type { BrowserPage, PortfolioView, PresetInfo, Recipe, RecipeRun, RecipeView } from "../types.ts";
 import { importPlanView } from "./import-plan.ts";
+import { browserControls } from "./browser-controls.ts";
 import { skippedText } from "./skipped.ts";
 
 // Saved fetch recipes: after the user has logged in to the browser opened by the
@@ -140,6 +141,17 @@ export function recipesPanel(ctx: Context): Panel {
       ...pages.map((p) => h("option", { value: p.id }, `${p.host} — ${p.title || t("(no title)")}`)),
     );
   }
+
+  // The dedicated browser, started here as in "Fetch in browser" (same part, same remembered choice).
+  const browser = browserControls({
+    info,
+    fail,
+    onOpened: async () => {
+      await refreshPages();
+      info(t("Log in to your brokerage in that browser, then fetch the recipes."));
+    },
+    onClosed: () => void refreshPages(),
+  });
 
   /** Runs one recipe; returns a note for the user when it needs attention. */
   async function runOne(recipe: Recipe, page: string): Promise<HTMLElement | null> {
@@ -512,7 +524,9 @@ export function recipesPanel(ctx: Context): Panel {
     noAccountNote,
     h("div", { class: "add-row" }, newAccountName, newAccountAdd),
     presetNote,
-    h("div", { class: "add-row" }, loginButton, pageSelect, refreshButton, scopeSelect, runButton),
+    h("div", { class: "add-row" }, loginButton),
+    browser.el,
+    h("div", { class: "add-row" }, pageSelect, refreshButton, scopeSelect, runButton),
     message,
     attention,
     results,

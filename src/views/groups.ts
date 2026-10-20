@@ -1,6 +1,7 @@
 import { h } from "../dom.ts";
-import { deleteButton, textField } from "../fields.ts";
+import { deleteButton, orderButtons, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
+import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { Category, PortfolioView } from "../types.ts";
 
@@ -43,11 +44,12 @@ export function groupsPanel(ctx: Context): Panel {
     "Groups",
     (view) => view.portfolio.groups.map((g) => g.id).join(","),
     (view, bind) => {
-      const rows = view.portfolio.groups.map((group) => {
+      const rows = view.portfolio.groups.map((group, position) => {
         const id = group.id;
         return h(
           "tr",
           {},
+          h("td", { class: "grip-cell" }, grip()),
           h(
             "td",
             {},
@@ -59,8 +61,24 @@ export function groupsPanel(ctx: Context): Panel {
               edit: (text) => ({ type: "rename_group", id, name: text }),
             }),
           ),
-          h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_group", id }))),
+          h(
+            "td",
+            {},
+            orderButtons(ctx, position, view.portfolio.groups.length, (up) => ({ type: "move_group", id, up }), {
+              list: "groups",
+              id,
+            }),
+            deleteButton(() => void ctx.apply({ type: "remove_group", id })),
+          ),
         );
+      });
+
+      const tbody = h("tbody", {}, ...rows);
+      makeSortable({
+        list: "groups",
+        tbody,
+        ids: view.portfolio.groups.map((x) => x.id),
+        move: (id, index) => void ctx.apply({ type: "move_group_to", id, index }),
       });
 
       const name = h("input", { type: "text", "aria-label": t("Group name"), autocomplete: "off" });
@@ -86,7 +104,7 @@ export function groupsPanel(ctx: Context): Panel {
         h(
           "div",
           { class: "table-wrap" },
-          h("table", {}, h("tbody", {}, ...rows)),
+          h("table", {}, tbody),
         ),
         form,
       ];
