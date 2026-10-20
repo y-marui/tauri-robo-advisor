@@ -121,7 +121,7 @@ export function deleteCoincheckCredentials(): Promise<void> {
   return invoke<void>("delete_coincheck_credentials");
 }
 
-/** Fetches the Coincheck balances (read-only) and values them in JPY with the public ticker. */
+/** Fetches the Coincheck balances (read-only) and values them in JPY with the public sales rate. */
 export function fetchCoincheckHoldings(): Promise<CoincheckHoldings> {
   return invoke<CoincheckHoldings>("fetch_coincheck_holdings");
 }

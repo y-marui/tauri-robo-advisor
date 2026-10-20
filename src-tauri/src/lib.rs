@@ -110,7 +110,7 @@ async fn open_bitflyer_price_page(
     .map_err(|e| e.to_string())?
 }
 
-// Coincheck: the same shape as bitFlyer, with prices from the public ticker only.
+// Coincheck: the same shape as bitFlyer, with prices from the public sales rate only.
 #[tauri::command]
 async fn save_coincheck_credentials(api_key: String, api_secret: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || secrets::save_coincheck(&api_key, &api_secret))
