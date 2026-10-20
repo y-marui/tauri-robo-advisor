@@ -248,6 +248,9 @@ export type Edit =
   | { type: "move_account"; id: number; up: boolean }
   | { type: "move_group"; id: number; up: boolean }
   | { type: "move_category"; id: number; up: boolean }
+  | { type: "move_account_to"; id: number; index: number }
+  | { type: "move_group_to"; id: number; index: number }
+  | { type: "move_category_to"; id: number; index: number }
   | {
       type: "set_holding";
       account: number;

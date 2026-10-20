@@ -1,5 +1,6 @@
 import { cleanDecimal, fractionToPercent, percentToFraction } from "./decimal.ts";
 import { h } from "./dom.ts";
+import { markMoved } from "./sortable.ts";
 import { t } from "./i18n.ts";
 import type { Bind, Context } from "./panel.ts";
 import type { Edit, PortfolioView } from "./types.ts";
@@ -119,11 +120,19 @@ export function orderButtons(
   position: number,
   count: number,
   move: (up: boolean) => Edit,
+  /** The list and row, so the row is highlighted after it moved. */
+  mark?: { list: string; id: number },
 ): HTMLElement {
   const up = h("button", { type: "button", "aria-label": t("Move up") }, "↑");
   const down = h("button", { type: "button", "aria-label": t("Move down") }, "↓");
-  up.addEventListener("click", () => void ctx.apply(move(true)));
-  down.addEventListener("click", () => void ctx.apply(move(false)));
+  const send = (edit: Edit) => {
+    if (mark) {
+      markMoved(mark.list, mark.id);
+    }
+    void ctx.apply(edit);
+  };
+  up.addEventListener("click", () => send(move(true)));
+  down.addEventListener("click", () => send(move(false)));
   up.disabled = position === 0;
   down.disabled = position === count - 1;
   return h("span", { class: "order" }, up, down);

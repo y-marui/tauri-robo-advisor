@@ -1,6 +1,7 @@
 import { h } from "../dom.ts";
 import { amountField, checkboxField, deleteButton, orderButtons, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
+import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { AccountKind } from "../types.ts";
 import { KINDS, kindLabel } from "./labels.ts";
@@ -65,11 +66,12 @@ export function accountsPanel(ctx: Context): Panel {
           type: "move_account",
           id,
           up,
-        }));
+        }), { list: "accounts", id });
 
         return h(
           "tr",
           {},
+          h("td", { class: "grip-cell" }, grip()),
           h(
             "td",
             {},
@@ -120,6 +122,14 @@ export function accountsPanel(ctx: Context): Panel {
         );
       });
 
+      const tbody = h("tbody", {}, ...rows);
+      makeSortable({
+        list: "accounts",
+        tbody,
+        ids: view.portfolio.accounts.map((x) => x.id),
+        move: (id, index) => void ctx.apply({ type: "move_account_to", id, index }),
+      });
+
       const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off" });
       const kind = h(
         "select",
@@ -158,6 +168,7 @@ export function accountsPanel(ctx: Context): Panel {
               h(
                 "tr",
                 {},
+                h("th", {}),
                 h("th", {}, t("Name")),
                 h("th", {}, t("Type")),
                 h("th", {}, t("Sellable")),
@@ -166,7 +177,7 @@ export function accountsPanel(ctx: Context): Panel {
                 h("th", {}),
               ),
             ),
-            h("tbody", {}, ...rows),
+            tbody,
           ),
         ),
         form,

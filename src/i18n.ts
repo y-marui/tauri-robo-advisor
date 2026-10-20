@@ -421,6 +421,7 @@ export const MESSAGES = {
   },
   "Move up": { ja: "上へ" },
   "Move down": { ja: "下へ" },
+  "Drag to reorder": { ja: "ドラッグして並べ替え" },
   "Preset": { ja: "組み込みのレシピ" },
   "Add the preset": { ja: "追加する" },
   "Detach as a custom recipe": { ja: "自分のレシピにする" },

@@ -1800,6 +1800,56 @@ fn groups_and_categories_move_up_and_down_and_stop_at_the_ends() {
     p.validate_integrity().unwrap();
 }
 
+#[test]
+fn rows_move_to_a_given_position() {
+    let mut p = Portfolio::default();
+    let a = account(&mut p, "A", AccountKind::Taxable);
+    let b = account(&mut p, "B", AccountKind::Taxable);
+    let c = account(&mut p, "C", AccountKind::Taxable);
+    let order = |p: &Portfolio| p.accounts.iter().map(|x| x.id).collect::<Vec<_>>();
+    apply(&mut p, Edit::MoveAccountTo { id: c, index: 0 });
+    assert_eq!(order(&p), vec![c, a, b]);
+    apply(&mut p, Edit::MoveAccountTo { id: c, index: 2 });
+    assert_eq!(order(&p), vec![a, b, c]);
+    // The same place changes nothing.
+    apply(&mut p, Edit::MoveAccountTo { id: b, index: 1 });
+    assert_eq!(order(&p), vec![a, b, c]);
+    let before = p.clone();
+    assert!(p.apply(Edit::MoveAccountTo { id: a, index: 3 }).is_err());
+    assert!(
+        p.apply(Edit::MoveAccountTo {
+            id: AccountId(9999),
+            index: 0
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+
+    let g1 = add_group(&mut p, "G1");
+    let g2 = add_group(&mut p, "G2");
+    let g3 = add_group(&mut p, "G3");
+    apply(&mut p, Edit::MoveGroupTo { id: g1, index: 2 });
+    let gorder = |p: &Portfolio| p.groups.iter().map(|x| x.id).collect::<Vec<_>>();
+    assert_eq!(gorder(&p), vec![g2, g3, g1]);
+    assert!(p.apply(Edit::MoveGroupTo { id: g1, index: 3 }).is_err());
+    assert!(
+        p.apply(Edit::MoveGroupTo {
+            id: GroupId(9999),
+            index: 0
+        })
+        .is_err()
+    );
+
+    let x = category(&mut p, "X", rust_decimal::Decimal::ZERO);
+    let y = category(&mut p, "Y", rust_decimal::Decimal::ZERO);
+    let z = category(&mut p, "Z", rust_decimal::Decimal::ZERO);
+    apply(&mut p, Edit::MoveCategoryTo { id: x, index: 1 });
+    let corder = |p: &Portfolio| p.categories.iter().map(|x| x.id).collect::<Vec<_>>();
+    assert_eq!(corder(&p), vec![y, x, z]);
+    assert!(p.apply(Edit::MoveCategoryTo { id: x, index: 3 }).is_err());
+    p.validate_integrity().unwrap();
+}
+
 fn weight_edit(
     account: AccountId,
     product: ProductId,
