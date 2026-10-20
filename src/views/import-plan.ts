@@ -2,7 +2,7 @@ import { formatAmount } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { getLanguage, t } from "../i18n.ts";
 import type { Context } from "../panel.ts";
-import type { ImportPlan, PortfolioView } from "../types.ts";
+import type { Edit, ImportPlan, PortfolioView } from "../types.ts";
 
 // The result of an import, shared by every source (bitFlyer, a table file or
 // pasted text): the rows linked to products, a way to link the others by hand,
@@ -28,7 +28,13 @@ export interface ImportPlanOptions {
 
 /** The linked rows, the rest to link, and the button that replaces the holdings. */
 export function importPlanView(options: ImportPlanOptions): HTMLElement {
-  const { ctx, view, plan, source, currency, accountSelect, notes } = options;
+  const { view, plan, source, currency, accountSelect, notes } = options;
+  // Every edit is tied to the data location of the view the plan was made from, so a plan that
+  // resolves after the data folder was switched cannot change the new data.
+  const ctx = {
+    ...options.ctx,
+    apply: (edit: Edit) => options.ctx.apply(edit, view.data.location),
+  };
   const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
   const parts: (HTMLElement | null)[] = [];
 

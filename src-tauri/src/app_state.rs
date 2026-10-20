@@ -27,6 +27,9 @@ pub struct DataInfo {
     pub folder: String,
     /// `true` when it is the app's own local folder (no folder was chosen).
     pub is_local: bool,
+    /// Counts the changes of the data location. An edit carries the value its screen was
+    /// drawn from, and is refused if the location changed since.
+    pub location: u64,
     #[serde(flatten)]
     pub notes: SyncNotes,
     /// Why a newer file on disk could not be used (never its contents).
@@ -89,6 +92,8 @@ type Fingerprint = (SystemTime, u64);
 /// The data file on disk, and what was last seen of it.
 struct Disk {
     path: PathBuf,
+    /// Bumped each time `path` changes (the data folder was switched).
+    location: u64,
     seen: Option<Fingerprint>,
     /// A hash of the file's content as last read or written by this app.
     hash: Option<u64>,
@@ -98,6 +103,9 @@ struct Disk {
 /// The message when another computer saved first; the frontend shows it as is.
 const CHANGED_ELSEWHERE: &str =
     "The data file was changed on another computer. It has been reloaded; please try again.";
+/// The message when the data folder was switched after the screen was drawn.
+const LOCATION_CHANGED: &str =
+    "The data folder was changed after this screen was shown. Nothing was saved; please try again.";
 /// The message that asks the user to confirm using data that is already in the chosen folder.
 pub const FOLDER_HAS_DATA: &str = "FOLDER_HAS_DATA";
 
@@ -292,6 +300,7 @@ impl AppState {
             app_data,
             disk: Mutex::new(Disk {
                 path,
+                location: 0,
                 seen,
                 hash,
                 warning: None,
@@ -309,6 +318,7 @@ impl AppState {
         let folder = disk.path.parent().map(PathBuf::from).unwrap_or_default();
         DataInfo {
             is_local: folder == self.app_data,
+            location: disk.location,
             notes: data_folder::scan(&folder),
             folder: folder.display().to_string(),
             warning: disk.warning.clone(),
@@ -329,9 +339,24 @@ impl AppState {
     /// file from another computer is adopted first, and the edit is refused if
     /// the file turns out to have changed while it was being applied, so an
     /// accepted edit is never lost to a stale copy.
+    #[cfg(test)]
     pub fn apply(&self, edit: Edit) -> Result<PortfolioView, String> {
         let mut guard = self.lock()?;
         let mut disk = self.lock_disk()?;
+        let mut next = guard.as_ref().map_err(Clone::clone)?.clone();
+        next.apply(edit).map_err(|e| e.to_string())?;
+        self.commit(&mut guard, &mut disk, next)
+    }
+
+    /// Like `apply`, for an edit sent from a screen drawn at data location `location` (the
+    /// `data.location` of the view it showed). If the data folder was switched since, the
+    /// edit refers to ids of other data and is refused without being applied.
+    pub fn apply_at(&self, edit: Edit, location: u64) -> Result<PortfolioView, String> {
+        let mut guard = self.lock()?;
+        let mut disk = self.lock_disk()?;
+        if disk.location != location {
+            return Err(LOCATION_CHANGED.to_owned());
+        }
         let mut next = guard.as_ref().map_err(Clone::clone)?.clone();
         next.apply(edit).map_err(|e| e.to_string())?;
         self.commit(&mut guard, &mut disk, next)
@@ -395,6 +420,7 @@ impl AppState {
             None => self.app_data.clone(),
         };
         let target = target_dir.join(DATA_FILE);
+        let mut switched = false;
         if target != disk.path {
             // The data in memory is replaced only after the pointer is written, so a failure
             // leaves the old file and the old data exactly as they were.
@@ -436,10 +462,21 @@ impl AppState {
                 }
             }
             disk.path = target;
+            disk.location += 1;
             disk.warning = None;
+            switched = true;
         }
         let portfolio = guard.as_ref().map_err(Clone::clone)?;
-        Ok(PortfolioView::new(portfolio, self.data_info(&disk)))
+        let view = PortfolioView::new(portfolio, self.data_info(&disk));
+        drop(disk); // `run_recipe` takes the runs lock before the disk lock: never hold both here
+        drop(guard);
+        if switched {
+            // Rows read for the old data must not be applied to the new data.
+            self.lock_runs()?.clear();
+            *lock_shown(&self.shown)? = None;
+            self.runs_generation.fetch_add(1, Ordering::SeqCst);
+        }
+        Ok(view)
     }
 
     /// Builds the full-record export from the current portfolio.
@@ -626,6 +663,7 @@ impl AppState {
     /// rows for `fetch_all_plan` / `apply_fetch_all`. A link that was followed
     /// without a saved reference gets one now, so the same link is found next time.
     pub fn run_recipe(&self, name: &str, page: &str) -> Result<RecipeOutcome, String> {
+        let location = self.lock_disk()?.location;
         let mut recipe = self.recipe(name)?;
         // An earlier result of this recipe must never survive a run that fails or needs
         // attention: it would be applied together with the fresh ones.
@@ -681,6 +719,11 @@ impl AppState {
         };
         let view = self.run_view(&run)?;
         let mut runs = self.lock_runs()?;
+        // The rows were read for the recipe of the data location the run started in: after the
+        // data folder was switched they must not be kept for the new data.
+        if self.lock_disk()?.location != location {
+            return Err(LOCATION_CHANGED.to_owned());
+        }
         runs.retain(|r| r.name != run.name);
         runs.push(run);
         self.runs_generation.fetch_add(1, Ordering::SeqCst);
@@ -1172,6 +1215,68 @@ mod tests {
         state.apply(add_account("New place")).unwrap();
         assert_eq!(store::peek_revision(&shared.join(DATA_FILE)), Some(2));
         assert_eq!(store::peek_revision(&local), Some(1));
+    }
+
+    #[test]
+    fn an_edit_from_before_a_folder_switch_is_refused() {
+        let local = temp_path("stale-local");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local);
+        let before = state.view().unwrap().data.location;
+        // Another folder with unrelated data (ids restart at 1 there).
+        let shared = local_dir.join("shared-stale");
+        let other = AppState::load(shared.join(DATA_FILE));
+        std::fs::create_dir_all(&shared).unwrap();
+        other.apply(add_account("Other computer")).unwrap();
+        let after = state
+            .set_data_folder(Some(shared), true)
+            .unwrap()
+            .data
+            .location;
+        assert_ne!(before, after);
+
+        let error = state.apply_at(add_account("Stale"), before).unwrap_err();
+        assert_eq!(error, LOCATION_CHANGED);
+        assert_eq!(
+            account_names(&state),
+            vec!["Other computer"],
+            "nothing applied"
+        );
+
+        state.apply_at(add_account("Fresh"), after).unwrap();
+        assert_eq!(account_names(&state), vec!["Other computer", "Fresh"]);
+    }
+
+    #[test]
+    fn switching_the_folder_drops_the_fetched_rows() {
+        let local = temp_path("runs-local");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local);
+        state
+            .lock_runs()
+            .unwrap()
+            .push(stored("r", AccountId(1), &[("A", 100)]));
+        let before = state.runs_generation.load(Ordering::SeqCst);
+        state
+            .set_data_folder(Some(local_dir.join("shared-runs")), false)
+            .unwrap();
+        assert!(state.lock_runs().unwrap().is_empty());
+        assert_ne!(state.runs_generation.load(Ordering::SeqCst), before);
+    }
+
+    #[test]
+    fn the_location_changes_only_when_the_path_does() {
+        let local = temp_path("loc-same");
+        let local_dir = local.parent().unwrap().to_path_buf();
+        let state = AppState::load(local);
+        let start = state.view().unwrap().data.location;
+        state.apply(add_account("A")).unwrap();
+        assert_eq!(state.view().unwrap().data.location, start);
+        let shared = local_dir.join("shared-loc");
+        let moved = state.set_data_folder(Some(shared.clone()), false).unwrap();
+        assert_eq!(moved.data.location, start + 1);
+        let again = state.set_data_folder(Some(shared), false).unwrap();
+        assert_eq!(again.data.location, start + 1, "same folder: no change");
     }
 
     #[test]
