@@ -438,6 +438,9 @@ impl Recipe {
                     || heading.chars().count() > MAX_LINK_TEXT_CHARS
                     || heading.chars().any(char::is_control)
                     || !(1..=3).contains(&source.item_depth)
+                    // Every card is one data row: nothing to skip, one row per record.
+                    || self.mapping.header_rows != 0
+                    || self.mapping.rows_per_record != 1
                 {
                     return Err(Error::Invalid(
                         "the card source is not acceptable".to_owned(),

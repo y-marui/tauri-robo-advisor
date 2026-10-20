@@ -240,7 +240,20 @@ export function tableImportPanel(ctx: Context): Panel {
   perRecordSelect.addEventListener("change", syncControls);
 
   /** Fills the column selects from the preview and the saved mapping of the source. */
+  /** The card list that was last chosen in the browser, if the loaded rows are its cards. */
+  let chosenCards: CardSource | null = null;
+
+  /** The saved mapping of the source, if any; then, for cards, one headerless row per record. */
   function useSavedMapping(): void {
+    applySavedMapping();
+    if (chosenCards !== null) {
+      headerInput.value = "0";
+      perRecordSelect.value = "1";
+      syncControls();
+    }
+  }
+
+  function applySavedMapping(): void {
     const saved = current?.portfolio.import_mappings.find((m) => m.source === source());
     const loaded = preview;
     if (!saved || !loaded) {
@@ -331,9 +344,6 @@ export function tableImportPanel(ctx: Context): Panel {
     mappingBox.hidden = false;
     info("");
   }
-
-  /** The card list that was last chosen in the browser, if the loaded rows are its cards. */
-  let chosenCards: CardSource | null = null;
 
   async function load(read: () => Promise<TablePreview>): Promise<void> {
     chosenCards = null;
@@ -542,11 +552,11 @@ export function tableImportPanel(ctx: Context): Panel {
     h("div", { class: "add-row" }, fileInput),
     browserFetch({
       onTable: (loaded, label, card) => {
-        showPreview(loaded);
-        tableTitleInput.value = label;
         // A card list is saved by its heading and item depth; the title field only shows it.
         chosenCards = card;
         tableTitleInput.disabled = card !== null;
+        showPreview(loaded);
+        tableTitleInput.value = label;
       },
       info,
       fail,

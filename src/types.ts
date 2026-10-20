@@ -485,6 +485,13 @@ export interface FetchedTable {
   card: CardSource | null;
 }
 
+/** What reading a page offered: its tables and card lists. */
+export interface FetchedTables {
+  tables: FetchedTable[];
+  /** The page has more headings than the app reads: card lists below them are not offered. */
+  headings_cut: boolean;
+}
+
 /** One recipe's result. Mirrors `RecipeRunView` in Rust. */
 export interface RecipeRun {
   name: string;

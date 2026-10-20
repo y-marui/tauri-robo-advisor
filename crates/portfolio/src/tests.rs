@@ -2137,6 +2137,16 @@ fn cards_recipe_for(account: AccountId) -> Recipe {
             heading: " Holdings ".to_owned(),
             item_depth: 2,
         })),
+        mapping: ImportMapping {
+            header_rows: 0,
+            rows_per_record: 1,
+            name_row: 0,
+            value_row: 0,
+            name_column: 0,
+            value_column: 1,
+            price_column: None,
+            ..recipe_for(account).mapping
+        },
         ..recipe_for(account)
     }
 }
@@ -2174,6 +2184,8 @@ fn a_cards_recipe_is_exclusive_with_a_table_title_and_needs_a_valid_source() {
         bad(&|r| r.cards.as_mut().unwrap().heading = "x".repeat(61)),
         bad(&|r| r.cards.as_mut().unwrap().item_depth = 0),
         bad(&|r| r.cards.as_mut().unwrap().item_depth = 4),
+        bad(&|r| r.mapping.header_rows = 1),
+        bad(&|r| r.mapping.rows_per_record = 2),
     ] {
         assert!(p.apply(Edit::SetRecipe { recipe }).is_err());
     }

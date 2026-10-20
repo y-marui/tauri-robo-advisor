@@ -100,6 +100,14 @@ pub struct TableSummary {
     pub card: Option<CardCandidate>,
 }
 
+/// The candidates found on a page.
+#[derive(Debug, Serialize)]
+pub struct FetchedTables {
+    pub tables: Vec<TableSummary>,
+    /// The page has more headings than the app reads, so card lists below them are not offered.
+    pub headings_cut: bool,
+}
+
 /// Starts an error message that means the browser tab is no longer where the recipes expect it:
 /// the rest of the batch must not run.
 pub const STOP_BATCH: &str = "[stop] ";
@@ -159,7 +167,7 @@ impl BrowserSession {
     }
 
     /// Reads the tables of one page and keeps them for `take_table`.
-    pub fn fetch_tables(&self, page_id: &str) -> Result<Vec<TableSummary>, String> {
+    pub fn fetch_tables(&self, page_id: &str) -> Result<FetchedTables, String> {
         let mut cdp = self.connect()?;
         let page = cdp
             .pages()
@@ -204,7 +212,9 @@ impl BrowserSession {
         let mut summaries = summaries;
         // The card lists of the page come after its tables. A failure to read the headings
         // (a page without any) only means there are none.
+        let mut headings_cut = false;
         if let Ok(headings) = cdp.read_headings(&session) {
+            headings_cut = headings.cut;
             for heading in headings.list {
                 // The first depth at which the heading gives cards; the others would give the
                 // same blocks again, split further.
@@ -228,7 +238,10 @@ impl BrowserSession {
             }
         }
         *lock(&self.fetched)? = tables;
-        Ok(summaries)
+        Ok(FetchedTables {
+            tables: summaries,
+            headings_cut,
+        })
     }
 
     /// Follows the recipe's links from the given page (each is a plain link that only

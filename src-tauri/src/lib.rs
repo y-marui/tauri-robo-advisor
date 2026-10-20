@@ -11,7 +11,7 @@ use app_state::{
     AppState, PortfolioView, RecipeOutcome, RecipeRunView, TableImportPlan, TablePreview,
 };
 use bitflyer::{Client, Holdings, ReqwestTransport};
-use browser_session::{BrowserInfo, BrowserSession, PageInfo, TableSummary};
+use browser_session::{BrowserInfo, BrowserSession, FetchedTables, PageInfo};
 use portfolio::{Edit, ImportPlan, ImportRow};
 use rebalance::{Holding, Params, Proposal, Target};
 use suggest::{AccountBalance, Overview, Request as SuggestRequest, Suggestion};
@@ -199,7 +199,7 @@ async fn browser_pages(state: State<'_, Arc<AppState>>) -> Result<Vec<PageInfo>,
 async fn fetch_browser_tables(
     state: State<'_, Arc<AppState>>,
     page: String,
-) -> Result<Vec<TableSummary>, String> {
+) -> Result<FetchedTables, String> {
     let state = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || state.browser.fetch_tables(&page))
         .await

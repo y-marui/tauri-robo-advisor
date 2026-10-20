@@ -134,7 +134,8 @@ export function browserFetch(options: Options): HTMLElement {
         return;
       }
       info(t("Reading the page…"));
-      const tables: FetchedTable[] = await fetchBrowserTables(pageSelect.value);
+      const fetched = await fetchBrowserTables(pageSelect.value);
+      const tables: FetchedTable[] = fetched.tables;
       lastTables = tables;
       tableSelect.replaceChildren(
         ...tables.map((table) =>
@@ -155,7 +156,9 @@ export function browserFetch(options: Options): HTMLElement {
       info(
         tables.length === 0
           ? t("No table was found on that page.")
-          : t("Choose the table with the holdings, then use it."),
+          : fetched.headings_cut
+            ? t("The page has more headings than the app reads, so card lists below the first ones are not offered. Choose the table with the holdings, then use it.")
+            : t("Choose the table with the holdings, then use it."),
       );
     });
   });
