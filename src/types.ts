@@ -170,6 +170,8 @@ export interface DataInfo {
   folder: string;
   /** `true` when no folder was chosen and the data is in the app's own local folder. */
   is_local: boolean;
+  /** Changes when the data folder is switched; sent back with each edit. */
+  location: number;
   /** Other copies of the data file made by the sync (for example "portfolio 2.json"). */
   conflict_copies: string[];
   /** The data file has not been downloaded to this computer yet. */

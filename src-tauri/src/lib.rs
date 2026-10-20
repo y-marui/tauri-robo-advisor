@@ -81,9 +81,10 @@ async fn get_portfolio(state: State<'_, Arc<AppState>>) -> Result<PortfolioView,
 async fn apply_portfolio_edit(
     state: State<'_, Arc<AppState>>,
     edit: Edit,
+    location: u64,
 ) -> Result<PortfolioView, String> {
     let state = Arc::clone(&state);
-    tauri::async_runtime::spawn_blocking(move || state.apply(edit))
+    tauri::async_runtime::spawn_blocking(move || state.apply_at(edit, location))
         .await
         .map_err(|e| e.to_string())?
 }

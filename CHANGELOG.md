@@ -2,10 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
+
 ### Changed
 
 - `make deploy` and `make dmg` sign the app (and the DMG) with a `Developer ID Application` certificate from the keychain when one exists (`TEAM_ID` / `DEVELOPER_NAME` / `SIGN_IDENTITY`, see `.env.example`), so macOS keeps the app's permissions across deploys (#73). With no certificate the app is signed ad-hoc with a message. The signature is verified after the build. New `make bundle-app`.
 
+- Browser reading follow-ups (#39): the fixed page scripts (table read, link search and move, menu click, settle wait) now run in an isolated world (`Page.createIsolatedWorld`), so a page cannot replace `URL`, `querySelectorAll`, or similar built-ins before the app reads it; the world is made again once if the browser reports the context gone. A recipe read now waits (up to 10 s, polling every 0.5 s) until a table with the recipe's title shows up and the same tables are read twice in a row, instead of relying only on the DOM-quiet heuristic (`Cdp::read_tables_until`); the safety rules are unchanged. The refused-word lists gained password, PIN, reissue, reset, unsubscribe, download and upload words (tests use made-up pages). The decision to keep treating 13+ digit and 24+ hex values as per-visit in link fingerprints is recorded and tested. Trying a real SBI page is still open.
 - Holdings tab: the table is read-only. Product names, categories, amounts (now with thousands separators and the product's currency) and the category and group names in the heading rows are text, not fields; all of them are edited in the Records card of the Settings tab, which a new "Edit in Records" button above the table (and in the empty state) opens and scrolls to. The table is rebuilt when a name, category or amount changes in Settings. No Rust change.
 - Settings tab: the Products card and the Holdings (manual entry) card are replaced by one "Records" card (全レコード), the full view of every product and every record. Each product has a heading row (name, category, currency, delete, add a record) and one row per record (account, weight, quantity and price read-only, amount, delete); a product-name filter and the add-product form are included. Clearing an amount no longer deletes the record (it is refused with a message; type 0 to keep a weight): a record is deleted only with its Delete button. The Holdings tab's table is unchanged for now. No Rust change.
 - The window opens at 1280 x 800 (wide enough for the left column and the main area side by side) instead of 800 x 600, and cannot be made smaller than 720 x 520.

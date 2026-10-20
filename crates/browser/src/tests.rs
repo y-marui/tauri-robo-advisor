@@ -138,6 +138,7 @@ fn fake_browser_logged(
         let mut socket = tungstenite::accept(stream).unwrap();
         let mut first = true;
         let mut next = 0usize;
+        let mut world = 0i64;
         while let Ok(Message::Text(text)) = socket.read() {
             let request: Value = serde_json::from_str(text.as_str()).unwrap();
             let id = request["id"].clone();
@@ -155,11 +156,39 @@ fn fake_browser_logged(
                     assert_eq!(request["params"]["flatten"], true);
                     json!({"sessionId": "s1"})
                 }
+                "Page.getFrameTree" => {
+                    assert_eq!(request["sessionId"], "s1");
+                    json!({"frameTree": {"frame": {"id": "frame1"}}})
+                }
+                "Page.createIsolatedWorld" => {
+                    assert_eq!(request["sessionId"], "s1");
+                    assert_eq!(request["params"]["frameId"], "frame1");
+                    world += 1;
+                    // Only the test that looks at the worlds records them.
+                    if let Some(log) = log
+                        .as_ref()
+                        .filter(|_| values.contains(&json!("__context_lost__")))
+                    {
+                        log.lock().unwrap().push(format!("world {world}"));
+                    }
+                    json!({"executionContextId": world})
+                }
                 "Runtime.evaluate" => {
                     assert_eq!(request["sessionId"], "s1");
+                    // Every script runs in the isolated world, never in the page's own.
+                    assert_eq!(request["params"]["contextId"], world);
                     if let Some(log) = &log {
                         let expression = request["params"]["expression"].as_str().unwrap_or("");
                         log.lock().unwrap().push(expression.to_owned());
+                    }
+                    if values
+                        .get(next)
+                        .is_some_and(|v| v == &json!("__context_lost__"))
+                    {
+                        next += 1;
+                        let error = json!({"id": id, "error": {"code": -32000, "message": "Cannot find context with specified id"}});
+                        socket.send(Message::text(error.to_string())).unwrap();
+                        continue;
                     }
                     if fail_script {
                         json!({"exceptionDetails": {"text": "secret page text"}})
@@ -947,4 +976,89 @@ fn the_click_script_only_clicks_one_scripted_entry_of_the_named_group() {
     ] {
         assert!(!script.contains(word), "{word}");
     }
+}
+
+#[test]
+fn scripts_run_in_one_isolated_world_that_is_made_again_when_its_context_is_gone() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![
+            json!({"leaf": [], "outer": []}),
+            json!("__context_lost__"),
+            json!({"leaf": [], "outer": []}),
+        ],
+        false,
+        Some(log.clone()),
+    );
+    let mut cdp = Cdp::connect(&endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+
+    cdp.read_tables(&session).unwrap();
+    cdp.read_tables(&session).unwrap();
+
+    let log = log.lock().unwrap();
+    let worlds: Vec<_> = log.iter().filter(|l| l.starts_with("world ")).collect();
+    assert_eq!(
+        worlds,
+        ["world 1", "world 2"],
+        "made once, and again only after the browser said the context was gone"
+    );
+}
+
+#[test]
+fn the_tables_are_read_again_until_the_title_shows_and_the_page_holds_still() {
+    let empty = json!({"leaf": [], "outer": []});
+    let with = json!({"leaf": [[["Holdings", "x"]]], "outer": []});
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let endpoint = fake_browser_logged(
+        vec![empty.clone(), empty, with.clone(), with],
+        false,
+        Some(log.clone()),
+    );
+    let mut cdp = Cdp::connect(&endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+
+    let ready = |page: &PageTables| page.leaf.iter().any(|t| t[0][0] == "Holdings");
+    let page = cdp
+        .read_tables_until(&session, &ready, std::time::Duration::from_secs(10))
+        .unwrap();
+
+    assert_eq!(page.leaf.len(), 1);
+    let reads = log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|l| l.contains("querySelectorAll"))
+        .count();
+    assert_eq!(reads, 4, "two empty reads, then the table twice in a row");
+}
+
+#[test]
+fn a_title_that_never_shows_ends_the_wait_with_what_was_read() {
+    let endpoint = fake_browser(json!({"leaf": [], "outer": []}));
+    let mut cdp = Cdp::connect(&endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+
+    let page = cdp
+        .read_tables_until(&session, &|_| false, std::time::Duration::from_millis(800))
+        .unwrap();
+
+    assert!(page.is_empty());
+}
+
+#[test]
+fn a_title_seen_only_in_the_last_read_is_not_taken_as_complete() {
+    let with = json!({"leaf": [[["Holdings", "x"]]], "outer": []});
+    let endpoint = fake_browser(with);
+    let mut cdp = Cdp::connect(&endpoint).unwrap();
+    let pages = cdp.pages().unwrap();
+    let session = cdp.attach(&pages[0]).unwrap();
+
+    // The table is there from the first read; with no time to confirm it, it is not accepted.
+    let result = cdp.read_tables_until(&session, &|p| !p.is_empty(), std::time::Duration::ZERO);
+
+    assert_eq!(result, Err(Error::Timeout));
 }
