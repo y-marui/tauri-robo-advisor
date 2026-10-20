@@ -86,7 +86,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
         const showQuantityAndPrice = (): void => {
           const held = holdingOf(current, record.account, record.product);
           quantityCell.textContent = held?.quantity ?? "";
-          priceCell.textContent = priceText(held);
+          const price = priceText(held);
+          priceCell.textContent = price === "" ? "" : `${price} ${product.currency}`;
         };
         // A record that only carries a weight (a product to start buying) has no value yet; the
         // label follows every refresh, since an edit or an import can change either.
@@ -109,14 +110,14 @@ export function holdingsTablePanel(ctx: Context): Panel {
               { class: "clip" },
               categories.find((c) => c.id === product.category)?.name ?? "",
             ),
+            priceCell,
+            quantityCell,
             h(
               "td",
               { class: "num" },
               `${yen(shownValue(view, record))} ${product.currency}`,
               weightOnlyLabel,
             ),
-            quantityCell,
-            priceCell,
             cells.value,
             cells.share,
           ),
@@ -225,9 +226,9 @@ export function holdingsTablePanel(ctx: Context): Panel {
                 h("th", {}, t("Product")),
                 ...(groupBy === "category" ? [h("th", {}, t("Account"))] : []),
                 h("th", {}, t("Category")),
-                h("th", {}, t("Amount")),
-                h("th", {}, t("Quantity")),
                 h("th", {}, t("Price")),
+                h("th", {}, t("Quantity")),
+                h("th", {}, t("Value")),
                 h("th", {}, t("Value (JPY)")),
                 h("th", {}, t("Share")),
               ),

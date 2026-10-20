@@ -444,7 +444,6 @@ export const MESSAGES = {
   },
   "Fetching “{recipe}”…": { ja: "「{recipe}」を取得中…" },
   "“{recipe}” failed: {reason}": { ja: "「{recipe}」に失敗しました: {reason}" },
-  "{count} rows were left out.": { ja: "{count} 行を除外しました。" },
   "Apply to the accounts": { ja: "口座に反映する" },
   "Confirm apply": { ja: "反映する" },
   "The holdings were replaced.": { ja: "保有を置き換えました。" },

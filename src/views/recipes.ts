@@ -5,6 +5,7 @@ import { t, type MessageKey } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import type { BrowserPage, PortfolioView, PresetInfo, Recipe, RecipeRun, RecipeView } from "../types.ts";
 import { importPlanView } from "./import-plan.ts";
+import { skippedText } from "./skipped.ts";
 
 // Saved fetch recipes: after the user has logged in to the browser opened by the
 // app, one button follows each recipe's links (plain links that only show another
@@ -352,7 +353,7 @@ export function recipesPanel(ctx: Context): Panel {
       const notes: HTMLElement[] = [];
       if (run.skipped.length > 0) {
         notes.push(
-          h("p", { class: "note" }, t("{count} rows were left out.", { count: String(run.skipped.length) })),
+          h("p", { class: "note" }, skippedText(run.skipped)),
         );
       }
       return h(

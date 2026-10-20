@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- A saved link is recognized again when a session identifier is carried in the path (`/app/list.do;BV_SessionID=...`, as Rakuten Securities does): the volatile `;name=value` path parameters are left out of the destination fingerprint like the volatile query pairs (other path parameters are kept). A link saved before this change is asked for once.
+- Fetching again after "The page changed while the recipes were running" no longer fails the same way: the old starting page is forgotten when the batch stops. A tab that already shows the recipe's table (left on the page the links lead to) is read as it is without looking for the links.
+- The Rakuten preset `rakuten-all` reads the right columns again: the name cell spans two columns, so the reader pads an empty cell after it, and the units, price, and evaluation are one column to the right (every row was reported as "not a number").
 - An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
 
 ### Added
@@ -17,6 +20,8 @@
 
 ### Changed
 
+- Holdings tab columns are now price (with the product's currency), quantity, value (the stored value, in the product's currency), value (JPY), and share.
+- The rows left out of a fetch are listed with their reasons in the fetch result ("row 2 (not a number)"), as they were in the table import, instead of only a count.
 - The oversized docs are split to fit doc-lint (#89), content unchanged: `docs/specification.md` is an index over `docs/specification-{import,browser,recipes,presets,suggestions,data}.md`, `docs/ui-design-settings.md` holds the settings tab, and the long Design Constraints, Tauri Notes, CI commands, licensing and tech stack sections of `AI_CONTEXT.md` moved to `docs/design-constraints.md` (`AI_CONTEXT.md` keeps the rule headlines and a pointer).
 - The Rakuten preset `rakuten-all` reads investment trusts (units x price per 10,000 units) and domestic stocks (the evaluation) by the kind cell, and reports rows of any other kind instead of valuing them wrongly. Stocks are covered by tests with made-up pages only; the kind labels are not checked against a real page.
 

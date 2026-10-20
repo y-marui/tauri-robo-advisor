@@ -548,6 +548,39 @@ fn volatile_value(value: &str) -> bool {
         || (value.len() >= 24 && value.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
+/// Whether a `key=value` pair (a query pair or a path parameter) is made for one visit.
+/// A name or value written with escapes (`%73ession`) is judged as the server reads it.
+/// Whole words only: `timeframe` is not a time stamp and `author` is not `auth`.
+fn volatile_pair(key: &str, value: &str) -> bool {
+    tokens(&percent_decoded(key))
+        .iter()
+        .any(|w| VOLATILE_KEYS.contains(&w.as_str()))
+        || volatile_value(&percent_decoded(value))
+}
+
+/// The path without its volatile path parameters (`/a.do;BV_SessionID=x` becomes `/a.do`),
+/// which Java servers use to carry a session in the path itself. Other parameters are kept.
+fn path_without_volatile_params(path: &str) -> String {
+    path.split('/')
+        .map(|segment| {
+            let mut parts = segment.split(';');
+            let name = parts.next().unwrap_or_default();
+            let kept: Vec<&str> = parts
+                .filter(|param| {
+                    let (key, value) = param.split_once('=').unwrap_or((param, ""));
+                    !volatile_pair(key, value)
+                })
+                .collect();
+            if kept.is_empty() {
+                name.to_owned()
+            } else {
+                format!("{name};{}", kept.join(";"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// The path of an address and its query without the parts that change per visit.
 /// The remaining keys are sorted, so the same destination always gives the same text.
 pub fn normalize_href(href: &str) -> String {
@@ -559,17 +592,13 @@ pub fn normalize_href(href: &str) -> String {
         format!("#{fragment}")
     };
     let (path, query) = href.split_once('?').unwrap_or((href, ""));
+    let path = path_without_volatile_params(path);
     let kept: Vec<(String, String)> = query
         .split('&')
         .filter(|pair| !pair.is_empty())
         .filter_map(|pair| {
             let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-            // A name or value written with escapes (`%73ession`) is judged as the server reads it.
-            // Whole words only: `timeframe` is not a time stamp and `author` is not `auth`.
-            let words = tokens(&percent_decoded(key));
-            let volatile = words.iter().any(|w| VOLATILE_KEYS.contains(&w.as_str()))
-                || volatile_value(&percent_decoded(value));
-            (!volatile).then(|| (key.to_owned(), value.to_owned()))
+            (!volatile_pair(key, value)).then(|| (key.to_owned(), value.to_owned()))
         })
         .collect();
     // The order is kept: with a repeated name a server may take the first or the last value.
@@ -964,6 +993,16 @@ mod tests {
         assert_ne!(fingerprint("/a"), fingerprint("/b"));
         assert_eq!(fingerprint("/a"), fingerprint("/a"));
         assert_eq!(normalize_href("/x?"), "/x");
+        // A session carried in the path (`;name=value`) is dropped like one in the query.
+        assert_eq!(
+            normalize_href("/a/list.do;BV_SessionID=ABC?p=1&BV_SessionID=ABC"),
+            "/a/list.do?p=1"
+        );
+        assert_eq!(
+            normalize_href("/a/list.do;BV_SessionID=ABC"),
+            normalize_href("/a/list.do;BV_SessionID=XYZ"),
+        );
+        assert_eq!(normalize_href("/a;lang=ja/b.do"), "/a;lang=ja/b.do");
         // Decision (#39): a 13+ digit number or a 24+ hex value is dropped whatever its name,
         // because such a value is far more often made for one visit than part of a destination,
         // and a link that changed every visit would never be found again. Two links with the same

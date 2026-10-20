@@ -187,8 +187,9 @@ const PRESETS: &[Preset] = &[
     // links to it with a plain link on the same host (the pages of the company are spread over
     // several hosts). The holdings of every kind are one table, found by its heading cells (its
     // cells are outer-table cells: some hold small tables, see `browser::PageTables`). After the
-    // heading row, a holding is one visible row: the kind, name, account type, units, cost, price,
-    // and a cell with the evaluation (first line) and the profit. The page also has a summary
+    // heading row, a holding is one visible row: the kind, name (the name cell spans two columns,
+    // so the reader pads an empty cell after it), account type, units, cost, price, and a cell
+    // with the evaluation (first line) and the profit. The page also has a summary
     // table by kind with hidden detail rows, which does not start with the same cells. Only the
     // units and the price are read, and the value is the units times the price per 10,000 units
     // for an investment trust row; a domestic stock row (its price is per share) reads the
@@ -214,8 +215,8 @@ const PRESETS: &[Preset] = &[
         layout: Layout {
             source: "Rakuten",
             name_column: 1,
-            value_column: 3,
-            price_column: Some(5),
+            value_column: 4,
+            price_column: Some(6),
             // Each kind sets its own unit (see `kinds`).
             price_unit: 1,
             price_part: None,
@@ -235,7 +236,7 @@ const PRESETS: &[Preset] = &[
                 (
                     "国内株式",
                     KindRead::Evaluation {
-                        column: 6,
+                        column: 7,
                         part: Some(0),
                     },
                 ),

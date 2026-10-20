@@ -2262,13 +2262,14 @@ mod tests {
         let row = |cells: &[&str]| cells.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
         let heading = {
             let mut cells = vec![recipe.table_starts_with.as_str()];
-            cells.resize(7, "");
+            cells.resize(8, "");
             row(&cells)
         };
         let holding = |kind: &str, name: &str, units: &str, value: &str| {
             row(&[
                 kind,
                 name,
+                "",
                 "Taxable",
                 units,
                 "5,000.00 円\n6,000 円",
