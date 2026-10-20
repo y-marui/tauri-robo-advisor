@@ -125,8 +125,14 @@ let openRecords: () => void = () => {};
 
 const context: Context = {
   async apply(edit) {
+    // The edit is tied to the data location of the view it was made from; Rust refuses it if
+    // the data folder was switched meanwhile.
+    const location = view?.data.location;
     try {
-      view = await applyEdit(edit);
+      if (location === undefined) {
+        throw new Error("The data is not loaded yet.");
+      }
+      view = await applyEdit(edit, location);
       renderAll();
       showStatus(t("Saved."), false);
       return true;

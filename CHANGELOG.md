@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An edit sent while the data folder is being switched can no longer be applied to the newly adopted data (#43): the data carries a location number (`data.location`) that changes with the folder, `apply_portfolio_edit` takes the number of the view the edit was made from, and Rust refuses it (nothing applied) if it differs. Switching the folder also invalidates fetched rows that were not applied yet. Reloading the file by content hash on every refresh was considered and not done (see `docs/architecture.md`).
+
 ### Changed
 
 - Holdings tab: the table is read-only. Product names, categories, amounts (now with thousands separators and the product's currency) and the category and group names in the heading rows are text, not fields; all of them are edited in the Records card of the Settings tab, which a new "Edit in Records" button above the table (and in the empty state) opens and scrolls to. The table is rebuilt when a name, category or amount changes in Settings. No Rust change.
