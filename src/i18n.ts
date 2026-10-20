@@ -354,6 +354,18 @@ export const MESSAGES = {
   "Create the API key with the permission to read the asset balance only. No trading, deposit or withdrawal permission is needed. If you can, also restrict the key to your IP address.": {
     ja: "API キーには、資産残高の参照の権限だけを付けて作成してください。取引・入出金の権限は不要です。可能なら、キーの利用元を自分の IP アドレスに限ってください。",
   },
+  "Values use Binance's last traded price (exchange order book, not a sales desk price): the JPY market when there is one.": {
+    ja: "評価額は、Binance の最終取引価格（取引所の板。販売所の価格ではありません）を使っています。円の市場がある銘柄は、その市場の価格です。",
+  },
+  "No JPY market exists for these, so they use the USDT market's last price times USDT/JPY: {names}": {
+    ja: "円の市場がないため、USDT 市場の最終価格に USDT/JPY を掛けて評価しています: {names}",
+  },
+  "Create the API key with read-only permission. Do not enable trading, withdrawal or any other permission. If you can, also restrict the key to your IP address.": {
+    ja: "API キーは、読み取り専用の権限で作成してください。取引・出金などの権限は付けないでください。可能なら、キーの利用元を自分の IP アドレスに限ってください。",
+  },
+  "Binance Japan accounts: this assumes your Binance Japan key also works on the global Binance API (api.binance.com). That is not confirmed by Binance. If the key is rejected, the message from Binance is shown above.": {
+    ja: "Binance Japan のアカウントの場合: Binance Japan のキーが、グローバル版の Binance API（api.binance.com）でも使えることを前提にしています。Binance による確認はありません。キーが拒否されたときは、Binance のメッセージを上に表示します。",
+  },
   "Replace holdings": { ja: "保有を置き換える" },
   "Confirm replace": { ja: "置き換える" },
   "This replaces every holding of “{account}” with the linked rows above.": {

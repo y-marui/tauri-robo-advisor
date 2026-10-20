@@ -8,6 +8,7 @@ import { accountTypesPanel } from "./views/account-types.ts";
 import { bitflyerPanel } from "./views/bitflyer.ts";
 import { coincheckPanel } from "./views/coincheck.ts";
 import { gmocoinPanel } from "./views/gmocoin.ts";
+import { binancePanel } from "./views/binance.ts";
 import { categoriesPanel } from "./views/categories.ts";
 import { groupsPanel } from "./views/groups.ts";
 import { dataFolderPanel } from "./views/data-folder.ts";
@@ -215,6 +216,7 @@ function build(): void {
   const bitflyer = bitflyerPanel(context);
   const coincheck = coincheckPanel(context);
   const gmocoin = gmocoinPanel(context);
+  const binance = binancePanel(context);
   const groups = groupsPanel(context);
   const categories = categoriesPanel(context);
   const records = recordsPanel(context);
@@ -232,6 +234,7 @@ function build(): void {
     bitflyer,
     coincheck,
     gmocoin,
+    binance,
     groups,
     categories,
     records,
@@ -294,6 +297,7 @@ function build(): void {
       bitflyer.el,
       coincheck.el,
       gmocoin.el,
+      binance.el,
     ),
     settings: h(
       "div",
