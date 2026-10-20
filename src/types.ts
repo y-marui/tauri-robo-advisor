@@ -474,6 +474,13 @@ export interface TableImportPlan {
 
 export type BrowserKind = "chrome" | "edge" | "brave";
 
+/** The browser and profile folder last used, as the app kept them. */
+export interface BrowserSettings {
+  kind: BrowserKind | null;
+  /** Empty: the default folder inside the app's data folder. */
+  profile: string;
+}
+
 export interface BrowserInfo {
   kind: BrowserKind;
 }

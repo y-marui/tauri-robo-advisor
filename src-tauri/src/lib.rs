@@ -1,5 +1,6 @@
 mod app_state;
 mod browser_session;
+mod browser_settings;
 mod data_folder;
 mod exporter;
 mod secrets;
@@ -168,6 +169,15 @@ fn list_browsers() -> Vec<BrowserInfo> {
     BrowserSession::installed()
 }
 
+// The browser and profile folder last used, kept in a local file (never in the portfolio data).
+#[tauri::command]
+fn get_browser_settings(
+    app: tauri::AppHandle,
+) -> Result<browser_settings::BrowserSettings, String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(browser_settings::load(&app_data))
+}
+
 #[tauri::command]
 async fn open_browser(
     app: tauri::AppHandle,
@@ -175,16 +185,32 @@ async fn open_browser(
     kind: browser::Kind,
     profile: Option<String>,
 ) -> Result<(), String> {
-    let profile = match profile.filter(|p| !p.trim().is_empty()) {
-        Some(folder) => std::path::PathBuf::from(folder.trim()),
-        None => {
-            browser_session::default_profile(&app.path().app_data_dir().map_err(|e| e.to_string())?)
-        }
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let folder = profile
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_owned();
+    let profile = if folder.is_empty() {
+        browser_session::default_profile(&app_data)
+    } else {
+        std::path::PathBuf::from(&folder)
     };
     let state = Arc::clone(&state);
-    tauri::async_runtime::spawn_blocking(move || state.browser.open(kind, &profile))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        state.browser.open(kind, &profile)?;
+        // Remembered only after the browser started; a failure to save does not undo the open.
+        let _ = browser_settings::save(
+            &app_data,
+            &browser_settings::BrowserSettings {
+                kind: Some(kind),
+                profile: folder,
+            },
+        );
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -427,6 +453,7 @@ pub fn run() {
             clear_fetch_runs,
             discard_fetch_run,
             list_browsers,
+            get_browser_settings,
             open_browser,
             browser_pages,
             fetch_browser_tables,
