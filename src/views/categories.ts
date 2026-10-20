@@ -2,6 +2,7 @@ import { percentToFraction } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { deleteButton, orderButtons, percentField, selectField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
+import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { ProductTargeting } from "../types.ts";
 import { TARGETINGS, targetingLabel } from "./labels.ts";
@@ -14,12 +15,14 @@ export function categoriesPanel(ctx: Context): Panel {
       "|" +
       view.portfolio.groups.map((g) => `${g.id}:${g.name}`).join(","),
     (view, bind) => {
+      const ids = view.portfolio.categories.map((c) => c.id);
       const rows = view.portfolio.categories.map((category, position) => {
         const id = category.id;
         const find = (v: typeof view) => v.portfolio.categories.find((c) => c.id === id);
         return h(
           "tr",
           {},
+          h("td", { class: "grip-cell" }, grip()),
           h(
             "td",
             {},
@@ -88,10 +91,18 @@ export function categoriesPanel(ctx: Context): Panel {
               type: "move_category",
               id,
               up,
-            })),
+            }), { list: "categories", id }),
             deleteButton(() => void ctx.apply({ type: "remove_category", id })),
           ),
         );
+      });
+
+      const tbody = h("tbody", {}, ...rows);
+      makeSortable({
+        list: "categories",
+        tbody,
+        ids,
+        move: (id, index) => void ctx.apply({ type: "move_category_to", id, index }),
       });
 
       const name = h("input", { type: "text", "aria-label": t("Name"), autocomplete: "off" });
@@ -140,6 +151,7 @@ export function categoriesPanel(ctx: Context): Panel {
               h(
                 "tr",
                 {},
+                h("th", {}),
                 h("th", {}, t("Name")),
                 ...(view.portfolio.groups.length === 0 ? [] : [h("th", {}, t("Group"))]),
                 h("th", {}, t("Target (%)")),
@@ -147,7 +159,7 @@ export function categoriesPanel(ctx: Context): Panel {
                 h("th", {}),
               ),
             ),
-            h("tbody", {}, ...rows),
+            tbody,
           ),
         ),
         form,

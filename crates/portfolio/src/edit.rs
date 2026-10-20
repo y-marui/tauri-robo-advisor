@@ -49,6 +49,12 @@ pub enum Edit {
         id: GroupId,
         up: bool,
     },
+    /// Moves a group to a given place in the list: `index` is the place it has afterwards (0 is
+    /// the top). An index past the end is refused; the same place changes nothing.
+    MoveGroupTo {
+        id: GroupId,
+        index: usize,
+    },
     RemoveGroup {
         id: GroupId,
     },
@@ -75,6 +81,11 @@ pub enum Edit {
     MoveCategory {
         id: CategoryId,
         up: bool,
+    },
+    /// Moves a category to a given place in the list, like `MoveGroupTo`.
+    MoveCategoryTo {
+        id: CategoryId,
+        index: usize,
     },
     AddProduct {
         name: String,
@@ -133,6 +144,11 @@ pub enum Edit {
         id: AccountId,
         /// `None` means the account can buy any product.
         products: Option<Vec<ProductId>>,
+    },
+    /// Moves an account to a given place in the list, like `MoveGroupTo`.
+    MoveAccountTo {
+        id: AccountId,
+        index: usize,
     },
     RemoveAccount {
         id: AccountId,
@@ -689,6 +705,18 @@ impl Portfolio {
             Edit::MoveCategory { id, up } => {
                 self.category(id)?;
                 swap_with_neighbor(&mut self.categories, |c| c.id == id, up);
+            }
+            Edit::MoveGroupTo { id, index } => {
+                self.group(id)?;
+                move_to(&mut self.groups, |g| g.id == id, index)?;
+            }
+            Edit::MoveCategoryTo { id, index } => {
+                self.category(id)?;
+                move_to(&mut self.categories, |c| c.id == id, index)?;
+            }
+            Edit::MoveAccountTo { id, index } => {
+                self.account(id)?;
+                move_to(&mut self.accounts, |a| a.id == id, index)?;
             }
             Edit::RemoveGroup { id } => {
                 self.group(id)?;
@@ -1395,6 +1423,18 @@ impl Portfolio {
         }
         Ok(())
     }
+}
+
+/// Moves the first item matching `is` so that it ends up at `index`; the others keep their order.
+fn move_to<T>(list: &mut Vec<T>, is: impl Fn(&T) -> bool, index: usize) -> Result<(), Error> {
+    if index >= list.len() {
+        return Err(Error::Invalid("the position is out of range".to_owned()));
+    }
+    if let Some(from) = list.iter().position(is) {
+        let item = list.remove(from);
+        list.insert(index, item);
+    }
+    Ok(())
 }
 
 /// Swaps the first item matching `is` with its neighbor above (`up`) or below; at an end of the
