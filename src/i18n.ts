@@ -280,7 +280,7 @@ export const MESSAGES = {
   "Add to this account": { ja: "この口座への追加" },
   "Short (+) / over (-)": { ja: "不足 (+) / 超過 (-)" },
   "No accounts yet.": { ja: "口座がまだありません。" },
-  "Nothing held or buyable in this account.": { ja: "この口座には、保有も買える商品もありません。" },
+  "This account holds nothing yet. Use the All tab, or add a record in Settings.": { ja: "この口座にはまだ保有がありません。「すべて」のタブを使うか、設定でレコードを追加してください。" },
   "Choose an account first.": { ja: "先に口座を選んでください。" },
   "API key": { ja: "API キー" },
   "API secret": { ja: "API シークレット" },

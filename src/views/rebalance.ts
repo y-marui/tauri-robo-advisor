@@ -102,7 +102,7 @@ export function rebalancePanel(ctx: Context): Panel {
       }
     }
     if (rows.length === 0) {
-      return h("p", { class: "note" }, t("Nothing held or buyable in this account."));
+      return h("p", { class: "note" }, t("This account holds nothing yet. Use the All tab, or add a record in Settings."));
     }
     return h(
       "div",
