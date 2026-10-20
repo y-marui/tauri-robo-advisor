@@ -1,6 +1,6 @@
 # Crypto Exchanges Investigation
 
-#122 の調査結果。Coincheck・GMO コイン・CoinTrade・SBI VC トレード・Binance の保有を、設計制約（ローカルのみ、認証情報はキーチェーンのみ、読み取り専用、注文をしない）の範囲で読めるかを、公式ドキュメントだけで調べた。調査日は 2026-10-20。実装の状況: Coincheck は #125、GMO コインは #126（`conversionRate` を販売所の価格として採用。決定は `specification-import.md` の GMO Coin Balances）。本アプリは投資助言ではなく、ここに実際の残高やキーは含まれない。
+#122 の調査結果。Coincheck・GMO コイン・CoinTrade・SBI VC トレード・Binance の保有を、設計制約（ローカルのみ、認証情報はキーチェーンのみ、読み取り専用、注文をしない）の範囲で読めるかを、公式ドキュメントだけで調べた。調査日は 2026-10-20。実装の状況: Coincheck は実装済み（#125。価格は #130 で販売所のレート API `/api/rate/<通貨>_jpy` に変更）、GMO コインは実装済み（#126。価格の基準は残高の応答の `conversionRate` ＝販売所の売値。取引所だけの銘柄 FCR・ASTR・NAC・WILD は取引所の最終約定価格で評価し、画面で明記する。決定は `specification-import.md` の GMO Coin Balances）。どちらも実サービスでの確認は未了。本アプリは投資助言ではなく、ここに実際の残高やキーは含まれない。
 
 ## Summary
 
@@ -58,8 +58,8 @@
 
 ## Recommended Order
 
-1. Coincheck（利用者が多く、通貨ごとの JPY 建てがあり、bitFlyer に最も近い）。
-2. GMO コイン（ticker が一括で取れる。共通部分の抽出の判断をここで行う）。
+1. Coincheck（実装済み #125・#130。利用者が多く、通貨ごとの JPY 建てがあり、bitFlyer に最も近い）。
+2. GMO コイン（実装済み #126。ticker が一括で取れる。共通部分の抽出の判断をここで行う）。
 3. SBI VC トレードのレシピのプリセット（利用者が画面の構造を確認できてから）。
 4. Binance（方針の決定を待つ）。
 

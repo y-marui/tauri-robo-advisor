@@ -97,7 +97,7 @@
 - 数値は文字列のまま十進数へ変換し、浮動小数点を通さない。
 - API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `coincheck-api-key` / `coincheck-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
 - フロントエンドから呼べるコマンド: `save_coincheck_credentials`、`has_coincheck_credentials`、`delete_coincheck_credentials`、`fetch_coincheck_holdings`。
-- 画面は「Coincheck」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは bitFlyer と同じ部品（別名の `source` は `coincheck`、名前は通貨コード）で、価格の基準は公開ティッカーの最終価格だけ。
+- 画面は「Coincheck」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは bitFlyer と同じ部品（別名の `source` は `coincheck`、名前は通貨コード）で、価格の基準は販売所のレート（`/api/rate/<通貨>_jpy`、#130）だけ。更新先の口座は、取引所ごとに最後に選んだものを覚える（下の Remembered Account）。
 
 ## GMO Coin Balances (#126)
 
@@ -114,3 +114,11 @@
 - API キーとシークレットは OS のキーチェーンにだけ保存し（項目名は `gmocoin-api-key` / `gmocoin-api-secret`）、フロントエンドへは返さない。エラーメッセージや `Debug` 出力にも含めない。
 - フロントエンドから呼べるコマンド: `save_gmocoin_credentials`、`has_gmocoin_credentials`、`delete_gmocoin_credentials`、`fetch_gmocoin_holdings`。
 - 画面は「GMO Coin」カード（[ui-design-settings.md](ui-design-settings.md)）。取り込みは Coincheck と同じ部品（別名の `source` は `gmocoin`、名前は銘柄コード）。
+
+## Remembered Account for Exchange Cards
+
+bitFlyer、Coincheck、GMO コインのカードの「更新先の口座」は、取引所ごとに最後に選んだ口座を覚え、次回（再起動後も）の初期値にする。
+
+- 表示の好みであり、保有データには入れない（スキーマ変更なし）。WebView の `localStorage` に、キー `exchange-account:<取引所>`（`bitflyer`・`coincheck`・`gmocoin`）、値は口座 ID で持つ。タブや言語の記憶と同じ方式で、Rust の保存は使わない（この PC の表示の好みだけで、データフォルダが同期されても影響しない）。保存できない環境でも動作は変わらない。
+- 覚えた口座が今はない（削除された）ときは無視し、従来の初期値（暗号資産の保有がある口座を先頭にした並びの 1 番目）に戻る。口座の一覧が変わったときも、画面で選んでいる口座を優先し、なければ覚えた口座を使う。
+- ブラウザ取得のレシピには適用しない（口座はレシピごとに保存済み）。実装は `src/exchange-account.ts`（3 つのカードで共通）。
