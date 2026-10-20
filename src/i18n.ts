@@ -26,8 +26,11 @@ export const MESSAGES = {
   "Fetch all": { ja: "すべて取得" },
   "Recipe to add": { ja: "追加するレシピ" },
   "Choose a recipe and an account first.": { ja: "先にレシピと口座を選んでください。" },
-  "Opened the login page of: {sites}. Log in by hand, then press Fetch again.": {
-    ja: "{sites} のログインのページを開きました。自分でログインしてから、もう一度「取得」を押してください。",
+  "Log in in the opened browser, then press Fetch again.": {
+    ja: "開いたブラウザでログインしてから、もう一度「取得」を押してください。",
+  },
+  "You may not be logged in: log in in the browser, then press Fetch again.": {
+    ja: "ログインしていない可能性があります。ブラウザでログインしてから、もう一度「取得」を押してください。",
   },
   "No login page is known for: {sites}. Log in and open a page of the site by hand, then press Fetch again.": {
     ja: "{sites} のログインのページは分かりません。自分でログインしてサイトのページを開いてから、もう一度「取得」を押してください。",

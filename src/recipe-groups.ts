@@ -52,3 +52,24 @@ export function sitesToLogIn(recipes: { start_site?: string }[], hosts: string[]
   }
   return sites;
 }
+
+/**
+ * The recipes to run after the login pages were handled: those of a site that had no open tab when
+ * the fetch started are held back (the person has to log in first), except for a site with no
+ * known login page (`unknown`), which is tried and reports its own problem.
+ */
+export function recipesAfterLogin<T extends { start_site?: string }>(
+  recipes: T[],
+  toLogIn: string[],
+  unknown: string[],
+): { run: T[] } {
+  const held = toLogIn.filter((site) => !unknown.includes(site));
+  return { run: recipes.filter((r) => !held.includes(r.start_site ?? "")) };
+}
+
+/** Adds a hint to a failure that says the first link was not found: the person may not be logged in. */
+export function withLoginHint(reason: string): string {
+  return reason.includes("no link with that text was found")
+    ? `${reason} ${t("You may not be logged in: log in in the browser, then press Fetch again.")}`
+    : reason;
+}

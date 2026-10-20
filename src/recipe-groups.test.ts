@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { setLanguage } from "./i18n.ts";
-import { groupBySite, recipeDisplayName, siteIsOpen, sitesToLogIn } from "./recipe-groups.ts";
+import { groupBySite, recipeDisplayName, recipesAfterLogin, siteIsOpen, sitesToLogIn, withLoginHint } from "./recipe-groups.ts";
 import type { PresetInfo, RecipeView } from "./types.ts";
 
 const preset = (id: string, label: string, site: string, company: string): PresetInfo => ({
@@ -49,4 +49,18 @@ test("a site is open when a tab is on it or below it, and only closed sites need
     sitesToLogIn([recipe("a", "alpha.example"), recipe("b", "alpha.example"), recipe("c", "beta.example"), recipe("d", "")], ["www.beta.example"]),
     ["alpha.example"],
   );
+});
+
+test("recipes of a site that had no open tab are held back, except where no login page is known", () => {
+  const recipes = [recipe("a", "alpha.example"), recipe("b", "beta.example"), recipe("c", "gamma.example"), recipe("d", "")];
+  const run = recipesAfterLogin(recipes, ["alpha.example", "gamma.example"], ["gamma.example"]).run;
+  assert.deepEqual(run.map((r) => r.name), ["b", "c", "d"]);
+});
+
+test("a missing first link gets a not-logged-in hint and other failures are left alone", () => {
+  setLanguage("en");
+  const missing = "Link 1: no link with that text was found on the page";
+  assert.ok(withLoginHint(missing).startsWith(missing));
+  assert.ok(withLoginHint(missing).includes("not be logged in"));
+  assert.equal(withLoginHint("Network error"), "Network error");
 });

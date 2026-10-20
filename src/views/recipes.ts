@@ -1,5 +1,5 @@
 import { applyFetchAll, browserPages, clearFetchRuns, discardFetchRun, fetchAllPlan, listPresets, openLoginPages, runRecipe, setLinkReference } from "../api.ts";
-import { groupBySite, recipeDisplayName, sitesToLogIn } from "../recipe-groups.ts";
+import { groupBySite, recipeDisplayName, recipesAfterLogin, sitesToLogIn, withLoginHint } from "../recipe-groups.ts";
 import { h } from "../dom.ts";
 import { deleteButton } from "../fields.ts";
 import { t, type MessageKey } from "../i18n.ts";
@@ -261,14 +261,16 @@ export function recipesPanel(ctx: Context): Panel {
         await refreshPages();
         open = await browserPages().catch(() => open);
         const parts: string[] = [];
-        if (result.opened.length > 0) {
-          parts.push(t("Opened the login page of: {sites}. Log in by hand, then press Fetch again.", { sites: result.opened.join(", ") }));
+        const held = recipesAfterLogin(wanted, toLogIn, result.unknown);
+        if (held.run.length < wanted.length) {
+          // Whether the login page was just opened or came back with the browser's saved tabs, the
+          // person has not logged in yet: nothing is fetched for these sites.
+          parts.push(t("Log in in the opened browser, then press Fetch again."));
         }
         if (result.unknown.length > 0) {
           parts.push(t("No login page is known for: {sites}. Log in and open a page of the site by hand, then press Fetch again.", { sites: result.unknown.join(", ") }));
         }
-        const opened = result.opened;
-        wanted = wanted.filter((r) => !opened.includes(r.start_site ?? ""));
+        wanted = held.run;
         if (wanted.length === 0) {
           info(parts.join(" "));
           return;
@@ -361,7 +363,7 @@ export function recipesPanel(ctx: Context): Panel {
               t("“{recipe}” ({account}) failed: {reason}", {
                 recipe: recipe.name,
                 account: accountNameOf(recipe),
-                reason: reason.replace("[stop] ", ""),
+                reason: withLoginHint(reason.replace("[stop] ", "")),
               }),
             ),
           );
