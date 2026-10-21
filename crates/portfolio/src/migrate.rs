@@ -27,6 +27,9 @@ fn to_current(value: &mut Value) {
         // Version 17: the rebalancing account is gone.
         settings.remove("target_account");
     }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..19).contains(&v)) {
+        tradable_into_excluded(value);
+    }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
@@ -92,5 +95,40 @@ fn account_kind_to_record_type(value: &mut Value) {
     if !custom.is_empty() {
         value["custom_types"] = Value::Array(custom);
         value["next_id"] = json!(next_id);
+    }
+}
+
+/// Version 19: the buyable products (`tradable`, `null` or absent = any) and the left-out products
+/// (`excluded`) become one list. A product takes part when it is buyable and not excluded, so the
+/// new exclusion list is the old one plus every product outside a set `tradable`.
+fn tradable_into_excluded(value: &mut Value) {
+    let products: Vec<Value> = value
+        .get("products")
+        .and_then(Value::as_array)
+        .map(|list| list.iter().filter_map(|p| p.get("id").cloned()).collect())
+        .unwrap_or_default();
+    let Some(accounts) = value.get_mut("accounts").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for account in accounts {
+        let Some(object) = account.as_object_mut() else {
+            continue;
+        };
+        let tradable = object.remove("tradable");
+        let Some(tradable) = tradable.as_ref().and_then(Value::as_array) else {
+            continue;
+        };
+        let mut excluded: Vec<Value> = object
+            .get("excluded")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for product in &products {
+            if !tradable.contains(product) && !excluded.contains(product) {
+                excluded.push(product.clone());
+            }
+        }
+        excluded.sort_by_key(Value::as_u64);
+        object.insert("excluded".to_owned(), Value::Array(excluded));
     }
 }

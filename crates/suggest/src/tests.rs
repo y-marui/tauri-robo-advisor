@@ -20,6 +20,23 @@ fn apply(p: &mut Portfolio, edit: Edit) {
     p.apply(edit).unwrap();
 }
 
+/// Leaves only these products taking part in trading in the account.
+fn limit_to(p: &mut Portfolio, account: AccountId, keep: &[ProductId]) {
+    let out = p
+        .products
+        .iter()
+        .map(|x| x.id)
+        .filter(|x| !keep.contains(x))
+        .collect();
+    apply(
+        p,
+        Edit::SetExcluded {
+            id: account,
+            products: out,
+        },
+    );
+}
+
 fn category(p: &mut Portfolio, name: &str, weight: Decimal) -> CategoryId {
     apply(
         p,
@@ -229,13 +246,7 @@ fn an_amount_below_the_unit_is_an_error() {
 #[test]
 fn only_products_the_account_can_buy_receive_money() {
     let mut f = fixture();
-    apply(
-        &mut f.portfolio,
-        Edit::SetTradable {
-            id: f.sub,
-            products: Some(vec![f.s1]),
-        },
-    );
+    limit_to(&mut f.portfolio, f.sub, &[f.s1]);
 
     let s = run(
         &f.portfolio,
@@ -253,13 +264,7 @@ fn only_products_the_account_can_buy_receive_money() {
 #[test]
 fn an_account_that_can_buy_nothing_gets_an_error() {
     let mut f = fixture();
-    apply(
-        &mut f.portfolio,
-        Edit::SetTradable {
-            id: f.sub,
-            products: Some(vec![]),
-        },
-    );
+    limit_to(&mut f.portfolio, f.sub, &[]);
 
     assert_eq!(
         run(
@@ -538,13 +543,7 @@ fn buy_only_to_target_on_a_balanced_portfolio_has_nothing_to_do() {
 #[test]
 fn buy_only_to_target_reports_what_the_account_cannot_buy() {
     let mut f = fixture();
-    apply(
-        &mut f.portfolio,
-        Edit::SetTradable {
-            id: f.sub,
-            products: Some(vec![f.s1]),
-        },
-    );
+    limit_to(&mut f.portfolio, f.sub, &[f.s1]);
 
     let s = run(&f.portfolio, f.sub, Mode::BuyOnlyToTarget).unwrap();
 
@@ -1202,25 +1201,39 @@ fn account_balance_compares_products_with_their_weights() {
 }
 
 #[test]
-fn account_balance_has_no_target_when_the_category_does_not_split() {
-    let (mut p, acc, a, _, c) = weighted_pair();
-    apply(
-        &mut p,
-        Edit::UpdateCategory {
-            id: c,
-            name: None,
-            target_weight: None,
-            targeting: Some(ProductTargeting::Free),
-        },
-    );
+fn account_balance_shows_an_equal_share_for_free_and_the_current_value_for_keep_current() {
+    let (mut p, acc, a, b, c) = weighted_pair();
+    hold(&mut p, acc, a, dec!(300000));
+    let set = |p: &mut Portfolio, targeting| {
+        apply(
+            p,
+            Edit::UpdateCategory {
+                id: c,
+                name: None,
+                target_weight: None,
+                targeting: Some(targeting),
+            },
+        );
+    };
+    let line = |p: &Portfolio| account_balance(p, acc).unwrap().categories[0].clone();
 
-    let balance = account_balance(&p, acc).unwrap();
+    // Free is an equal split, like the suggestions treat it: 300000 and 100000 held -> 200000 each.
+    set(&mut p, ProductTargeting::Free);
+    let free = line(&p);
+    let of = |l: &CategoryBalance, id| l.products.iter().find(|x| x.product == id).unwrap().clone();
+    assert_eq!(of(&free, a).current, dec!(300000));
+    assert_eq!(of(&free, a).target, Some(dec!(200000)));
+    assert_eq!(of(&free, a).shortfall, Some(dec!(-100000)));
+    assert_eq!(of(&free, b).target, Some(dec!(200000)));
+    assert_eq!(of(&free, b).shortfall, Some(dec!(100000)));
 
-    let line = &balance.categories[0];
-    let product = line.products.iter().find(|x| x.product == a).unwrap();
-    assert_eq!(product.current, dec!(100000));
-    assert_eq!(product.target, None);
-    assert_eq!(product.shortfall, None);
+    // Keep-current asks for what is there: the target is the current value, nothing is short.
+    set(&mut p, ProductTargeting::KeepCurrent);
+    let keep = line(&p);
+    assert_eq!(of(&keep, a).target, Some(dec!(300000)));
+    assert_eq!(of(&keep, a).shortfall, Some(dec!(0)));
+    assert_eq!(of(&keep, b).target, Some(dec!(100000)));
+    assert_eq!(of(&keep, b).shortfall, Some(dec!(0)));
 }
 
 #[test]
@@ -1236,13 +1249,7 @@ fn account_balance_leaves_out_products_the_account_does_not_hold() {
             weight: Some(dec!(4)),
         },
     );
-    apply(
-        &mut p,
-        Edit::SetTradable {
-            id: acc,
-            products: Some(vec![a, other]),
-        },
-    );
+    limit_to(&mut p, acc, &[a, other]);
 
     let balance = account_balance(&p, acc).unwrap();
 

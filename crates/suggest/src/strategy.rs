@@ -108,11 +108,7 @@ impl<'a> Plan<'a> {
                     share: item.weight() / weight_sum,
                     held: held.get(&product).copied().unwrap_or_default(),
                     sell_cap,
-                    buyable: !excluded
-                        && account
-                            .tradable
-                            .as_ref()
-                            .is_none_or(|list| list.contains(&product)),
+                    buyable: !excluded,
                 }
             })
             .collect();

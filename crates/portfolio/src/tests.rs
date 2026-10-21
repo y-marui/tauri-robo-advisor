@@ -141,24 +141,6 @@ fn a_category_with_products_cannot_be_removed() {
 }
 
 #[test]
-fn removing_a_product_removes_its_holdings_and_tradable_entries() {
-    let (mut p, _, prod, acc) = sample();
-    apply(
-        &mut p,
-        Edit::SetTradable {
-            id: acc,
-            products: Some(vec![prod]),
-        },
-    );
-
-    apply(&mut p, Edit::RemoveProduct { id: prod });
-
-    assert!(p.holdings.is_empty());
-    assert_eq!(p.accounts[0].tradable, Some(vec![]));
-    p.validate_integrity().unwrap();
-}
-
-#[test]
 fn removing_an_account_removes_its_holdings() {
     let (mut p, _, _, acc) = sample();
 
@@ -235,28 +217,6 @@ fn set_holding_updates_in_place_and_rejects_negative_values() {
         },
     );
     assert!(p.holdings.is_empty());
-}
-
-#[test]
-fn set_tradable_checks_products_and_removes_duplicates() {
-    let (mut p, _, prod, acc) = sample();
-
-    assert!(
-        p.apply(Edit::SetTradable {
-            id: acc,
-            products: Some(vec![ProductId(999)])
-        })
-        .is_err()
-    );
-    apply(
-        &mut p,
-        Edit::SetTradable {
-            id: acc,
-            products: Some(vec![prod, prod]),
-        },
-    );
-
-    assert_eq!(p.accounts[0].tradable, Some(vec![prod]));
 }
 
 #[test]
@@ -1735,7 +1695,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 18);
+    assert_eq!(SCHEMA_VERSION, 19);
 }
 
 #[test]
@@ -2862,9 +2822,9 @@ fn merging_moves_aliases_and_records_and_removes_the_product() {
     hold(&mut p, acc2, b, dec!(300));
     apply(
         &mut p,
-        Edit::SetTradable {
+        Edit::SetExcluded {
             id: acc2,
-            products: Some(vec![b]),
+            products: vec![b],
         },
     );
 
@@ -2892,7 +2852,7 @@ fn merging_moves_aliases_and_records_and_removes_the_product() {
             .iter()
             .any(|h| h.account == acc1 && h.product == a)
     );
-    assert_eq!(p.accounts[1].tradable, Some(vec![a]));
+    assert_eq!(p.accounts[1].excluded, vec![a]);
     p.validate_integrity().unwrap();
 }
 
@@ -2965,9 +2925,9 @@ fn splitting_cuts_out_an_alias_with_the_picked_records() {
     alias(&mut p, a, "Name 2");
     apply(
         &mut p,
-        Edit::SetTradable {
+        Edit::SetExcluded {
             id: acc1,
-            products: Some(vec![a]),
+            products: vec![a],
         },
     );
 
@@ -2999,7 +2959,7 @@ fn splitting_cuts_out_an_alias_with_the_picked_records() {
         p.products.iter().find(|x| x.id == a).unwrap().aliases.len(),
         1
     );
-    assert_eq!(p.accounts[0].tradable, Some(vec![a, z.id]));
+    assert_eq!(p.accounts[0].excluded, vec![a, z.id]);
     p.validate_integrity().unwrap();
 }
 
@@ -3336,11 +3296,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 19, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 20, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 19 })
+        Err(Error::UnsupportedVersion { found: 20 })
     ));
 }
 
@@ -3776,4 +3736,29 @@ fn the_rebalancing_account_of_an_older_file_is_dropped() {
     p.validate_integrity().unwrap();
     let json = serde_json::to_value(&p).unwrap();
     assert!(json["settings"].get("target_account").is_none());
+}
+
+#[test]
+fn the_buyable_products_of_an_older_file_join_the_exclusion_list() {
+    let old = r#"{"schema_version": 18, "next_id": 20,
+      "products": [
+        {"id": 1, "name": "A", "category": 5, "currency": "JPY"},
+        {"id": 2, "name": "B", "category": 5, "currency": "JPY"},
+        {"id": 3, "name": "C", "category": 5, "currency": "JPY"}],
+      "categories": [{"id": 5, "name": "X", "target_weight": "1"}],
+      "accounts": [
+        {"id": 10, "name": "Limited", "sellable": true, "rounding_unit": "1", "tradable": [1, 2], "excluded": [2]},
+        {"id": 11, "name": "Any", "sellable": true, "rounding_unit": "1", "tradable": null, "excluded": [3]},
+        {"id": 12, "name": "Unset", "sellable": true, "rounding_unit": "1"}]}"#;
+
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+
+    p.validate_integrity().unwrap();
+    // Takes part = buyable (listed, or no list) and not excluded.
+    assert_eq!(p.accounts[0].excluded, vec![ProductId(2), ProductId(3)]);
+    assert_eq!(p.accounts[1].excluded, vec![ProductId(3)]);
+    assert!(p.accounts[2].excluded.is_empty());
+    let json = serde_json::to_value(&p).unwrap();
+    assert!(json["accounts"][0].get("tradable").is_none());
 }

@@ -167,7 +167,7 @@ impl Portfolio {
         for account in &self.accounts {
             name(&account.name, "account").map_err(into_corrupt)?;
             positive(account.rounding_unit, "rounding unit").map_err(into_corrupt)?;
-            for product in account.tradable.iter().flatten().chain(&account.excluded) {
+            for product in &account.excluded {
                 if !self.products.iter().any(|p| p.id == *product) {
                     return corrupt("an account refers to a missing product");
                 }

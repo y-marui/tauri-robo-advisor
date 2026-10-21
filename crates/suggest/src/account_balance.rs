@@ -17,8 +17,8 @@ pub struct ProductBalance {
     /// What the account holds of the product, in JPY.
     #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
-    /// What the weights ask for, in whole yen. `None` when the category does
-    /// not ask for a split (free, keep-current) or has no usable weights.
+    /// What the weights ask for, in whole yen: an equal share for free and equal categories, the
+    /// current value for keep-current. `None` only when the weights are unusable (all zero).
     #[serde(serialize_with = "crate::display::yen_option")]
     pub target: Option<Decimal>,
     /// `target` minus `current`, in whole yen: positive when the product is
@@ -113,13 +113,17 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
             let weights: Vec<Option<Decimal>> = members
                 .iter()
                 .map(|p| match category.targeting {
-                    ProductTargeting::Equal => Some(Decimal::ONE),
+                    // Suggestions treat a free category as an equal split, so the table does too.
+                    ProductTargeting::Equal | ProductTargeting::Free => Some(Decimal::ONE),
                     ProductTargeting::Weighted => Some(
                         portfolio
                             .record_weight(account.id, p.id)
                             .unwrap_or_default(),
                     ),
-                    ProductTargeting::Free | ProductTargeting::KeepCurrent => None,
+                    // Keep-current asks for the split it already has: the weights are the values.
+                    ProductTargeting::KeepCurrent => {
+                        Some(held.get(&p.id).copied().unwrap_or_default())
+                    }
                 })
                 .collect();
             let weight_sum: Decimal = weights.iter().flatten().copied().sum();
