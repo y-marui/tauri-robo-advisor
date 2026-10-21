@@ -10,7 +10,7 @@ pub enum Mode {
     FixedAdd { amount: Decimal },
     /// The smallest amount that reaches the target without selling.
     BuyOnlyToTarget,
-    /// Sell and buy in the rebalancing account to reach the target.
+    /// Sell and buy in the request's account to reach the target.
     FullRebalance,
     /// Raise `amount` by selling what is furthest above target.
     FixedSell { amount: Decimal },
