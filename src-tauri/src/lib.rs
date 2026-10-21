@@ -580,6 +580,9 @@ async fn export_all(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Restores the size and position the window was closed with. The plugin
+        // ignores a saved position that is off every connected screen.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
