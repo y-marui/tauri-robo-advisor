@@ -274,7 +274,7 @@ export const MESSAGES = {
   "Product": { ja: "商品" },
   "Applied: {amount} JPY": { ja: "実行額: {amount} 円" },
   "Needed to reach the target: {amount} JPY": { ja: "目標に届くまでに必要な額: {amount} 円" },
-  "Trades in {account}": { ja: "{account} での売買" },
+  "Trades not listed in the table above": { ja: "上の表にない売買" },
   "The amount was lowered from {requested} to {applied} JPY to fit the rounding unit.": {
     ja: "丸め単位に合わせて、{requested} 円から {applied} 円に下げました。",
   },

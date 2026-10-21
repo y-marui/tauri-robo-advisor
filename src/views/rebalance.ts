@@ -1,4 +1,4 @@
-import { productGroups, type ProductRow } from "../account-products.ts";
+import { productGroups, slotKey, tradesBySlot, unlistedTrades, type ProductRow } from "../account-products.ts";
 import { getAccountBalance } from "../api.ts";
 import { h } from "../dom.ts";
 import { cleanDecimal } from "../decimal.ts";
@@ -7,7 +7,7 @@ import { t } from "../i18n.ts";
 import type { Bind, Context, Panel } from "../panel.ts";
 import { clearAll, selectAll, toggle } from "../rebalance-selection.ts";
 import { weightOf } from "../product-shares.ts";
-import type { Account, AccountBalance, PortfolioView } from "../types.ts";
+import type { Account, AccountBalance, PortfolioView, ProductLine } from "../types.ts";
 import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from "./suggestion.ts";
 
 // The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
@@ -44,6 +44,13 @@ export function rebalancePanel(ctx: Context): Panel {
 
   // The account's own settings, kept between renders so typing in the field is not interrupted.
   box.onModeChange(() => {
+    if (current) {
+      renderLists(current);
+    }
+  });
+
+  // The lists show what the suggestion changes, so they follow the result.
+  box.onResult(() => {
     if (current) {
       renderLists(current);
     }
@@ -129,7 +136,7 @@ export function rebalancePanel(ctx: Context): Panel {
   const productName = (view: PortfolioView, id: number): string =>
     view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
 
-  const head = (withBox: boolean, withShare: boolean, withAccount: boolean): HTMLElement =>
+  const head = (withBox: boolean, withShare: boolean, withAccount: boolean, withTrade: boolean): HTMLElement =>
     h(
       "thead",
       {},
@@ -143,6 +150,8 @@ export function rebalancePanel(ctx: Context): Panel {
         h("th", {}, t("Current")),
         h("th", {}, t("Target")),
         h("th", {}, t("Short (+) / over (-)")),
+        withTrade ? h("th", {}, t("Change")) : "",
+        withTrade ? h("th", {}, t("After")) : "",
       ),
     );
 
@@ -178,6 +187,7 @@ export function rebalancePanel(ctx: Context): Panel {
     withBox: boolean,
     withShare: boolean,
     withAccount: boolean,
+    trades: Map<string, ProductLine> | null,
   ): HTMLElement {
     let cell: HTMLElement | string = "";
     if (withBox) {
@@ -205,7 +215,21 @@ export function rebalancePanel(ctx: Context): Panel {
         { class: `num ${row.shortfall === null ? "" : deltaClass(row.shortfall)}` },
         row.shortfall === null ? "" : signed(row.shortfall),
       ),
+      ...tradeCells(trades, account.id, row),
     );
+  }
+
+  // The "Change" and "After" cells of a row, when a suggestion is shown. A row without a trade stays
+  // as it is: no change, and the same value after.
+  function tradeCells(trades: Map<string, ProductLine> | null, account: number, row: ProductRow): HTMLElement[] {
+    if (trades === null) {
+      return [];
+    }
+    const line = trades.get(slotKey(account, row.product));
+    return [
+      h("td", { class: `num ${line ? deltaClass(line.delta) : ""}` }, line ? signed(line.delta) : ""),
+      h("td", { class: "num" }, line ? yen(line.after) : yen(row.current)),
+    ];
   }
 
   // The product list of the tab: one account's, or on "All" every account's in one table with an
@@ -268,6 +292,8 @@ export function rebalancePanel(ctx: Context): Panel {
       controls.append(selectAllButton, clearButton);
     }
 
+    const suggestion = box.result();
+    const trades = suggestion === null ? null : tradesBySlot(suggestion.products);
     const rows: HTMLElement[] = [];
     for (const category of order) {
       const group = merged.get(category);
@@ -286,11 +312,13 @@ export function rebalancePanel(ctx: Context): Panel {
             h("td", { class: "num" }, group.total === null ? "" : yen(group.total)),
             h("td", {}),
             h("td", {}),
+            trades === null ? "" : h("td", {}),
+            trades === null ? "" : h("td", {}),
           ),
         );
       }
       for (const { account, row } of group.rows) {
-        rows.push(productRow(view, account, row, showAll, withShare, multi));
+        rows.push(productRow(view, account, row, showAll, withShare, multi, trades));
       }
     }
 
@@ -305,7 +333,49 @@ export function rebalancePanel(ctx: Context): Panel {
     const table =
       rows.length === 0
         ? h("p", { class: "note" }, showAll ? t("No products are held yet.") : t("No product takes part in trading."))
-        : h("div", { class: "table-wrap" }, h("table", {}, head(showAll, withShare, multi), h("tbody", {}, ...rows)));
+        : h("div", { class: "table-wrap" }, h("table", {}, head(showAll, withShare, multi, trades !== null), h("tbody", {}, ...rows)));
+    // A trade whose product has no row here (not expected: trades are in held, listed products) is
+    // still shown, below the table.
+    const shownKeys = new Set([...shown].flatMap(([id, products]) => products.map((p) => slotKey(id, p))));
+    const unlisted =
+      suggestion === null
+        ? []
+        : unlistedTrades(
+            suggestion.products,
+            shownKeys,
+            listed.map((a) => a.id),
+          );
+    const unlistedTable =
+      unlisted.length === 0
+        ? ""
+        : h(
+            "div",
+            { class: "table-wrap" },
+            h("h3", {}, t("Trades not listed in the table above")),
+            h(
+              "table",
+              {},
+              h(
+                "thead",
+                {},
+                h("tr", {}, h("th", {}, t("Account")), h("th", {}, t("Product")), h("th", {}, t("Change")), h("th", {}, t("After"))),
+              ),
+              h(
+                "tbody",
+                {},
+                ...unlisted.map((line) =>
+                  h(
+                    "tr",
+                    {},
+                    h("td", {}, accountOf(view, line.account)?.name ?? "?"),
+                    h("th", { scope: "row" }, productName(view, line.product)),
+                    h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
+                    h("td", { class: "num" }, yen(line.after)),
+                  ),
+                ),
+              ),
+            ),
+          );
     return h(
       "div",
       { class: "product-list" },
@@ -321,6 +391,7 @@ export function rebalancePanel(ctx: Context): Panel {
           )
         : "",
       table,
+      unlistedTable,
       h(
         "p",
         { class: "note" },

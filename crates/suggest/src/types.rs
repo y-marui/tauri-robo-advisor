@@ -77,6 +77,10 @@ pub struct ProductLine {
     pub product: ProductId,
     #[serde(serialize_with = "crate::display::yen")]
     pub delta: Decimal,
+    /// What the account holds of the product once the trade is made: its current value (in every
+    /// record, as the account balance counts it) plus `delta`.
+    #[serde(serialize_with = "crate::display::yen")]
+    pub after: Decimal,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

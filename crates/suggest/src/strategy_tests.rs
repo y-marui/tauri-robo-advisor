@@ -332,3 +332,46 @@ fn the_all_tab_leaves_a_strategy_account_alone() {
     assert!(s.products.iter().all(|l| l.account != f.b));
     assert!(!s.products.is_empty());
 }
+
+#[test]
+fn a_strategy_line_reports_the_value_after_the_trade() {
+    let mut f = fixture();
+    let [f1, f2, ..] = f.funds[..] else {
+        unreachable!()
+    };
+    set(
+        &mut f.portfolio,
+        f.main,
+        items(&[(f1, Some(dec!(1))), (f2, Some(dec!(1)))]),
+    );
+    hold(&mut f.portfolio, f.main, f1, dec!(300000));
+    hold(&mut f.portfolio, f.main, f2, dec!(100000));
+    for (mode, buys) in [
+        (
+            Mode::FixedAdd {
+                amount: dec!(50000),
+            },
+            true,
+        ),
+        (
+            Mode::FixedSell {
+                amount: dec!(50000),
+            },
+            false,
+        ),
+    ] {
+        let s = run(&f.portfolio, f.main, mode).unwrap();
+        assert!(!s.products.is_empty());
+        for line in &s.products {
+            let held: Decimal = f
+                .portfolio
+                .holdings
+                .iter()
+                .filter(|h| h.account == line.account && h.product == line.product)
+                .map(|h| h.value)
+                .sum();
+            assert_eq!(line.after, held + line.delta, "{line:?}");
+            assert_eq!(line.delta > Decimal::ZERO, buys);
+        }
+    }
+}

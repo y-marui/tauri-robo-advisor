@@ -413,6 +413,8 @@ export interface ProductLine {
   account: number;
   product: number;
   delta: string;
+  /** What the account holds of the product after the trade (current + delta, from Rust). */
+  after: string;
 }
 
 export type Note =

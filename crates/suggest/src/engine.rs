@@ -741,6 +741,21 @@ impl<'a> Book<'a> {
         Ok(self.finish(ModeName::FullRebalance, None, applied, None, lines, notes))
     }
 
+    /// A trade of a product in an account, with the value the account holds of it afterwards.
+    fn line(&self, account: AccountId, product: ProductId, delta: Decimal) -> ProductLine {
+        let held = self
+            .held_here
+            .get(&(account, product))
+            .copied()
+            .unwrap_or_default();
+        ProductLine {
+            account,
+            product,
+            delta,
+            after: held + delta,
+        }
+    }
+
     /// Turns per-product buy amounts into per-account purchases, rounded to the units.
     fn buy_lines(
         &self,
@@ -754,11 +769,7 @@ impl<'a> Book<'a> {
         Ok(placed
             .iter()
             .zip(rounded)
-            .map(|(((account, product), _), delta)| ProductLine {
-                account: *account,
-                product: *product,
-                delta,
-            })
+            .map(|(((account, product), _), delta)| self.line(*account, *product, delta))
             .collect())
     }
 
@@ -794,11 +805,7 @@ impl<'a> Book<'a> {
         Ok(placed
             .iter()
             .zip(rounded)
-            .map(|(((account, product), _), amount)| ProductLine {
-                account: *account,
-                product: *product,
-                delta: -amount,
-            })
+            .map(|(((account, product), _), amount)| self.line(*account, *product, -amount))
             .collect())
     }
 
@@ -1050,9 +1057,21 @@ impl<'a> Book<'a> {
         requested: Option<Decimal>,
         applied: Decimal,
         required_total: Option<Decimal>,
-        mut lines: Vec<ProductLine>,
+        lines: Vec<ProductLine>,
         notes: Vec<Note>,
     ) -> Suggestion {
+        // One line per account and product: trades in the same slot add up, and `after` follows.
+        let mut merged: BTreeMap<Slot, ProductLine> = BTreeMap::new();
+        for line in lines {
+            merged
+                .entry((line.account, line.product))
+                .and_modify(|m| {
+                    m.delta += line.delta;
+                    m.after += line.delta;
+                })
+                .or_insert(line);
+        }
+        let mut lines: Vec<ProductLine> = merged.into_values().collect();
         lines.retain(|line| !line.delta.is_zero());
         lines.sort_by_key(|line| (line.account, line.product));
         let deltas = self.category_deltas(&lines);

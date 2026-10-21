@@ -83,3 +83,19 @@ test("the All tab reads its own list of products left out", () => {
   assert.equal(productGroups(view, both, balance, true)[0]?.rows[0]?.takesPart, true);
   assert.equal(productGroups(view, both, balance, true, true)[0]?.rows[0]?.takesPart, false);
 });
+
+test("trades are found by account and product, and unlisted ones are reported", async () => {
+  const { slotKey, tradesBySlot, unlistedTrades } = await import("./account-products.ts");
+  const lines = [
+    { account: 1, product: 10, delta: "1,000", after: "5,000" },
+    { account: 2, product: 10, delta: "-500", after: "100" },
+    { account: 2, product: 11, delta: "500", after: "500" },
+  ];
+  const trades = tradesBySlot(lines);
+  assert.equal(trades.get(slotKey(2, 10))?.after, "100");
+  assert.equal(trades.get(slotKey(1, 11)), undefined);
+  const shown = new Set([slotKey(1, 10), slotKey(2, 10)]);
+  assert.deepEqual(unlistedTrades(lines, shown, [1, 2]), [lines[2]]);
+  // Accounts the table does not cover are not its concern.
+  assert.deepEqual(unlistedTrades(lines, shown, [1]), []);
+});

@@ -3,7 +3,7 @@
 // figures come from Rust (`AccountBalance`); this only arranges them and adds the products the
 // balance leaves out (an account is listed with every product, held or not).
 
-import type { Account, AccountBalance, PortfolioView, ProductBalance } from "./types.ts";
+import type { Account, AccountBalance, PortfolioView, ProductBalance, ProductLine } from "./types.ts";
 
 export interface ProductRow {
   product: number;
@@ -69,4 +69,27 @@ export function productGroups(
     }
   }
   return groups;
+}
+
+/** The key of an (account, product) pair, as the table and the suggestion share it. */
+export const slotKey = (account: number, product: number): string => `${account}:${product}`;
+
+/**
+ * The suggestion's lines by (account, product). Rust gives one line per pair (trades in the same
+ * pair are added up there, with `after`), so nothing is added here.
+ */
+export function tradesBySlot(lines: readonly ProductLine[]): Map<string, ProductLine> {
+  return new Map(lines.map((line) => [slotKey(line.account, line.product), line]));
+}
+
+/**
+ * The lines whose pair has no row in the table (`shown`), among the accounts the table covers, so
+ * a trade is never dropped from the screen.
+ */
+export function unlistedTrades(
+  lines: readonly ProductLine[],
+  shown: ReadonlySet<string>,
+  accounts: readonly number[],
+): ProductLine[] {
+  return lines.filter((line) => accounts.includes(line.account) && !shown.has(slotKey(line.account, line.product)));
 }

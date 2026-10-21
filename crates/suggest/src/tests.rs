@@ -2352,3 +2352,54 @@ fn the_method_defaults_to_following_the_portfolio_in_json() {
     .unwrap();
     assert_eq!(request.method, Method::ByProductWeights);
 }
+
+/// What `account` holds of `product` in the portfolio's records.
+fn held_in(p: &Portfolio, account: AccountId, product: ProductId) -> Decimal {
+    p.holdings
+        .iter()
+        .filter(|h| h.account == account && h.product == product)
+        .map(|h| h.value)
+        .sum()
+}
+
+#[test]
+fn a_line_reports_the_value_after_the_trade_in_every_account() {
+    let mut f = fixture();
+    hold(&mut f.portfolio, f.sub, f.s1, dec!(50000));
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateAccount {
+            id: f.sub,
+            name: None,
+            sellable: Some(true),
+            rounding_unit: None,
+        },
+    );
+    for mode in [
+        Mode::FixedAdd {
+            amount: dec!(200000),
+        },
+        Mode::FixedSell {
+            amount: dec!(150000),
+        },
+        Mode::FullRebalance,
+    ] {
+        for s in [
+            run_all(&f.portfolio, mode.clone(), false).unwrap(),
+            run(&f.portfolio, f.main, mode.clone()).unwrap(),
+        ] {
+            assert!(!s.products.is_empty());
+            for line in &s.products {
+                assert_eq!(
+                    line.after,
+                    held_in(&f.portfolio, line.account, line.product) + line.delta,
+                    "{line:?}"
+                );
+            }
+        }
+    }
+    // A sale and a purchase are both covered.
+    let s = run(&f.portfolio, f.main, Mode::FullRebalance).unwrap();
+    assert!(s.products.iter().any(|l| l.delta < Decimal::ZERO));
+    assert!(s.products.iter().any(|l| l.delta > Decimal::ZERO));
+}
