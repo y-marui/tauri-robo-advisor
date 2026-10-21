@@ -44,6 +44,18 @@ function describeNote(note: Note, view: PortfolioView): string {
         },
       );
     }
+    case "product_not_filled": {
+      const surplus = note.shortfall.startsWith("-");
+      return t(
+        surplus
+          ? "“{product}” is still {amount} JPY over its share."
+          : "“{product}” is {amount} JPY short of its share.",
+        {
+          product: view.portfolio.products.find((p) => p.id === note.product)?.name ?? "?",
+          amount: yen(surplus ? note.shortfall.slice(1) : note.shortfall),
+        },
+      );
+    }
     case "already_balanced":
       return t("Every category is already within tolerance.");
   }
@@ -103,27 +115,30 @@ function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElemen
     { class: "suggestion" },
     h("p", { class: "summary" }, summary),
     ...suggestion.notes.map((n) => h("p", { class: "note" }, describeNote(n, view))),
-    h(
-      "div",
-      { class: "table-wrap" },
-      h(
-        "table",
-        {},
-        h(
-          "thead",
-          {},
+    // An account with a product strategy has no categories: only its trades are shown.
+    categoryRows.length === 0
+      ? ""
+      : h(
+          "div",
+          { class: "table-wrap" },
           h(
-            "tr",
+            "table",
             {},
-            h("th", {}, t("Category")),
-            h("th", {}, t("Current")),
-            h("th", {}, t("Change")),
-            h("th", {}, t("After")),
+            h(
+              "thead",
+              {},
+              h(
+                "tr",
+                {},
+                h("th", {}, t("Category")),
+                h("th", {}, t("Current")),
+                h("th", {}, t("Change")),
+                h("th", {}, t("After")),
+              ),
+            ),
+            h("tbody", {}, ...categoryRows),
           ),
         ),
-        h("tbody", {}, ...categoryRows),
-      ),
-    ),
     ...tradeTables,
     h("p", { class: "note" }, t("Taxes are not taken into account in suggestions.")),
   );

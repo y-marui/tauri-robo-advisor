@@ -23,6 +23,13 @@ pub fn suggest(portfolio: &Portfolio, request: &Request) -> Result<Suggestion, E
     portfolio
         .validate_integrity()
         .map_err(|_| Error::Inconsistent)?;
+    // An account with a product strategy does not use the category targets, so problems with them
+    // do not block it.
+    if let Some(id) = request.account
+        && let Some(account) = crate::strategy::account_of(portfolio, id)
+    {
+        return crate::strategy::suggest(portfolio, account, &request.mode);
+    }
     let issues = portfolio.issues();
     if !issues.is_empty() {
         return Err(Error::Blocked(issues));
@@ -87,7 +94,13 @@ impl<'a> Book<'a> {
                     .find(|a| a.id == id)
                     .ok_or(Error::UnknownAccount)?,
             ],
-            None => portfolio.accounts.iter().collect(),
+            // An account with a product strategy takes no part in the shared suggestion: its
+            // strategy applies in its own tab. Its holdings still count toward the values.
+            None => portfolio
+                .accounts
+                .iter()
+                .filter(|a| a.strategy.is_portfolio())
+                .collect(),
         };
         if portfolio
             .holdings

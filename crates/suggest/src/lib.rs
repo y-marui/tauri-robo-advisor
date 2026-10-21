@@ -20,6 +20,7 @@ mod error;
 mod fill;
 mod overview;
 mod round;
+mod strategy;
 mod types;
 
 pub use account_balance::{AccountBalance, CategoryBalance, ProductBalance, account_balance};
@@ -29,7 +30,10 @@ pub use overview::{
     AccountOverview, CategoryOverview, GroupOverview, HoldingOverview, Overview, TypeOverview,
     overview,
 };
+pub use strategy::StrategyBalance;
 pub use types::{CategoryLine, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 
+#[cfg(test)]
+mod strategy_tests;
 #[cfg(test)]
 mod tests;

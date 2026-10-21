@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use rust_decimal::Decimal;
 
 use crate::presets::Preset;
-use crate::{Error, Issue, MIN_SCHEMA_VERSION, Portfolio, ProductTargeting, SCHEMA_VERSION};
+use crate::{
+    Error, Issue, MIN_SCHEMA_VERSION, Portfolio, ProductTargeting, SCHEMA_VERSION, Strategy,
+};
 
 /// The most recipes a data file may hold.
 const MAX_RECIPES_ALLOWED: usize = 50;
@@ -64,7 +66,52 @@ pub(crate) fn currency(value: &str) -> Result<String, Error> {
     }
 }
 
+/// The most products a strategy lists, and the largest ratio (ratios are relative, so a huge one
+/// is a typing mistake) and its decimals (so sums and divisions stay exact).
+const MAX_STRATEGY_ITEMS: usize = 100;
+pub(crate) const MAX_STRATEGY_RATIO: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
+const MAX_STRATEGY_RATIO_SCALE: u32 = 6;
+
 impl Portfolio {
+    /// Checks a strategy against the products and returns it as it should be stored.
+    pub(crate) fn checked_strategy(&self, strategy: Strategy) -> Result<Strategy, Error> {
+        let Strategy::Products { items } = &strategy else {
+            return Ok(strategy);
+        };
+        if items.is_empty() || items.len() > MAX_STRATEGY_ITEMS {
+            return Err(Error::Invalid(format!(
+                "a strategy lists 1 to {MAX_STRATEGY_ITEMS} products"
+            )));
+        }
+        let mut seen = HashSet::new();
+        for item in items {
+            if !self.products.iter().any(|p| p.id == item.product) {
+                return Err(Error::NotFound("product"));
+            }
+            if !seen.insert(item.product) {
+                return Err(Error::Invalid(
+                    "a product is listed twice in the strategy".to_owned(),
+                ));
+            }
+            if let Some(ratio) = item.ratio {
+                positive(ratio, "ratio")?;
+                if ratio > MAX_STRATEGY_RATIO
+                    || ratio.normalize().scale() > MAX_STRATEGY_RATIO_SCALE
+                {
+                    return Err(Error::Invalid(
+                        "the ratio is too large or has too many decimals".to_owned(),
+                    ));
+                }
+            }
+        }
+        if items.iter().any(|i| i.ratio.is_none()) && items.iter().any(|i| i.ratio.is_some()) {
+            return Err(Error::Invalid(
+                "give a ratio to every product of the strategy, or to none".to_owned(),
+            ));
+        }
+        Ok(strategy)
+    }
+
     /// Checks everything that must hold for the data to be safe to use: the
     /// version, unique ids, valid references, and value ranges. It is run on
     /// every loaded file, because the file is not trusted to be well formed.
@@ -125,6 +172,8 @@ impl Portfolio {
                     return corrupt("an account refers to a missing product");
                 }
             }
+            self.checked_strategy(account.strategy.clone())
+                .map_err(into_corrupt)?;
         }
 
         let mut type_ids = HashSet::new();

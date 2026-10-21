@@ -1,6 +1,7 @@
 import { h } from "../dom.ts";
 import { amountField, checkboxField, deleteButton, orderButtons, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
+import { strategyEditor } from "./account-strategy.ts";
 import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 
@@ -132,6 +133,7 @@ export function accountsPanel(ctx: Context): Panel {
           ),
           h("td", {}, canBuy),
           h("td", {}, leftOut),
+          h("td", {}, strategyEditor(ctx, bind, id, products)),
           h("td", {}, order, deleteButton(() => void ctx.apply({ type: "remove_account", id }))),
         );
       });
@@ -156,6 +158,7 @@ export function accountsPanel(ctx: Context): Panel {
           {},
           h("td", {}),
           h("td", {}, name),
+          h("td", {}),
           h("td", {}),
           h("td", {}),
           h("td", {}),
@@ -194,6 +197,7 @@ export function accountsPanel(ctx: Context): Panel {
                 h("th", {}, t("Rounding unit")),
                 h("th", {}, t("Can buy")),
                 h("th", {}, t("Left out of trading")),
+                h("th", {}, t("Strategy")),
                 h("th", {}),
               ),
             ),

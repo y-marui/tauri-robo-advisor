@@ -43,8 +43,15 @@ export interface Account {
   tradable: number[] | null;
   /** Products suggestions never buy or sell in this account. */
   excluded?: number[];
+  /** What suggestions aim at; absent: follow the portfolio. */
+  strategy?: Strategy;
   rounding_unit: string;
 }
+
+/** Mirrors `portfolio::Strategy`. A blank ratio means an equal share. */
+export type Strategy =
+  | { type: "portfolio" }
+  | { type: "products"; items: { product: number; ratio: string | null }[] };
 
 export interface Holding {
   account: number;
@@ -273,6 +280,7 @@ export type Edit =
     }
   | { type: "set_tradable"; id: number; products: number[] | null }
   | { type: "set_excluded"; id: number; products: number[] }
+  | { type: "set_strategy"; id: number; strategy: Strategy }
   | { type: "remove_account"; id: number }
   | { type: "move_account"; id: number; up: boolean }
   | { type: "move_group"; id: number; up: boolean }
@@ -409,6 +417,7 @@ export interface ProductLine {
 export type Note =
   | { type: "amount_rounded"; requested: string; applied: string }
   | { type: "category_not_filled"; category: number; shortfall: string }
+  | { type: "product_not_filled"; product: number; shortfall: string }
   | { type: "already_balanced" };
 
 export interface Suggestion {
@@ -441,9 +450,17 @@ export interface CategoryBalance {
   products: ProductBalance[];
 }
 
+/** An account with a product strategy: its products against their ratios. */
+export interface StrategyBalance {
+  total: string;
+  products: ProductBalance[];
+}
+
 export interface AccountBalance {
   account: number;
   categories: CategoryBalance[];
+  /** Present for an account with a product strategy (the categories are then empty). */
+  strategy?: StrategyBalance;
 }
 
 /** A name a source uses and its value. Mirrors `portfolio::ImportRow`. */
