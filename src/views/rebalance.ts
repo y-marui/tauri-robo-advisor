@@ -1,12 +1,15 @@
 import { productGroups, type ProductRow } from "../account-products.ts";
 import { getAccountBalance } from "../api.ts";
 import { h } from "../dom.ts";
+import { cleanDecimal } from "../decimal.ts";
 import { amountField, checkboxField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import type { Bind, Context, Panel } from "../panel.ts";
 import { clearAll, selectAll, toggle } from "../rebalance-selection.ts";
+import { SHARE_KINDS, shareOf, switchKind, type ShareKind } from "../product-shares.ts";
 import type { Account, AccountBalance, PortfolioView } from "../types.ts";
-import { categoryName, deltaClass, signed, suggestionBox, yen } from "./suggestion.ts";
+import { shareLabel } from "./labels.ts";
+import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from "./suggestion.ts";
 
 // The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
 // have the suggestion form and its result on top. An account tab trades in its account; "All" trades
@@ -41,6 +44,12 @@ export function rebalancePanel(ctx: Context): Panel {
   });
 
   // The account's own settings, kept between renders so typing in the field is not interrupted.
+  box.onModeChange(() => {
+    if (current) {
+      renderLists(current);
+    }
+  });
+
   const settingsRows = new Map<number, HTMLElement>();
   let settingsBinders: Bind[] = [];
   const settingsSlot = h("div", { class: "account-settings-slot" });
@@ -113,7 +122,7 @@ export function rebalancePanel(ctx: Context): Panel {
   const productName = (view: PortfolioView, id: number): string =>
     view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
 
-  const head = (withBox: boolean): HTMLElement =>
+  const head = (withBox: boolean, withShare: boolean): HTMLElement =>
     h(
       "thead",
       {},
@@ -122,13 +131,59 @@ export function rebalancePanel(ctx: Context): Panel {
         {},
         withBox ? h("th", {}, t("Takes part")) : "",
         h("th", {}, t("Product")),
+        withShare ? h("th", {}, t("Share in the category")) : "",
         h("th", {}, t("Current")),
         h("th", {}, t("Target")),
         h("th", {}, t("Short (+) / over (-)")),
       ),
     );
 
-  function productRow(view: PortfolioView, account: Account, row: ProductRow, withBox: boolean): HTMLElement {
+  // The share of a product in its category for the mode chosen in the suggestion form: one
+  // setting per mode and product, the same in every account.
+  function shareCell(view: PortfolioView, product: number): HTMLElement {
+    const mode = box.mode();
+    const share = shareOf(view, mode, product);
+    const name = productName(view, product);
+    const kind = h(
+      "select",
+      { "aria-label": t("{product}: share in the category ({mode})", { product: name, mode: modeLabel(mode) }) },
+      ...SHARE_KINDS.map((k) => h("option", { value: k }, shareLabel(k))),
+    );
+    kind.value = share.kind;
+    kind.addEventListener("change", () => {
+      void ctx.apply(switchKind(current ?? view, mode, product, kind.value as ShareKind));
+    });
+    const cell = h("td", { class: "share-cell" }, kind);
+    if (share.kind === "weighted") {
+      const weight = h("input", {
+        type: "text",
+        inputmode: "decimal",
+        class: "number",
+        autocomplete: "off",
+        "aria-label": t("{product}: weight ({mode})", { product: name, mode: modeLabel(mode) }),
+        value: share.weight,
+      });
+      weight.addEventListener("change", () => {
+        const value = cleanDecimal(weight.value);
+        if (value === null || value.startsWith("-") || Number(value) === 0) {
+          ctx.fail(t("Enter a positive weight."));
+          weight.value = share.weight;
+          return;
+        }
+        void ctx.apply({ type: "set_product_share", mode, product, share: { kind: "weighted", weight: value } });
+      });
+      cell.append(" ", weight);
+    }
+    return cell;
+  }
+
+  function productRow(
+    view: PortfolioView,
+    account: Account,
+    row: ProductRow,
+    withBox: boolean,
+    withShare: boolean,
+  ): HTMLElement {
     let cell: HTMLElement | string = "";
     if (withBox) {
       const check = h("input", {
@@ -146,6 +201,7 @@ export function rebalancePanel(ctx: Context): Panel {
       {},
       cell,
       h("th", { scope: "row" }, productName(view, row.product)),
+      withShare ? shareCell(view, row.product) : "",
       h("td", { class: "num" }, yen(row.current)),
       h("td", { class: "num" }, row.target === null ? "" : yen(row.target)),
       h(
@@ -162,6 +218,8 @@ export function rebalancePanel(ctx: Context): Panel {
     const showAll = mode === "all";
     const groups = productGroups(view, account, balances.get(account.id) ?? null, showAll);
     const shown = groups.flatMap((g) => g.rows.map((r) => r.product));
+    // A strategy account has its own ratios, so the shares of the portfolio do not apply to it.
+    const withShare = account.strategy?.type !== "products";
 
     const toggleButton = h(
       "button",
@@ -196,6 +254,7 @@ export function rebalancePanel(ctx: Context): Panel {
             { class: "group" },
             showAll ? h("td", {}) : "",
             h("th", { scope: "rowgroup" }, categoryName(view, group.category)),
+            withShare ? h("td", {}) : "",
             h("td", { class: "num" }, group.total === null ? "" : yen(group.total)),
             h("td", {}),
             h("td", {}),
@@ -203,7 +262,7 @@ export function rebalancePanel(ctx: Context): Panel {
         );
       }
       for (const row of group.rows) {
-        rows.push(productRow(view, account, row, showAll));
+        rows.push(productRow(view, account, row, showAll, withShare));
       }
     }
 
@@ -220,12 +279,21 @@ export function rebalancePanel(ctx: Context): Panel {
     const table =
       rows.length === 0
         ? h("p", { class: "note" }, showAll ? t("There are no products yet. Add one in Settings.") : t("No product takes part in trading in this account."))
-        : h("div", { class: "table-wrap" }, h("table", {}, head(showAll), h("tbody", {}, ...rows)));
+        : h("div", { class: "table-wrap" }, h("table", {}, head(showAll, withShare), h("tbody", {}, ...rows)));
     return h(
       "div",
       { class: "product-list" },
       controls,
       strategyNote,
+      withShare
+        ? h(
+            "p",
+            { class: "note" },
+            t("Share in the category is set for the mode chosen above ({mode}); each mode keeps its own setting for a product, and it is the same in every account.", {
+              mode: modeLabel(box.mode()),
+            }),
+          )
+        : "",
       table,
       h(
         "p",

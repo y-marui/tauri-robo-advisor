@@ -12,7 +12,7 @@ import { recordKey, typeOptions } from "./labels.ts";
 const upper = (text: string): string => text.trim().toUpperCase();
 
 /** The number of columns of the records table; the heading rows span them all. */
-const COLUMNS = 7;
+const COLUMNS = 6;
 
 /** What to focus once the card has been rebuilt: the rebuild drops the focus of the old controls. */
 type FocusTarget = { kind: "add-record"; product: number } | { kind: "add-product" };
@@ -59,7 +59,7 @@ export function recordsPanel(ctx: Context): Panel {
     "Records",
     (view) =>
       [
-        view.portfolio.categories.map((c) => `${c.id}:${c.name}:${c.targeting}`).join(","),
+        view.portfolio.categories.map((c) => `${c.id}:${c.name}`).join(","),
         view.portfolio.products
           .map((p) => `${p.id}:${p.category}:${p.currency}:${p.aliases.map((a) => `${a.source}/${a.name}`).join(";")}`)
           .join(","),
@@ -101,7 +101,6 @@ export function recordsPanel(ctx: Context): Panel {
         product: (typeof products)[number],
         account: (typeof accounts)[number],
         type: string | null,
-        weighted: boolean,
       ): HTMLElement => {
         const quantity = h("td", { class: "num" });
         const price = h("td", { class: "num" });
@@ -136,27 +135,6 @@ export function recordsPanel(ctx: Context): Panel {
           invalid: t("Enter an amount (0 is allowed). To remove a record, use its Delete button."),
           attrs: { inputmode: "decimal", class: "number" },
         });
-        const weight = weighted
-          ? textField({
-              ctx,
-              bind,
-              label: t("Relative weight inside the category: {account}", { account: account.name }),
-              get: (v) => holdingOf(v, account.id, product.id, type)?.weight ?? "",
-              edit: (text) => {
-                const value = text === "" ? null : cleanDecimal(text);
-                return text !== "" && value === null
-                  ? null
-                  : {
-                      type: "set_holding_weight",
-                      account: account.id,
-                      product: product.id,
-                      account_type: type,
-                      weight: value,
-                    };
-              },
-              attrs: { inputmode: "decimal", class: "number" },
-            })
-          : null;
         return h(
           "tr",
           {},
@@ -179,7 +157,6 @@ export function recordsPanel(ctx: Context): Panel {
               }),
             }),
           ),
-          h("td", {}, weight),
           quantity,
           price,
           h("td", {}, amount, " ", h("span", { class: "muted" }, product.currency)),
@@ -199,10 +176,7 @@ export function recordsPanel(ctx: Context): Panel {
         );
       };
 
-      const addRecordForm = (
-        product: (typeof products)[number],
-        weighted: boolean,
-      ): HTMLElement | null => {
+      const addRecordForm = (product: (typeof products)[number]): HTMLElement | null => {
         if (accounts.length === 0) {
           return null;
         }
@@ -224,23 +198,12 @@ export function recordsPanel(ctx: Context): Panel {
           autocomplete: "off",
           class: "number",
         });
-        const weight = weighted
-          ? h("input", {
-              type: "text",
-              "aria-label": `${product.name}: ${t("Weight")}`,
-              placeholder: t("Weight"),
-              inputmode: "decimal",
-              autocomplete: "off",
-              class: "number",
-            })
-          : null;
         const form = h(
           "form",
           { class: "record-add" },
           account,
           type,
           amount,
-          weight,
           h("button", { type: "submit" }, t("Add a record")),
         );
         focusers.set(`record:${product.id}`, account);
@@ -248,40 +211,26 @@ export function recordsPanel(ctx: Context): Panel {
           event.preventDefault();
           const accountId = Number(account.value);
           const accountType = type.value === "" ? null : type.value;
-          const amountText = amount.value.trim();
-          const weightText = weight?.value.trim() ?? "";
-          const value = amountText === "" ? null : cleanDecimal(amountText);
-          const share = weightText === "" ? null : cleanDecimal(weightText);
-          if ((amountText === "" && weightText === "") || (amountText !== "" && value === null) || (weightText !== "" && share === null)) {
-            ctx.fail(t("Enter an amount or a weight, as numbers."));
+          const value = cleanDecimal(amount.value.trim());
+          if (value === null) {
+            ctx.fail(t("Enter an amount (0 is allowed). To remove a record, use its Delete button."));
             return;
           }
           pendingFocus = { kind: "add-record", product: product.id };
-          void (async () => {
-            let ok = true;
-            if (value !== null) {
-              ok = await ctx.apply({
-                type: "set_holding",
-                account: accountId,
-                product: product.id,
-                account_type: accountType,
-                value,
-                quantity: null,
-              });
-            }
-            if (ok && share !== null) {
-              ok = await ctx.apply({
-                type: "set_holding_weight",
-                account: accountId,
-                product: product.id,
-                account_type: accountType,
-                weight: share,
-              });
-            }
-            if (!ok) {
-              pendingFocus = null;
-            }
-          })();
+          void ctx
+            .apply({
+              type: "set_holding",
+              account: accountId,
+              product: product.id,
+              account_type: accountType,
+              value,
+              quantity: null,
+            })
+            .then((ok) => {
+              if (!ok) {
+                pendingFocus = null;
+              }
+            });
         });
         return form;
       };
@@ -297,7 +246,6 @@ export function recordsPanel(ctx: Context): Panel {
       const bar = bulkCategoryBar(ctx, categories, products, selected, shown, () => syncSelection());
       const bodies: HTMLElement[] = [];
       for (const category of categories) {
-        const weighted = category.targeting === "weighted";
         const heading = h(
           "tbody",
           { class: "records-category" },
@@ -365,14 +313,14 @@ export function recordsPanel(ctx: Context): Panel {
               attrs: { class: "currency", maxlength: "3" },
             }),
             deleteButton(() => void ctx.apply({ type: "remove_product", id }), t("Delete product")),
-            addRecordForm(product, weighted),
+            addRecordForm(product),
             productTools(ctx, view, product),
           );
           const own = view.portfolio.holdings.filter((r) => r.product === id);
           const rows = accounts.flatMap((a) =>
             own
               .filter((r) => r.account === a.id)
-              .map((r) => recordRow(product, a, r.account_type ?? null, weighted)),
+              .map((r) => recordRow(product, a, r.account_type ?? null)),
           );
           const block = h(
             "tbody",
@@ -451,7 +399,6 @@ export function recordsPanel(ctx: Context): Panel {
                 {},
                 h("th", {}, t("Account")),
                 h("th", {}, t("Type")),
-                h("th", {}, t("Weight")),
                 h("th", {}, t("Quantity")),
                 h("th", {}, t("Price")),
                 h("th", {}, t("Amount")),

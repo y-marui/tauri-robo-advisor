@@ -93,7 +93,6 @@ export const MESSAGES = {
   "The file is left untouched. To start a new file, move portfolio.json out of the data folder and open the app again.": {
     ja: "ファイルはそのまま残してあります。新しく始めるには、データの保存場所から portfolio.json を別の場所へ移して、アプリを開き直してください。",
   },
-  "No value yet": { ja: "評価額はまだありません" },
   "Group by": { ja: "まとめ方" },
   "By category": { ja: "カテゴリ別" },
   "Language": { ja: "言語" },
@@ -104,10 +103,8 @@ export const MESSAGES = {
   "Settings": { ja: "設定" },
   "Name": { ja: "名前" },
   "Target (%)": { ja: "目標 (%)" },
-  "Product targeting": { ja: "商品の目標の持ち方" },
   "Category": { ja: "カテゴリ" },
   "Currency": { ja: "通貨" },
-  "Weight": { ja: "比率" },
   "Type": { ja: "種別" },
   "Sellable": { ja: "売却可" },
   "Rounding unit": { ja: "丸め単位" },
@@ -173,11 +170,14 @@ export const MESSAGES = {
   "Enter an amount (0 is allowed). To remove a record, use its Delete button.": {
     ja: "金額を入力してください（0 も可）。レコードを消すには、その行の削除ボタンを使います。",
   },
-  "Enter an amount or a weight, as numbers.": {
-    ja: "金額か比率を、数値で入力してください。",
-  },
-  "Free": { ja: "自由" },
   "Equal": { ja: "等分" },
+  "Share in the category": { ja: "カテゴリ内の比率" },
+  "{product}: share in the category ({mode})": { ja: "{product}: カテゴリ内の比率（{mode}）" },
+  "{product}: weight ({mode})": { ja: "{product}: 比率の値（{mode}）" },
+  "Enter a positive weight.": { ja: "比率には、0 より大きい数を入力してください。" },
+  "Share in the category is set for the mode chosen above ({mode}); each mode keeps its own setting for a product, and it is the same in every account.": {
+    ja: "カテゴリ内の比率は、上で選んだモード（{mode}）のものです。モードごとに商品の設定を別々に持ち、どの口座でも同じです。",
+  },
   "Keep current": { ja: "現在の比率を維持" },
   "Weighted": { ja: "比率を指定" },
   "General account": { ja: "一般" },
@@ -220,19 +220,12 @@ export const MESSAGES = {
   "Category targets add up to {sum}%, not 100%.": {
     ja: "カテゴリの目標の合計が {sum}% で、100% になっていません。",
   },
-  "Category “{category}” has weighted products without a weight.": {
-    ja: "カテゴリ「{category}」に、比率が未入力の商品があります。",
-  },
-  "Category “{category}” has no products.": {
-    ja: "カテゴリ「{category}」に商品がありません。",
-  },
   "Set the {currency}/JPY rate in Settings to value {currency} holdings.": {
     ja: "{currency} の保有を評価するには、設定で {currency}/JPY レートを入力してください。",
   },
   "Taxes are not taken into account in suggestions.": {
     ja: "提案では税金を考慮していません。",
   },
-  "Relative weight inside the category: {account}": { ja: "カテゴリ内の相対比率: {account}" },
   "Amounts are in each product’s currency.": {
     ja: "金額は、各商品の通貨で入力します。",
   },

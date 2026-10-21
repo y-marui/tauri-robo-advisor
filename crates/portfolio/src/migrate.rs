@@ -2,9 +2,12 @@
 //! The file is not trusted: anything unexpected is left as it is and the integrity check rejects
 //! it.
 
+use std::collections::BTreeMap;
+
+use rust_decimal::Decimal;
 use serde_json::{Value, json};
 
-use crate::{Error, MIN_SCHEMA_VERSION, Portfolio};
+use crate::{Error, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio};
 
 /// Reads a stored file: parses it, converts an older supported version to the current layout
 /// (the version number itself is raised by the caller after the integrity check), and returns the
@@ -29,6 +32,9 @@ fn to_current(value: &mut Value) {
     }
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..19).contains(&v)) {
         tradable_into_excluded(value);
+    }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..20).contains(&v)) {
+        targeting_into_product_shares(value);
     }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
@@ -132,4 +138,88 @@ fn tradable_into_excluded(value: &mut Value) {
         excluded.sort_by_key(Value::as_u64);
         object.insert("excluded".to_owned(), Value::Array(excluded));
     }
+}
+
+/// Version 20: the targeting of the products of a category (`targeting`) and the weights of the
+/// records (`weight`) become a setting per product in each of the four suggestion modes
+/// (`product_shares`). Each mode gets what the category had, so nothing changes for the user: a
+/// weighted category gives each product the sum of its record weights (a product without a weight
+/// gets an equal share, which is what a missing weight asked for once it was refused as a problem),
+/// a keep-current category keeps the current values, and a free or equal category stores nothing
+/// (an equal share is the default). Then both old fields are dropped.
+fn targeting_into_product_shares(value: &mut Value) {
+    let mut weights: BTreeMap<u64, Decimal> = BTreeMap::new();
+    if let Some(holdings) = value.get_mut("holdings").and_then(Value::as_array_mut) {
+        for holding in holdings {
+            let Some(object) = holding.as_object_mut() else {
+                continue;
+            };
+            let product = object.get("product").and_then(Value::as_u64);
+            let weight = match object.remove("weight") {
+                Some(Value::String(text)) => text.parse::<Decimal>().ok(),
+                _ => None,
+            };
+            if let (Some(product), Some(weight)) = (product, weight.filter(|w| *w > Decimal::ZERO))
+            {
+                let sum = weights.entry(product).or_default();
+                *sum = sum.checked_add(weight).unwrap_or(Decimal::MAX);
+            }
+        }
+    }
+    let mut kinds: BTreeMap<u64, String> = BTreeMap::new();
+    if let Some(categories) = value.get_mut("categories").and_then(Value::as_array_mut) {
+        for category in categories {
+            let Some(object) = category.as_object_mut() else {
+                continue;
+            };
+            let targeting = object.remove("targeting");
+            if let (Some(id), Some(kind)) = (
+                object.get("id").and_then(Value::as_u64),
+                targeting.as_ref().and_then(Value::as_str),
+            ) {
+                kinds.insert(id, kind.to_owned());
+            }
+        }
+    }
+    let mut entries: Vec<(u64, Value)> = Vec::new();
+    let products = value
+        .get("products")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for product in &products {
+        let (Some(id), Some(category)) = (
+            product.get("id").and_then(Value::as_u64),
+            product.get("category").and_then(Value::as_u64),
+        ) else {
+            continue;
+        };
+        let share = match kinds.get(&category).map(String::as_str) {
+            Some("keep_current") => Some(json!({ "kind": "keep_current" })),
+            Some("weighted") => weights.get(&id).map(|w| {
+                let w = (*w).min(MAX_PRODUCT_WEIGHT);
+                json!({ "kind": "weighted", "weight": w.to_string() })
+            }),
+            _ => None,
+        };
+        if let Some(share) = share {
+            entries.push((id, share));
+        }
+    }
+    if entries.is_empty() {
+        return;
+    }
+    entries.sort_by_key(|(id, _)| *id);
+    let mut shares = Vec::new();
+    for mode in [
+        "fixed_add",
+        "buy_only_to_target",
+        "full_rebalance",
+        "fixed_sell",
+    ] {
+        for (id, share) in &entries {
+            shares.push(json!({ "mode": mode, "product": id, "share": share }));
+        }
+    }
+    value["product_shares"] = Value::Array(shares);
 }
