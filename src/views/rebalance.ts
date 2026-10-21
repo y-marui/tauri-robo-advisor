@@ -2,15 +2,18 @@ import { getAccountBalance } from "../api.ts";
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
-import { accountFor, type Selection } from "../rebalance-account.ts";
+import { clearAll, heldProducts, selectAll, toggle } from "../rebalance-selection.ts";
 import type { AccountBalance, PortfolioView } from "../types.ts";
 import { categoryName, deltaClass, signed, suggestionBox, yen } from "./suggestion.ts";
 
-// The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Every tab has the
-// same layout: the suggestion form and its result on top, the account's holdings (balance inside
-// the account) below. An account tab works on its account; "All" works on the rebalancing account,
-// which it also lets the person choose. Products the account does not hold are left out of both
-// the list and the suggestion. Every figure comes from Rust.
+// The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
+// have the suggestion form and its result on top. An account tab trades in its account and shows the
+// account's balance below. "All" trades across every account instead and shows, per account, the
+// products that take part (the account's exclusion list, shown the other way round: ticked = not
+// excluded). Products an account does not hold are left out of the suggestion. Every figure comes
+// from Rust.
+
+type Selection = number | "all";
 
 export function rebalancePanel(ctx: Context): Panel {
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("Rebalance") });
@@ -22,40 +25,104 @@ export function rebalancePanel(ctx: Context): Panel {
   let sequence = 0;
   let shownAccount: number | null = null;
 
-  const accountNow = (): number | null =>
-    accountFor(selected, current?.portfolio.settings.target_account ?? null);
+  const accountNow = (): number | null => (selected === "all" ? null : selected);
 
-  // The same form for "All" and the account tabs; "All" works on the rebalancing account.
+  // The same form for "All" and the account tabs; "All" trades in every account.
   const box = suggestionBox({
     modes: ["fixed_add", "buy_only_to_target", "full_rebalance", "fixed_sell"],
     account: accountNow,
     heldOnly: true,
-    noAccountMessage: () =>
-      selected === "all" ? t("Choose the rebalancing account first.") : t("Choose an account first."),
   });
-  const targetSelect = h("select", { "aria-label": t("Rebalancing account") });
-  // The suggestion must use the saved account, so it waits while the choice is being saved.
-  targetSelect.addEventListener("change", () => {
+
+  // "All": which products of each account take part.
+  const participation = h("div", { class: "participation" });
+  const participationSection = h(
+    "div",
+    {},
+    h("h3", {}, t("Products taking part")),
+    h("p", { class: "note" }, t("Untick a product to keep it out of the suggestion in that account.")),
+    participation,
+  );
+  const checks = new Map<string, HTMLInputElement>();
+  let participationSignature: string | null = null;
+
+  const balanceSection = h("div", {}, h("h3", {}, t("Balance inside the account")), balance);
+  const body = h("div", { role: "tabpanel", class: "tab-body" }, box.el, participationSection, balanceSection);
+
+  const el = h("section", { class: "card rebalance", "aria-label": t("Rebalance") }, tabs, body);
+
+  const excludedOf = (view: PortfolioView, account: number): number[] =>
+    view.portfolio.accounts.find((a) => a.id === account)?.excluded ?? [];
+
+  // The suggestion must use the saved list, so it waits while a change is being saved.
+  // The controls are held while saving: a second change would start from the list as it was before
+  // the first one was saved and overwrite it.
+  let saving = false;
+  const holdControls = (): void => {
+    for (const control of participation.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, button")) {
+      control.disabled = saving;
+    }
+  };
+  const save = (account: number, products: number[]): void => {
+    saving = true;
+    holdControls();
     box.setBusy(true);
     void ctx
-      .apply({
-        type: "set_target_account",
-        account: targetSelect.value === "" ? null : Number(targetSelect.value),
-      })
-      .finally(() => box.setBusy(false));
-  });
-  let targetSignature: string | null = null;
-  const targetField = h("label", { class: "field" }, h("span", {}, t("Rebalancing account")), targetSelect);
-  const body = h(
-    "div",
-    { role: "tabpanel", class: "tab-body" },
-    targetField,
-    box.el,
-    h("h3", {}, t("Balance inside the account")),
-    balance,
-  );
+      .apply({ type: "set_excluded", id: account, products })
+      .finally(() => {
+        saving = false;
+        holdControls();
+        box.setBusy(false);
+      });
+  };
 
-  const el = h("section", { class: "card rebalance" }, h("h2", {}, t("Rebalance")), tabs, body);
+  function buildParticipation(view: PortfolioView): void {
+    checks.clear();
+    const name = (id: number): string => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
+    participation.replaceChildren(
+      ...view.portfolio.accounts.map((account) => {
+        const shown = heldProducts(view, account.id);
+        const selectAllButton = h("button", { type: "button", class: "link-button" }, t("Select all"));
+        selectAllButton.addEventListener("click", () =>
+          save(account.id, selectAll(current ? excludedOf(current, account.id) : [], shown)),
+        );
+        const clearButton = h("button", { type: "button", class: "link-button" }, t("Clear"));
+        clearButton.addEventListener("click", () =>
+          save(account.id, clearAll(current ? excludedOf(current, account.id) : [], shown)),
+        );
+        const items = shown.map((product) => {
+          const check = h("input", { type: "checkbox" });
+          check.addEventListener("change", () =>
+            save(account.id, toggle(current ? excludedOf(current, account.id) : [], product, check.checked)),
+          );
+          checks.set(`${account.id}:${product}`, check);
+          return h("label", { class: "check" }, check, name(product));
+        });
+        return h(
+          "fieldset",
+          { class: "participation-account" },
+          h("legend", {}, account.name),
+          h("div", { class: "button-row" }, selectAllButton, clearButton),
+          items.length === 0 ? h("p", { class: "note" }, t("This account holds nothing yet. Add a record in Settings.")) : h("div", {}, ...items),
+        );
+      }),
+    );
+    holdControls();
+  }
+
+  function refreshParticipation(view: PortfolioView): void {
+    const signature = view.portfolio.accounts
+      .map((a) => `${a.id}:${a.name}:${heldProducts(view, a.id).join("/")}`)
+      .join(",") + view.portfolio.products.map((p) => `${p.id}:${p.name}`).join(",");
+    if (signature !== participationSignature) {
+      participationSignature = signature;
+      buildParticipation(view);
+    }
+    for (const [key, check] of checks) {
+      const [account, product] = key.split(":").map(Number);
+      check.checked = !excludedOf(view, account ?? -1).includes(product ?? -1);
+    }
+  }
 
   const productName = (view: PortfolioView, id: number): string =>
     view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
@@ -133,9 +200,6 @@ export function rebalancePanel(ctx: Context): Panel {
     if (account === null) {
       shownAccount = null;
       sequence += 1;
-      balance.replaceChildren(
-        h("p", { class: "note" }, selected === "all" ? t("Choose the rebalancing account first.") : ""),
-      );
       return;
     }
     const mine = ++sequence;
@@ -167,7 +231,8 @@ export function rebalancePanel(ctx: Context): Panel {
       tab.setAttribute("aria-selected", String(active));
       tab.tabIndex = active ? 0 : -1;
     }
-    targetField.hidden = id !== "all";
+    participationSection.hidden = id !== "all";
+    balanceSection.hidden = id === "all";
     if (current) {
       box.update(current);
       refreshBalance(current);
@@ -216,16 +281,7 @@ export function rebalancePanel(ctx: Context): Panel {
           selected = "all";
         }
       }
-      if (signature !== targetSignature) {
-        targetSignature = signature;
-        targetSelect.replaceChildren(
-          h("option", { value: "" }, t("None")),
-          ...accounts.map((a) => h("option", { value: String(a.id) }, a.name)),
-        );
-      }
-      if (document.activeElement !== targetSelect) {
-        targetSelect.value = String(view.portfolio.settings.target_account ?? "");
-      }
+      refreshParticipation(view);
       select(selected);
     },
   };

@@ -314,9 +314,6 @@ pub enum Edit {
         category: Decimal,
         product: Decimal,
     },
-    SetTargetAccount {
-        account: Option<AccountId>,
-    },
 }
 
 /// One product's value in a [`Edit::ReplaceHoldings`].
@@ -1210,9 +1207,6 @@ impl Portfolio {
                 self.accounts.retain(|a| a.id != id);
                 self.holdings.retain(|h| h.account != id);
                 self.recipes.retain(|r| r.account != id);
-                if self.settings.target_account == Some(id) {
-                    self.settings.target_account = None;
-                }
             }
             Edit::AddAccountType {
                 name: new_name,
@@ -1648,12 +1642,6 @@ impl Portfolio {
                 let product = fraction(product, "product tolerance")?;
                 self.settings.category_tolerance = category;
                 self.settings.product_tolerance = product;
-            }
-            Edit::SetTargetAccount { account } => {
-                if let Some(account) = account {
-                    self.account(account)?;
-                }
-                self.settings.target_account = account;
             }
         }
         self.revision = self.revision.saturating_add(1);

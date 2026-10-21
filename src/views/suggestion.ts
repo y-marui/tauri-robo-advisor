@@ -51,8 +51,6 @@ function describeNote(note: Note, view: PortfolioView): string {
 
 function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElement {
   const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
-  const accountName =
-    view.portfolio.accounts.find((a) => a.id === suggestion.account)?.name ?? "?";
   const summary =
     suggestion.required_total !== null
       ? t("Needed to reach the target: {amount} JPY", { amount: yen(suggestion.required_total) })
@@ -68,14 +66,37 @@ function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElemen
       h("td", { class: "num" }, yen(line.after)),
     ),
   );
-  const productRows = suggestion.products.map((line) =>
-    h(
-      "tr",
-      {},
-      h("th", { scope: "row" }, productName(line.product)),
-      h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
-    ),
-  );
+  // The trades are grouped by account, in the order of the account list.
+  const tradeTables = view.portfolio.accounts
+    .map((account) => ({
+      account,
+      lines: suggestion.products.filter((line) => line.account === account.id),
+    }))
+    .filter((group) => group.lines.length > 0)
+    .map(({ account, lines }) =>
+      h(
+        "div",
+        { class: "table-wrap" },
+        h("h3", {}, t("Trades in {account}", { account: account.name })),
+        h(
+          "table",
+          {},
+          h("thead", {}, h("tr", {}, h("th", {}, t("Product")), h("th", {}, t("Change")))),
+          h(
+            "tbody",
+            {},
+            ...lines.map((line) =>
+              h(
+                "tr",
+                {},
+                h("th", { scope: "row" }, productName(line.product)),
+                h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
 
   return h(
     "div",
@@ -103,19 +124,7 @@ function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElemen
         h("tbody", {}, ...categoryRows),
       ),
     ),
-    productRows.length === 0
-      ? null
-      : h(
-          "div",
-          { class: "table-wrap" },
-          h("h3", {}, t("Trades in {account}", { account: accountName })),
-          h(
-            "table",
-            {},
-            h("thead", {}, h("tr", {}, h("th", {}, t("Product")), h("th", {}, t("Change")))),
-            h("tbody", {}, ...productRows),
-          ),
-        ),
+    ...tradeTables,
     h("p", { class: "note" }, t("Taxes are not taken into account in suggestions.")),
   );
 }
@@ -143,11 +152,10 @@ export interface SuggestionBox {
 
 interface SuggestionBoxOptions {
   modes: ModeType[];
-  /** The account to calculate for, or `null` when none is chosen. */
+  /** The account to calculate for, or `null` for every account. */
   account: () => number | null;
   /** Only buy what the account already holds (every Rebalance tab). */
   heldOnly?: boolean;
-  noAccountMessage: () => string;
 }
 
 export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
@@ -193,8 +201,7 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
   run.addEventListener("click", () => {
     const view = current;
     const account = options.account();
-    if (!view || account === null) {
-      fail(options.noAccountMessage());
+    if (!view) {
       return;
     }
     const type = modeSelect.value as ModeType;

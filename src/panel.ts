@@ -39,9 +39,14 @@ export function panel(
   title: MessageKey,
   signature: (view: PortfolioView) => string,
   build: (view: PortfolioView, bind: (binding: Bind) => void) => Node[],
+  options: { heading?: boolean } = {},
 ): Panel {
   const body = h("div", { class: "card-body" });
-  const el = h("section", { class: "card" }, h("h2", {}, t(title)), body);
+  // Without a heading (a tab label already names the card) the title is still its accessible name.
+  const el =
+    options.heading === false
+      ? h("section", { class: "card", "aria-label": t(title) }, body)
+      : h("section", { class: "card" }, h("h2", {}, t(title)), body);
   let lastSignature: string | null = null;
   let bindings: Bind[] = [];
   return {

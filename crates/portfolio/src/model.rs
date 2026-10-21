@@ -29,9 +29,12 @@ use serde::{Deserialize, Serialize};
 /// evaluation, so it refuses). Records that were saved before keep working as they are.
 /// Version 16 added the products an account leaves out of trading (`excluded`: an older app would
 /// suggest trading them, so it refuses). An older file has none excluded.
+/// Version 17 dropped the rebalancing account (`settings.target_account`: the All tab now trades
+/// across every account, so an older app would still read a target that no longer exists). An older
+/// file loses the setting on load (see `migrate`).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 16;
+pub const SCHEMA_VERSION: u32 = 17;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -183,9 +186,6 @@ pub struct Settings {
     pub category_tolerance: Decimal,
     /// Deviation from a product target tolerated before suggesting a trade.
     pub product_tolerance: Decimal,
-    /// The account used for whole-portfolio rebalancing.
-    #[serde(default)]
-    pub target_account: Option<AccountId>,
 }
 
 impl Default for Settings {
@@ -194,7 +194,6 @@ impl Default for Settings {
             usd_jpy: None,
             category_tolerance: Decimal::new(1, 2),
             product_tolerance: Decimal::ZERO,
-            target_account: None,
         }
     }
 }

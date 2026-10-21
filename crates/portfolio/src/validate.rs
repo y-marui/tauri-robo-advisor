@@ -182,11 +182,6 @@ impl Portfolio {
         if let Some(rate) = settings.usd_jpy {
             positive(rate, "exchange rate").map_err(into_corrupt)?;
         }
-        if let Some(account) = settings.target_account
-            && !self.accounts.iter().any(|a| a.id == account)
-        {
-            return corrupt("the target account is missing");
-        }
         // Saved mappings and recipes were checked when they were saved; a file is
         // not trusted to have been written by this app, so the same rules apply here.
         let mut sources = HashSet::new();

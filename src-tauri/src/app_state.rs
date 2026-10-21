@@ -1137,7 +1137,7 @@ mod tests {
 
         let error = state
             .suggest(&Request {
-                account,
+                account: Some(account),
                 mode: suggest::Mode::BuyOnlyToTarget,
                 held_only: false,
             })

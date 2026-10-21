@@ -159,14 +159,12 @@ fn removing_a_product_removes_its_holdings_and_tradable_entries() {
 }
 
 #[test]
-fn removing_an_account_removes_its_holdings_and_clears_the_target_account() {
+fn removing_an_account_removes_its_holdings() {
     let (mut p, _, _, acc) = sample();
-    apply(&mut p, Edit::SetTargetAccount { account: Some(acc) });
 
     apply(&mut p, Edit::RemoveAccount { id: acc });
 
     assert!(p.holdings.is_empty());
-    assert_eq!(p.settings.target_account, None);
     p.validate_integrity().unwrap();
 }
 
@@ -466,10 +464,6 @@ fn integrity_check_rejects_dangling_references_and_duplicates() {
 
     let mut p = good.clone();
     p.next_id = 1;
-    assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
-
-    let mut p = good;
-    p.settings.target_account = Some(AccountId(999));
     assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
 }
 
@@ -1612,7 +1606,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 16);
+    assert_eq!(SCHEMA_VERSION, 17);
 }
 
 #[test]
@@ -3213,11 +3207,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 17, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 18, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 17 })
+        Err(Error::UnsupportedVersion { found: 18 })
     ));
 }
 
@@ -3639,4 +3633,18 @@ fn the_sbi_presets_read_the_type_from_the_table_title() {
     for rule in &effective.type_rules {
         assert!(p.has_account_type(&rule.account_type));
     }
+}
+
+#[test]
+fn the_rebalancing_account_of_an_older_file_is_dropped() {
+    let old = r#"{"schema_version": 16, "next_id": 5,
+      "accounts": [{"id": 3, "name": "A", "sellable": true, "rounding_unit": "1"}],
+      "settings": {"category_tolerance": "0.01", "product_tolerance": "0", "target_account": 3}}"#;
+
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+
+    p.validate_integrity().unwrap();
+    let json = serde_json::to_value(&p).unwrap();
+    assert!(json["settings"].get("target_account").is_none());
 }

@@ -10,7 +10,7 @@ pub enum Mode {
     FixedAdd { amount: Decimal },
     /// The smallest amount that reaches the target without selling.
     BuyOnlyToTarget,
-    /// Sell and buy in the request's account to reach the target.
+    /// Sell and buy in the request's account (every account when none) to reach the target.
     FullRebalance,
     /// Raise `amount` by selling what is furthest above target.
     FixedSell { amount: Decimal },
@@ -18,7 +18,10 @@ pub enum Mode {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Request {
-    pub account: AccountId,
+    /// The account to trade in, or `None` to trade across every account (each one's own rules
+    /// apply: what it may sell, buy, and exclude, and its rounding unit).
+    #[serde(default)]
+    pub account: Option<AccountId>,
     pub mode: Mode,
     /// Only buy products the account holds (value above zero in any record). Every
     /// Rebalance tab sets it, including "All".
@@ -52,9 +55,10 @@ pub struct CategoryLine {
     pub target_after: Decimal,
 }
 
-/// One trade in the chosen account. `delta` is positive to buy, negative to sell.
+/// One trade of a product in an account. `delta` is positive to buy, negative to sell.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ProductLine {
+    pub account: AccountId,
     pub product: ProductId,
     #[serde(serialize_with = "crate::display::yen")]
     pub delta: Decimal,
@@ -89,7 +93,8 @@ pub enum Note {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Suggestion {
     pub mode: ModeName,
-    pub account: AccountId,
+    /// The account the suggestion is for; `None` when it spans every account.
+    pub account: Option<AccountId>,
     /// The amount the user asked for, when the mode takes one.
     #[serde(serialize_with = "crate::display::yen_option")]
     pub requested: Option<Decimal>,

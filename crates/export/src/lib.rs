@@ -328,23 +328,12 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
 
 fn settings(portfolio: &Portfolio) -> Table {
     let s = &portfolio.settings;
-    let target = s
-        .target_account
-        .and_then(|id| portfolio.accounts.iter().find(|a| a.id == id));
     let mut table = Table::new(&["setting", "value"]);
     let mut row = |key: &str, value: String| table.push(vec![plain_cell(key), value]);
     row("schema_version", portfolio.schema_version.to_string());
     row("usd_jpy", optional_number(s.usd_jpy));
     row("category_tolerance", number(s.category_tolerance));
     row("product_tolerance", number(s.product_tolerance));
-    row(
-        "rebalancing_account_id",
-        target.map_or(String::new(), |a| a.id.0.to_string()),
-    );
-    row(
-        "rebalancing_account",
-        target.map_or(String::new(), |a| text_cell(&a.name)),
-    );
     table
 }
 
@@ -400,7 +389,7 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
          accounts.csv     Accounts with their rules (sellable, tradable products, rounding unit).\n\
-         settings.csv     Exchange rate, tolerances, and the rebalancing account.\n\
+         settings.csv     Exchange rate and tolerances.\n\
          portfolio.json   The complete data in the app's own format (all of the above).\n\
          \n\
          Notes\n\

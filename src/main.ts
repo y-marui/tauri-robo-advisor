@@ -250,7 +250,7 @@ function build(): void {
     rebalance: h("div", { class: "subpane", role: "tabpanel" }, rebalance.el),
   };
   const subLabels: Record<HoldingsSubTab, string> = {
-    holdings: t("Holdings"),
+    holdings: t("List"),
     rebalance: t("Rebalance"),
   };
   const subButtons = new Map<HoldingsSubTab, HTMLButtonElement>();

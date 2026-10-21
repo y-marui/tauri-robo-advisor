@@ -4,10 +4,13 @@
 
 ### Added
 
+- The Rebalance "All" tab now trades across every account (#148): it lists, per account, the products it holds with checkboxes (the per-account exclusion list of #142, ticked = not excluded) and "Select all" / "Clear" buttons. The suggestion engine (`suggest::Request.account` is now optional, `ProductLine` carries its account) spreads a product's amount over the accounts that may buy or sell it and rounds per account (the total to the least common multiple of the rounding units). Results are grouped by account.
 - Per-account exclusion of products from trading (#142): `Account::excluded` (edit `SetExcluded`, "Left out of trading" in the Accounts card of the settings tab) lists products that suggestions never buy or sell in that account, in any mode; their holdings still count toward the category's value. The Rebalance account tab marks them "Excluded". `accounts.csv` gets `excluded_product_ids`. Schema version 16 (an older app refuses the file); an older file loads with nothing excluded, no conversion needed.
 
 ### Changed
 
+- The Holdings and Rebalance panels no longer start with a heading, and the Holdings sub-tab is now called List (#148). A saved sub-tab choice keeps working.
+- Schema version 17 removes the rebalancing account (`settings.target_account`, edit `SetTargetAccount`, the select in Rebalance and Settings); an older file loses the setting when read, and the export's `settings.csv` no longer has the two rebalancing-account rows (#148).
 - Products inside a category are brought toward equal weights taking what is held into account (#142): the default "Free" targeting no longer splits a purchase evenly (or sells in proportion to the account holding); it behaves like "Equal", so the product furthest below its share is raised first. A category still goes one way only, and a product that cannot be traded (excluded, not tradable, nothing to sell) is left out so the rest take the amount.
 
 ### Fixed
