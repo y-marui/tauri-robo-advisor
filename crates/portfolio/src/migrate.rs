@@ -36,6 +36,12 @@ fn to_current(value: &mut Value) -> Result<(), Error> {
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..20).contains(&v)) {
         targeting_into_product_shares(value)?;
     }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..21).contains(&v)) {
+        copy_excluded_for_all(value);
+    }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..22).contains(&v)) {
+        shares_into_weights(value);
+    }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
@@ -141,6 +147,22 @@ fn tradable_into_excluded(value: &mut Value) {
     }
 }
 
+/// Version 21: the All tab has its own exclusion list (`excluded_all`). It starts as a copy of the
+/// account's list, so nothing changes for the user.
+fn copy_excluded_for_all(value: &mut Value) {
+    let Some(accounts) = value.get_mut("accounts").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for account in accounts {
+        let Some(object) = account.as_object_mut() else {
+            continue;
+        };
+        if let Some(list @ Value::Array(_)) = object.get("excluded").cloned() {
+            object.insert("excluded_all".to_owned(), list);
+        }
+    }
+}
+
 /// Version 20: the targeting of the products of a category (`targeting`) and the weights of the
 /// records (`weight`) become a setting per product in each of the four suggestion modes
 /// (`product_shares`). Each mode gets what the category had, so nothing changes for the user: a
@@ -229,4 +251,49 @@ fn targeting_into_product_shares(value: &mut Value) -> Result<(), Error> {
     }
     value["product_shares"] = Value::Array(shares);
     Ok(())
+}
+
+/// Version 22: a product setting is a plain weight. An entry of the old shape (`share` with a
+/// `kind`) keeps its weight when it was a weighted one; an equal share and a keep-current setting
+/// are the default weight 1, which is not stored. An entry that already has a `weight` (made by
+/// the step of version 20 in this run) is left as it is.
+fn shares_into_weights(value: &mut Value) {
+    let Some(entries) = value
+        .get_mut("product_shares")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let old = std::mem::take(entries);
+    for mut entry in old {
+        let Some(object) = entry.as_object_mut() else {
+            entries.push(entry);
+            continue;
+        };
+        let Some(share) = object.remove("share") else {
+            entries.push(entry);
+            continue;
+        };
+        let weight = match share.get("kind").and_then(Value::as_str) {
+            Some("weighted") => share.get("weight").cloned(),
+            _ => None,
+        };
+        // A weight that is not a decimal is kept as it is, for the integrity check to refuse.
+        let is_default = weight
+            .as_ref()
+            .and_then(Value::as_str)
+            .and_then(|w| w.parse::<Decimal>().ok())
+            .is_some_and(|w| w == Decimal::ONE);
+        if let Some(weight) = weight
+            && !is_default
+        {
+            object.insert("weight".to_owned(), weight);
+            entries.push(entry);
+        }
+    }
+    if entries.is_empty()
+        && let Some(object) = value.as_object_mut()
+    {
+        object.remove("product_shares");
+    }
 }

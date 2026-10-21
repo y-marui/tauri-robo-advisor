@@ -3,16 +3,19 @@
 // figures come from Rust (`AccountBalance`); this only arranges them and adds the products the
 // balance leaves out (an account is listed with every product, held or not).
 
-import type { Account, AccountBalance, PortfolioView, ProductBalance } from "./types.ts";
+import type { Account, AccountBalance, PortfolioView, ProductBalance, ProductLine } from "./types.ts";
 
 export interface ProductRow {
   product: number;
   /** JPY held in the account. */
   current: string;
-  target: string | null;
-  shortfall: string | null;
   /** False when the account leaves the product out of trading. */
   takesPart: boolean;
+}
+
+/** Whether the figures show a holding: any non-zero digit in the yen amount. */
+export function isHeld(current: string): boolean {
+  return /[1-9]/.test(current);
 }
 
 export interface ProductGroup {
@@ -23,21 +26,21 @@ export interface ProductGroup {
 }
 
 /**
- * The groups to show. "Show all" lists every product; otherwise only those that take part. Products
- * the account does not hold have no figures. A product strategy lists the products it names.
+ * The groups to show. "Show all" lists every product the account holds; otherwise only those that
+ * also take part. Products the account does not hold are never candidates (not every account can
+ * trade every product). `forAll` reads the list kept for the All tab. A product strategy lists the products it names, held or not.
  */
 export function productGroups(
   view: PortfolioView,
   account: Account,
   balance: AccountBalance | null,
   showAll: boolean,
+  forAll = false,
 ): ProductGroup[] {
-  const excluded = new Set(account.excluded ?? []);
+  const excluded = new Set((forAll ? account.excluded_all : account.excluded) ?? []);
   const row = (product: number, figures: ProductBalance | undefined): ProductRow => ({
     product,
     current: figures?.current ?? "0",
-    target: figures?.target ?? null,
-    shortfall: figures?.shortfall ?? null,
     takesPart: !excluded.has(product),
   });
   const wanted = (r: ProductRow): boolean => showAll || r.takesPart;
@@ -56,10 +59,33 @@ export function productGroups(
     const rows = view.portfolio.products
       .filter((p) => p.category === category.id)
       .map((p) => row(p.id, figures.get(p.id)))
-      .filter(wanted);
+      .filter((r) => isHeld(r.current) && wanted(r));
     if (rows.length > 0) {
       groups.push({ category: category.id, total: known?.total ?? null, rows });
     }
   }
   return groups;
+}
+
+/** The key of an (account, product) pair, as the table and the suggestion share it. */
+export const slotKey = (account: number, product: number): string => `${account}:${product}`;
+
+/**
+ * The suggestion's lines by (account, product). Rust gives one line per pair (trades in the same
+ * pair are added up there, with `after`), so nothing is added here.
+ */
+export function tradesBySlot(lines: readonly ProductLine[]): Map<string, ProductLine> {
+  return new Map(lines.map((line) => [slotKey(line.account, line.product), line]));
+}
+
+/**
+ * The lines whose pair has no row in the table (`shown`), among the accounts the table covers, so
+ * a trade is never dropped from the screen.
+ */
+export function unlistedTrades(
+  lines: readonly ProductLine[],
+  shown: ReadonlySet<string>,
+  accounts: readonly number[],
+): ProductLine[] {
+  return lines.filter((line) => accounts.includes(line.account) && !shown.has(slotKey(line.account, line.product)));
 }

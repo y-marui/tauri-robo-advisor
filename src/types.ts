@@ -3,16 +3,11 @@
 
 /** The suggestion modes; each keeps its own product targeting (`Portfolio.product_shares`). */
 export type SuggestionMode = "fixed_add" | "buy_only_to_target" | "full_rebalance" | "fixed_sell";
-/** How a product's target inside its category is held. Mirrors `portfolio::ProductShare`. */
-export type ProductShare =
-  | { kind: "equal" }
-  | { kind: "weighted"; weight: string }
-  | { kind: "keep_current" };
-/** An explicit setting of a product for a mode; a product without one has an equal share. */
+/** An explicit weight of a product for a mode (positive); a product without one has the weight 1. */
 export interface ProductShareEntry {
   mode: SuggestionMode;
   product: number;
-  share: ProductShare;
+  weight: string;
 }
 /** A built-in account type id, or the id of a custom type (`custom-<n>`). */
 export type AccountTypeId = string;
@@ -52,6 +47,8 @@ export interface Account {
   sellable: boolean;
   /** Products that do not take part in trading in this account: suggestions never buy or sell them. */
   excluded?: number[];
+  /** The same for the All tab's suggestions. */
+  excluded_all?: number[];
   /** What suggestions aim at; absent: follow the portfolio. */
   strategy?: Strategy;
   rounding_unit: string;
@@ -201,7 +198,7 @@ export interface Portfolio {
   recipes: Recipe[];
   /** Absent when there is none. */
   custom_types?: CustomType[];
-  /** Absent when every product has an equal share in every mode. */
+  /** Absent when every product has the weight 1 in every mode. */
   product_shares?: ProductShareEntry[];
 }
 
@@ -258,7 +255,7 @@ export type Edit =
       category?: number;
       currency?: string;
     }
-  | { type: "set_product_share"; mode: SuggestionMode; product: number; share: ProductShare }
+  | { type: "set_product_share"; mode: SuggestionMode; product: number; weight: string }
   | { type: "add_account_type"; name: string; sellable: boolean }
   | { type: "update_account_type"; id: string; name?: string; sellable?: boolean }
   | { type: "remove_account_type"; id: string }
@@ -278,7 +275,7 @@ export type Edit =
       sellable?: boolean;
       rounding_unit?: string;
     }
-  | { type: "set_excluded"; id: number; products: number[] }
+  | { type: "set_excluded"; id: number; products: number[]; all?: boolean }
   | { type: "set_strategy"; id: number; strategy: Strategy }
   | { type: "remove_account"; id: number }
   | { type: "move_account"; id: number; up: boolean }
@@ -390,10 +387,15 @@ export type SuggestMode =
   | { type: "full_rebalance" }
   | { type: "fixed_sell"; amount: string };
 
+/** How the money is allocated: by the category targets (then the weights inside a category), or by the product weights across all categories. */
+export type SuggestMethod = "follow_portfolio" | "by_product_weights";
+
 export interface SuggestRequest {
   /** The account to trade in; `null` trades across every account. */
   account: number | null;
   mode: SuggestMode;
+  /** Omitted means `follow_portfolio`. */
+  method?: SuggestMethod;
   /** Only buy products the account holds. Omitted means false. */
   held_only?: boolean;
 }
@@ -411,6 +413,8 @@ export interface ProductLine {
   account: number;
   product: number;
   delta: string;
+  /** What the account holds of the product after the trade (current + delta, from Rust). */
+  after: string;
 }
 
 export type Note =

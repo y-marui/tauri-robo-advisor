@@ -10,7 +10,7 @@
 
 mod csv;
 
-use portfolio::{Account, Category, Portfolio, Product, ProductShare};
+use portfolio::{Account, Category, Portfolio, Product, ProductId};
 use rust_decimal::Decimal;
 
 use csv::{Table, number, optional_number, plain_cell, text_cell};
@@ -289,8 +289,8 @@ fn aliases(portfolio: &Portfolio) -> Table {
     table
 }
 
-/// The explicit settings of how products are targeted, one row per mode and product (a product
-/// that is not listed for a mode has an equal share).
+/// The explicit weights of the products, one row per mode and product (a product that is not
+/// listed for a mode has the weight 1).
 fn product_targets(portfolio: &Portfolio) -> Table {
     let mut table = Table::new(&[
         "mode",
@@ -298,30 +298,19 @@ fn product_targets(portfolio: &Portfolio) -> Table {
         "product",
         "category_id",
         "category",
-        "targeting",
         "relative_weight",
     ]);
     for entry in &portfolio.product_shares {
         let product = product_of(portfolio, entry.product);
         let category =
             product.and_then(|p| portfolio.categories.iter().find(|c| c.id == p.category));
-        let weight = match entry.share {
-            ProductShare::Weighted { weight } => Some(weight),
-            _ => None,
-        };
-        let targeting = match entry.share {
-            ProductShare::Equal => "equal",
-            ProductShare::Weighted { .. } => "weighted",
-            ProductShare::KeepCurrent => "keep_current",
-        };
         table.push(vec![
             plain_cell(&keyword(&entry.mode)),
             plain_cell(&entry.product.0.to_string()),
             text_cell(product.map_or("", |p| &p.name)),
             plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),
             text_cell(category.map_or("", |c| &c.name)),
-            plain_cell(targeting),
-            optional_number(weight),
+            number(entry.weight),
         ]);
     }
     table
@@ -343,6 +332,7 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
         "sellable",
         "rounding_unit",
         "excluded_product_ids",
+        "excluded_all_product_ids",
         "strategy",
         "strategy_products",
         "value_jpy",
@@ -354,7 +344,8 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
             text_cell(&account.name),
             plain_cell(if account.sellable { "true" } else { "false" }),
             number(account.rounding_unit),
-            plain_cell(&excluded(account)),
+            plain_cell(&id_list(&account.excluded)),
+            plain_cell(&id_list(&account.excluded_all)),
             plain_cell(if account.strategy.is_portfolio() {
                 "portfolio"
             } else {
@@ -378,10 +369,8 @@ fn settings(portfolio: &Portfolio) -> Table {
     table
 }
 
-fn excluded(account: &Account) -> String {
-    account
-        .excluded
-        .iter()
+fn id_list(ids: &[ProductId]) -> String {
+    ids.iter()
         .map(|id| id.0.to_string())
         .collect::<Vec<_>>()
         .join(";")
@@ -432,7 +421,7 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          categories.csv   Categories (with their group) with their target weight and current value.\n\
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
-         product_targets.csv  How a product is targeted inside its category, per suggestion mode (only the products that do not have an equal share).\n\
+         product_targets.csv  The weight of a product, per suggestion mode (only the products whose weight is not 1).\n\
          accounts.csv     Accounts with their rules (sellable, rounding unit, products left out of trading).\n\
          settings.csv     Exchange rate and tolerances.\n\
          portfolio.json   The complete data in the app's own format (all of the above).\n\
@@ -449,7 +438,8 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
            apostrophe so a spreadsheet does not run it as a formula; remove the apostrophe if you\n\
            need the original name.\n\
          * `excluded_product_ids` lists the products that do not take part in trading in the account\n\
-           (product ids separated by semicolons; empty when none).\n\
+           (product ids separated by semicolons; empty when none). `excluded_all_product_ids` is the same\n\
+           for a suggestion across all accounts.\n\
          * `strategy` is `portfolio` (follow the portfolio's targets) or `products` (specified\n\
            products with ratios); `strategy_products` then lists them as `id` or `id:ratio`\n\
            separated by semicolons (a missing ratio means an equal share).\n\

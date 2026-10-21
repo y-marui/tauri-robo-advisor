@@ -16,6 +16,18 @@ pub enum Mode {
     FixedSell { amount: Decimal },
 }
 
+/// How the money is allocated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Method {
+    /// By the portfolio's category targets, then by the product weights inside each category.
+    #[default]
+    FollowPortfolio,
+    /// Ignoring the category targets: every product that takes part gets its weight's share of
+    /// the whole, across categories.
+    ByProductWeights,
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Request {
     /// The account to trade in, or `None` to trade across every account (each one's own rules
@@ -23,6 +35,9 @@ pub struct Request {
     #[serde(default)]
     pub account: Option<AccountId>,
     pub mode: Mode,
+    /// How the money is allocated (an account with a product strategy always follows its own).
+    #[serde(default)]
+    pub method: Method,
     /// Only buy products the account holds (value above zero in any record). Every
     /// Rebalance tab sets it, including "All".
     #[serde(default)]
@@ -62,6 +77,10 @@ pub struct ProductLine {
     pub product: ProductId,
     #[serde(serialize_with = "crate::display::yen")]
     pub delta: Decimal,
+    /// What the account holds of the product once the trade is made: its current value (in every
+    /// record, as the account balance counts it) plus `delta`.
+    #[serde(serialize_with = "crate::display::yen")]
+    pub after: Decimal,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

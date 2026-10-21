@@ -1,5 +1,5 @@
 import { t } from "../i18n.ts";
-import type { CustomType, ProductShare } from "../types.ts";
+import type { CustomType } from "../types.ts";
 
 /** The account types that ship with the app, in the order they are offered. */
 export const BUILTIN_TYPES = [
@@ -12,17 +12,6 @@ export const BUILTIN_TYPES = [
   "deposit",
   "crypto",
 ] as const;
-
-export function shareLabel(kind: ProductShare["kind"]): string {
-  switch (kind) {
-    case "equal":
-      return t("Equal");
-    case "keep_current":
-      return t("Keep current");
-    case "weighted":
-      return t("Weighted");
-  }
-}
 
 export function typeLabel(id: string | null | undefined, custom: CustomType[] | undefined): string {
   switch (id) {

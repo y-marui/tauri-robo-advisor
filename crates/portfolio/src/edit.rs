@@ -7,7 +7,7 @@ use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, Alias, CardSource, Category, CategoryId, Error, FetchLink, Group, GroupId,
     Holding, ImportMapping, KindRead, KindRule, MAX_PRODUCT_WEIGHT, Portfolio, Product, ProductId,
-    ProductShare, ProductShareEntry, Recipe, Strategy, SuggestionMode, TypeRule,
+    ProductShareEntry, Recipe, Strategy, SuggestionMode, TypeRule,
 };
 
 /// Which record stays when a merge finds a record of both products in one account.
@@ -151,10 +151,13 @@ pub enum Edit {
         rounding_unit: Option<Decimal>,
     },
     /// Sets the products that do not take part in trading in the account (suggestions never buy or
-    /// sell them).
+    /// sell them): in the account's own suggestions, or with `all` in the suggestions across all
+    /// accounts.
     SetExcluded {
         id: AccountId,
         products: Vec<ProductId>,
+        #[serde(default)]
+        all: bool,
     },
     /// Sets what the account's suggestions aim at. A product strategy needs at least one product.
     SetStrategy {
@@ -214,12 +217,12 @@ pub enum Edit {
         #[serde(default)]
         account_type: Option<String>,
     },
-    /// Sets how a product is targeted inside its category for one suggestion mode (`Equal`
-    /// clears the setting). Global: it applies to every account.
+    /// Sets the weight of a product for one suggestion mode (the default weight 1 clears the
+    /// setting). Global: it applies to every account.
     SetProductShare {
         mode: SuggestionMode,
         product: ProductId,
-        share: ProductShare,
+        weight: Decimal,
     },
     /// Makes the account hold exactly these products, as an import does. The
     /// values are in each product's own currency.
@@ -1006,6 +1009,7 @@ impl Portfolio {
                 self.product_shares.retain(|e| e.product != id);
                 for account in &mut self.accounts {
                     account.excluded.retain(|p| *p != id);
+                    account.excluded_all.retain(|p| *p != id);
                     account.drop_strategy_product(id);
                 }
             }
@@ -1071,10 +1075,12 @@ impl Portfolio {
                     self.holdings.push(h);
                 }
                 for account in &mut self.accounts {
-                    if account.excluded.contains(&remove) && !account.excluded.contains(&keep) {
-                        account.excluded.push(keep);
+                    for list in [&mut account.excluded, &mut account.excluded_all] {
+                        if list.contains(&remove) && !list.contains(&keep) {
+                            list.push(keep);
+                        }
+                        list.retain(|p| *p != remove);
                     }
-                    account.excluded.retain(|p| *p != remove);
                     account.merge_strategy_product(keep, remove);
                 }
                 self.product_shares.retain(|e| e.product != remove);
@@ -1115,8 +1121,10 @@ impl Portfolio {
                     }
                 }
                 for account in &mut self.accounts {
-                    if account.excluded.contains(&product) {
-                        account.excluded.push(id);
+                    for list in [&mut account.excluded, &mut account.excluded_all] {
+                        if list.contains(&product) {
+                            list.push(id);
+                        }
                     }
                 }
             }
@@ -1147,6 +1155,7 @@ impl Portfolio {
                     name: new_name,
                     sellable: true,
                     excluded: Vec::new(),
+                    excluded_all: Vec::new(),
                     strategy: Strategy::Portfolio,
                     rounding_unit: Decimal::ONE,
                 });
@@ -1176,14 +1185,19 @@ impl Portfolio {
                     account.rounding_unit = u;
                 }
             }
-            Edit::SetExcluded { id, products } => {
+            Edit::SetExcluded { id, products, all } => {
                 for product in &products {
                     self.product(*product)?;
                 }
                 let mut products = products;
                 products.sort();
                 products.dedup();
-                self.account_mut(id)?.excluded = products;
+                let account = self.account_mut(id)?;
+                if all {
+                    account.excluded_all = products;
+                } else {
+                    account.excluded = products;
+                }
             }
             Edit::SetStrategy { id, strategy } => {
                 self.account(id)?;
@@ -1323,23 +1337,21 @@ impl Portfolio {
             Edit::SetProductShare {
                 mode,
                 product,
-                share,
+                weight,
             } => {
                 self.product(product)?;
-                if let ProductShare::Weighted { weight } = share {
-                    let weight = positive(weight, "weight")?;
-                    if weight > MAX_PRODUCT_WEIGHT {
-                        return Err(Error::Invalid("the weight is too large".to_owned()));
-                    }
+                let weight = positive(weight, "weight")?;
+                if weight > MAX_PRODUCT_WEIGHT {
+                    return Err(Error::Invalid("the weight is too large".to_owned()));
                 }
                 self.product_shares
                     .retain(|e| !(e.mode == mode && e.product == product));
-                if share != ProductShare::Equal {
+                if weight != Decimal::ONE {
                     self.check_capacity(self.product_shares.len())?;
                     self.product_shares.push(ProductShareEntry {
                         mode,
                         product,
-                        share,
+                        weight,
                     });
                     self.product_shares.sort_by_key(|e| (e.mode, e.product));
                 }

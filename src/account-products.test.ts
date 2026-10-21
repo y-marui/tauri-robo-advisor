@@ -20,27 +20,36 @@ const balance = {
     {
       category: 1,
       total: "300",
-      products: [{ product: 10, current: "300", target: "200", shortfall: "-100" }],
+      products: [
+        { product: 10, current: "300", target: "200", shortfall: "-100" },
+        { product: 11, current: "0", target: "100", shortfall: "100" },
+      ],
+    },
+    {
+      category: 2,
+      total: "80",
+      products: [{ product: 12, current: "80", target: null, shortfall: null }],
     },
   ],
 } as unknown as AccountBalance;
 
 const account = { id: 5, excluded: [11] } as unknown as Account;
 
-test("show all lists every product, held or not, with the figures Rust gave", () => {
+test("show all lists the products the account holds, with the figures Rust gave", () => {
   const groups = productGroups(view, account, balance, true);
   assert.deepEqual(groups.map((g) => g.category), [1, 2]);
-  assert.deepEqual(groups[0]?.rows.map((r) => [r.product, r.current, r.takesPart]), [
-    [10, "300", true],
-    [11, "0", false],
-  ]);
-  assert.equal(groups[0]?.rows[0]?.target, "200");
+  assert.deepEqual(groups[0]?.rows.map((r) => [r.product, r.current, r.takesPart]), [[10, "300", true]]);
   assert.equal(groups[0]?.total, "300");
-  assert.equal(groups[1]?.total, null);
+  assert.equal(groups[1]?.total, "80");
+});
+
+test("a held product left out is still listed, a product not held never is", () => {
+  const groups = productGroups(view, { ...account, excluded: [10, 11] } as Account, balance, true);
+  assert.deepEqual(groups[0]?.rows.map((r) => [r.product, r.takesPart]), [[10, false]]);
 });
 
 test("tradable only drops the products left out, and the categories that end up empty", () => {
-  const groups = productGroups(view, { ...account, excluded: [11, 12] } as Account, balance, false);
+  const groups = productGroups(view, { ...account, excluded: [12] } as Account, balance, false);
   assert.deepEqual(groups.map((g) => g.rows.map((r) => r.product)), [[10]]);
 });
 
@@ -64,8 +73,28 @@ test("a product strategy lists the products it names in one group", () => {
   assert.deepEqual(groups[0]?.rows.map((r) => [r.product, r.current]), [[12, "0"], [10, "50"]]);
 });
 
-test("without a balance the rows have no figures", () => {
-  const groups = productGroups(view, account, null, true);
-  assert.equal(groups[0]?.rows[0]?.target, null);
-  assert.equal(groups[0]?.rows[0]?.current, "0");
+test("without a balance nothing is known to be held, so nothing is listed", () => {
+  assert.deepEqual(productGroups(view, account, null, true), []);
+});
+
+test("the All tab reads its own list of products left out", () => {
+  const both = { ...account, excluded: [], excluded_all: [10] } as Account;
+  assert.equal(productGroups(view, both, balance, true)[0]?.rows[0]?.takesPart, true);
+  assert.equal(productGroups(view, both, balance, true, true)[0]?.rows[0]?.takesPart, false);
+});
+
+test("trades are found by account and product, and unlisted ones are reported", async () => {
+  const { slotKey, tradesBySlot, unlistedTrades } = await import("./account-products.ts");
+  const lines = [
+    { account: 1, product: 10, delta: "1,000", after: "5,000" },
+    { account: 2, product: 10, delta: "-500", after: "100" },
+    { account: 2, product: 11, delta: "500", after: "500" },
+  ];
+  const trades = tradesBySlot(lines);
+  assert.equal(trades.get(slotKey(2, 10))?.after, "100");
+  assert.equal(trades.get(slotKey(1, 11)), undefined);
+  const shown = new Set([slotKey(1, 10), slotKey(2, 10)]);
+  assert.deepEqual(unlistedTrades(lines, shown, [1, 2]), [lines[2]]);
+  // Accounts the table does not cover are not its concern.
+  assert.deepEqual(unlistedTrades(lines, shown, [1]), []);
 });

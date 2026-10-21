@@ -1140,6 +1140,7 @@ mod tests {
                 account: Some(account),
                 mode: suggest::Mode::BuyOnlyToTarget,
                 held_only: false,
+                method: Default::default(),
             })
             .unwrap_err();
 

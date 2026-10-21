@@ -43,9 +43,18 @@ use serde::{Deserialize, Serialize};
 /// (`Category::targeting`) and the records (`Holding::weight`) to the Rebalance tab: a setting per
 /// suggestion mode and product (`Portfolio::product_shares`). An older app would read every product
 /// as an equal share, so it refuses. An older file is converted on load (see `migrate`).
+/// Version 21 gave the All tab its own list of products left out of trading
+/// (`Account::excluded_all`, next to `excluded`, which the account's own tab keeps): an older app
+/// would trade in All by the account's list. An older file starts with the two lists equal (see
+/// `migrate`).
+/// Version 22 turned the setting of a product (`Portfolio::product_shares`) into a plain weight
+/// (the kinds "equal share" and "keep current" are gone; an equal share is the weight 1). An older
+/// app would read the entries as the old kinds, so it refuses. An older file is converted on load
+/// (see `migrate`): a weight stays, an equal share and a keep-current setting become the default
+/// weight 1.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 20;
+pub const SCHEMA_VERSION: u32 = 22;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -90,27 +99,15 @@ impl SuggestionMode {
 /// mistake (and could overflow a calculation).
 pub const MAX_PRODUCT_WEIGHT: Decimal = Decimal::from_parts(1_000_000_000, 0, 0, false, 0);
 
-/// How a product's target inside its category is held, for one suggestion mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ProductShare {
-    /// The same share as the other products with this setting (the default, and what a product
-    /// without a setting gets).
-    #[default]
-    Equal,
-    /// An explicit relative weight, positive; relative to the other products of the category.
-    Weighted { weight: Decimal },
-    /// The product keeps its current value as its proportion.
-    KeepCurrent,
-}
-
-/// The setting of one product for one suggestion mode. A product without an entry is `Equal`, and
-/// an `Equal` setting is never stored.
+/// The setting of one product for one suggestion mode: its weight, positive and relative to the
+/// other products it is compared with (the products of its category, or every product when the
+/// suggestion allocates by product weights). A product without an entry has the weight 1, and a
+/// weight of 1 is never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductShareEntry {
     pub mode: SuggestionMode,
     pub product: ProductId,
-    pub share: ProductShare,
+    pub weight: Decimal,
 }
 
 /// A main category above the categories. It has no target of its own: its target and its current
@@ -181,11 +178,15 @@ pub struct Account {
     /// Whether suggestions may propose selling in this account (a record is also bound by the
     /// selling rule of its type).
     pub sellable: bool,
-    /// Products that do not take part in trading in this account: suggestions never buy or sell
-    /// them. Their holdings still count toward the value of their category. Every other product
+    /// Products that do not take part in trading in this account's own suggestions: they are never
+    /// bought or sold. Their holdings still count toward the value of their category. Every other product
     /// takes part (buying a product the account does not hold is a separate rule).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded: Vec<ProductId>,
+    /// The same for a suggestion across all accounts (the All tab). Kept apart from `excluded`, so
+    /// what is traded in All can differ from what is traded in the account alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_all: Vec<ProductId>,
     /// What the account's suggestions aim at: the portfolio's targets (default), or a list of
     /// products with ratios chosen for this account alone.
     #[serde(default, skip_serializing_if = "Strategy::is_portfolio")]
@@ -555,8 +556,8 @@ pub struct Portfolio {
     pub recipes: Vec<Recipe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom_types: Vec<CustomType>,
-    /// How each product is targeted inside its category, per suggestion mode. Global (not per
-    /// account). Only non-`Equal` settings are stored, sorted by mode then product.
+    /// The weight of each product, per suggestion mode. Global (not per account). Only weights
+    /// other than 1 are stored, sorted by mode then product.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub product_shares: Vec<ProductShareEntry>,
 }
@@ -604,13 +605,11 @@ impl Portfolio {
             .unwrap_or(true)
     }
 
-    /// How a product is targeted inside its category when the given mode runs: its stored
-    /// setting, or an equal share.
-    pub fn product_share(&self, mode: SuggestionMode, product: ProductId) -> ProductShare {
+    /// The weight of a product when the given mode runs: its stored setting, or 1.
+    pub fn product_weight(&self, mode: SuggestionMode, product: ProductId) -> Decimal {
         self.product_shares
             .iter()
             .find(|e| e.mode == mode && e.product == product)
-            .map(|e| e.share)
-            .unwrap_or_default()
+            .map_or(Decimal::ONE, |e| e.weight)
     }
 }

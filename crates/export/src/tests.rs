@@ -1,6 +1,6 @@
 // Every name and amount in these tests is made up.
 
-use portfolio::{Edit, Portfolio, ProductShare, SuggestionMode};
+use portfolio::{Edit, Portfolio, SuggestionMode};
 use rust_decimal::{Decimal, dec};
 
 use crate::*;
@@ -75,6 +75,7 @@ fn sample() -> Portfolio {
         Edit::SetExcluded {
             id: nisa,
             products: vec![us],
+            all: false,
         },
     );
     for (account, product, account_type, value) in [
@@ -214,9 +215,9 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["accounts.csv"]),
         [
-            "account_id,account,sellable,rounding_unit,excluded_product_ids,strategy,strategy_products,value_jpy",
-            "6,Main,true,1,,portfolio,,650000",
-            "7,Tax-free,true,1,4,portfolio,,100000",
+            "account_id,account,sellable,rounding_unit,excluded_product_ids,excluded_all_product_ids,strategy,strategy_products,value_jpy",
+            "6,Main,true,1,,,portfolio,,650000",
+            "7,Tax-free,true,1,4,,portfolio,,100000",
         ]
     );
 }
@@ -255,7 +256,7 @@ fn product_targets_are_exported_per_mode() {
         Edit::SetProductShare {
             mode: SuggestionMode::FixedAdd,
             product: s1,
-            share: ProductShare::Weighted { weight: dec!(2.50) },
+            weight: dec!(2.50),
         },
     );
     apply(
@@ -263,7 +264,7 @@ fn product_targets_are_exported_per_mode() {
         Edit::SetProductShare {
             mode: SuggestionMode::FixedSell,
             product: s2,
-            share: ProductShare::KeepCurrent,
+            weight: dec!(0.5),
         },
     );
     let f = files(&p);
@@ -271,11 +272,11 @@ fn product_targets_are_exported_per_mode() {
     let rows = lines(&f["product_targets.csv"]);
     assert_eq!(
         rows[0],
-        "mode,product_id,product,category_id,category,targeting,relative_weight"
+        "mode,product_id,product,category_id,category,relative_weight"
     );
     assert_eq!(rows.len(), 3);
-    assert!(rows[1].starts_with("fixed_add,") && rows[1].ends_with(",weighted,2.5"));
-    assert!(rows[2].starts_with("fixed_sell,") && rows[2].ends_with(",keep_current,"));
+    assert!(rows[1].starts_with("fixed_add,") && rows[1].ends_with(",2.5"));
+    assert!(rows[2].starts_with("fixed_sell,") && rows[2].ends_with(",0.5"));
 }
 
 #[test]
@@ -397,7 +398,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
             .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,"))
     );
     assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,,");
-    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,,portfolio,,");
+    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,,,portfolio,,");
     // Shares need the total, which is also unknown.
     assert!(holdings[1].ends_with(",500000,"));
 }

@@ -4,8 +4,7 @@ use rust_decimal::Decimal;
 
 use crate::presets::Preset;
 use crate::{
-    Error, Issue, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio, ProductShare, SCHEMA_VERSION,
-    Strategy,
+    Error, Issue, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio, SCHEMA_VERSION, Strategy,
 };
 
 /// The most recipes a data file may hold.
@@ -168,7 +167,7 @@ impl Portfolio {
         for account in &self.accounts {
             name(&account.name, "account").map_err(into_corrupt)?;
             positive(account.rounding_unit, "rounding unit").map_err(into_corrupt)?;
-            for product in &account.excluded {
+            for product in account.excluded.iter().chain(&account.excluded_all) {
                 if !self.products.iter().any(|p| p.id == *product) {
                     return corrupt("an account refers to a missing product");
                 }
@@ -231,17 +230,12 @@ impl Portfolio {
             if !shared.insert((entry.mode, entry.product)) {
                 return corrupt("a product has two settings for the same mode");
             }
-            match entry.share {
-                ProductShare::Equal => {
-                    return corrupt("an equal product setting is stored");
-                }
-                ProductShare::Weighted { weight } => {
-                    positive(weight, "weight").map_err(into_corrupt)?;
-                    if weight > MAX_PRODUCT_WEIGHT {
-                        return corrupt("a product weight is too large");
-                    }
-                }
-                ProductShare::KeepCurrent => {}
+            positive(entry.weight, "weight").map_err(into_corrupt)?;
+            if entry.weight > MAX_PRODUCT_WEIGHT {
+                return corrupt("a product weight is too large");
+            }
+            if entry.weight == Decimal::ONE {
+                return corrupt("a default product weight is stored");
             }
         }
 

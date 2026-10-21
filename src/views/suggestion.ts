@@ -2,7 +2,7 @@ import { suggestRebalance } from "../api.ts";
 import { cleanDecimal, formatAmount } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { getLanguage, t } from "../i18n.ts";
-import type { Note, PortfolioView, SuggestMode, Suggestion } from "../types.ts";
+import type { Note, PortfolioView, SuggestMethod, SuggestMode, Suggestion } from "../types.ts";
 
 // The suggestion box shared by the overall balance panel and the account tabs:
 // a mode, an amount when the mode needs one, and the result of
@@ -62,7 +62,6 @@ function describeNote(note: Note, view: PortfolioView): string {
 }
 
 function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElement {
-  const productName = (id: number) => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
   const summary =
     suggestion.required_total !== null
       ? t("Needed to reach the target: {amount} JPY", { amount: yen(suggestion.required_total) })
@@ -78,44 +77,12 @@ function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElemen
       h("td", { class: "num" }, yen(line.after)),
     ),
   );
-  // The trades are grouped by account, in the order of the account list.
-  const tradeTables = view.portfolio.accounts
-    .map((account) => ({
-      account,
-      lines: suggestion.products.filter((line) => line.account === account.id),
-    }))
-    .filter((group) => group.lines.length > 0)
-    .map(({ account, lines }) =>
-      h(
-        "div",
-        { class: "table-wrap" },
-        h("h3", {}, t("Trades in {account}", { account: account.name })),
-        h(
-          "table",
-          {},
-          h("thead", {}, h("tr", {}, h("th", {}, t("Product")), h("th", {}, t("Change")))),
-          h(
-            "tbody",
-            {},
-            ...lines.map((line) =>
-              h(
-                "tr",
-                {},
-                h("th", { scope: "row" }, productName(line.product)),
-                h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
   return h(
     "div",
     { class: "suggestion" },
     h("p", { class: "summary" }, summary),
     ...suggestion.notes.map((n) => h("p", { class: "note" }, describeNote(n, view))),
-    // An account with a product strategy has no categories: only its trades are shown.
+    // An account with a product strategy has no categories. The trades are in the product list.
     categoryRows.length === 0
       ? ""
       : h(
@@ -139,7 +106,6 @@ function suggestionView(view: PortfolioView, suggestion: Suggestion): HTMLElemen
             h("tbody", {}, ...categoryRows),
           ),
         ),
-    ...tradeTables,
     h("p", { class: "note" }, t("Taxes are not taken into account in suggestions.")),
   );
 }
@@ -162,6 +128,11 @@ export function modeLabel(type: ModeType): string {
   return MODES.find((m) => m.value === type)?.label() ?? type;
 }
 
+const METHODS: { value: SuggestMethod; label: () => string }[] = [
+  { value: "follow_portfolio", label: () => t("Follow the portfolio") },
+  { value: "by_product_weights", label: () => t("By product weights across categories") },
+];
+
 export interface SuggestionBox {
   el: HTMLElement;
   /** Gives the box the current state and drops a result that may be out of date. */
@@ -172,6 +143,10 @@ export interface SuggestionBox {
   mode(): ModeType;
   /** Calls `listener` when another mode is chosen. */
   onModeChange(listener: () => void): void;
+  /** The suggestion shown now, or `null` when the box shows none. */
+  result(): Suggestion | null;
+  /** Calls `listener` whenever the suggestion shown changes (a new one, or cleared). */
+  onResult(listener: (suggestion: Suggestion | null) => void): void;
 }
 
 interface SuggestionBoxOptions {
@@ -190,6 +165,11 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     "select",
     { "aria-label": t("Suggestion mode") },
     ...available.map((m) => h("option", { value: m.value }, m.label())),
+  );
+  const methodSelect = h(
+    "select",
+    { "aria-label": t("Allocation method") },
+    ...METHODS.map((m) => h("option", { value: m.value }, m.label())),
   );
   const amount = h("input", {
     type: "text",
@@ -222,8 +202,22 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
   let current: PortfolioView | null = null;
   let sequence = 0;
 
+  // The suggestion shown, kept so the product list can show its changes too.
+  let latest: Suggestion | null = null;
+  const resultListeners: ((suggestion: Suggestion | null) => void)[] = [];
+  const setLatest = (suggestion: Suggestion | null): void => {
+    if (latest === null && suggestion === null) {
+      return;
+    }
+    latest = suggestion;
+    for (const listener of resultListeners) {
+      listener(suggestion);
+    }
+  };
+
   const fail = (text: string): void => {
     result.replaceChildren();
+    setLatest(null);
     message.classList.add("error");
     message.textContent = text;
   };
@@ -251,11 +245,17 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     updateRunButton();
     message.classList.remove("error");
     message.textContent = t("Calculating…");
-    suggestRebalance({ account, mode, held_only: options.heldOnly === true })
+    suggestRebalance({
+      account,
+      mode,
+      method: methodSelect.value as SuggestMethod,
+      held_only: options.heldOnly === true,
+    })
       .then((suggestion) => {
         if (mine === sequence) {
           message.textContent = "";
           result.replaceChildren(suggestionView(view, suggestion));
+          setLatest(suggestion);
         }
       })
       .catch((error) => {
@@ -273,6 +273,7 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     "div",
     { class: "suggest-controls" },
     h("label", { class: "field" }, h("span", {}, t("Suggestion mode")), modeSelect),
+    h("label", { class: "field" }, h("span", {}, t("Allocation method")), methodSelect),
     h("div", { class: "add-row" }, amount, run),
     message,
     result,
@@ -287,6 +288,7 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
       result.replaceChildren();
       message.textContent = "";
       message.classList.remove("error");
+      setLatest(null);
     },
     setBusy(value) {
       busy = value;
@@ -295,6 +297,10 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     mode: () => modeSelect.value as ModeType,
     onModeChange(listener) {
       modeListeners.push(listener);
+    },
+    result: () => latest,
+    onResult(listener) {
+      resultListeners.push(listener);
     },
   };
 }

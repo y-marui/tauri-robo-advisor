@@ -194,6 +194,7 @@ impl<'a> Plan<'a> {
                 account: self.account.id,
                 product: self.rows[i].product,
                 delta: amount * sign,
+                after: self.rows[i].held + amount * sign,
             })
             .collect()
     }

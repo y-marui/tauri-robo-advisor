@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use portfolio::{AccountId, CategoryId, Portfolio, ProductId, ProductShare, SuggestionMode};
+use portfolio::{AccountId, CategoryId, Portfolio, ProductId, SuggestionMode};
 use rust_decimal::Decimal;
 use serde::Serialize;
 
@@ -20,8 +20,8 @@ pub struct ProductBalance {
     /// What the account holds of the product, in JPY.
     #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
-    /// What the weights ask for, in whole yen: an equal share for free and equal categories, the
-    /// current value for keep-current. `None` only when the weights are unusable (all zero).
+    /// What the weights ask for, in whole yen: the category's holdings of the account split by
+    /// the product weights. `None` only when the weights are unusable (all zero).
     #[serde(serialize_with = "crate::display::yen_option")]
     pub target: Option<Decimal>,
     /// `target` minus `current`, in whole yen: positive when the product is
@@ -106,51 +106,23 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .iter()
                 .map(|p| held.get(&p.id).copied().unwrap_or_default())
                 .sum();
-            let weights: Vec<Option<Decimal>> = members
+            let weights: Vec<Decimal> = members
                 .iter()
-                .map(|p| match portfolio.product_share(BALANCE_MODE, p.id) {
-                    ProductShare::Equal => Some(Decimal::ONE),
-                    ProductShare::Weighted { weight } => Some(weight),
-                    // Keep-current is handled below: the target is the current value itself.
-                    ProductShare::KeepCurrent => None,
-                })
+                .map(|p| portfolio.product_weight(BALANCE_MODE, p.id))
                 .collect();
-            // Keep-current products target what is there, to the sen (no rounding that could
-            // invent a gap); the rest of the category's total is split over the others by weight.
-            let current_of = |p: &portfolio::Product| held.get(&p.id).copied().unwrap_or_default();
-            let kept: Decimal = members
-                .iter()
-                .zip(&weights)
-                .filter(|(_, w)| w.is_none())
-                .map(|(p, _)| current_of(p))
-                .sum();
-            let rest = total - kept;
-            let weight_sum: Decimal = weights.iter().flatten().copied().sum();
-            let others = weights.iter().flatten().count();
-            // Whole yen that add up to the rest, so the shortfalls never suggest money is missing
+            let weight_sum: Decimal = weights.iter().copied().sum();
+            // Whole yen that add up to the total, so the shortfalls never suggest money is missing
             // or left over.
-            let split: Option<Vec<Decimal>> = if others == 0 {
-                Some(Vec::new())
-            } else if weight_sum > Decimal::ZERO {
-                let exact: Vec<Decimal> = weights
-                    .iter()
-                    .flatten()
-                    .map(|w| rest * *w / weight_sum)
-                    .collect();
+            let targets: Vec<Option<Decimal>> = if weight_sum > Decimal::ZERO {
+                let exact: Vec<Decimal> = weights.iter().map(|w| total * *w / weight_sum).collect();
                 let caps = vec![None; exact.len()];
-                round_to_units(&exact, Decimal::ONE, rest.round_dp(0), &caps)
+                match round_to_units(&exact, Decimal::ONE, total.round_dp(0), &caps) {
+                    Some(whole) => whole.into_iter().map(Some).collect(),
+                    None => vec![None; members.len()],
+                }
             } else {
-                None
+                vec![None; members.len()]
             };
-            let mut split = split.map(Vec::into_iter);
-            let targets: Vec<Option<Decimal>> = members
-                .iter()
-                .zip(&weights)
-                .map(|(p, w)| match w {
-                    None => Some(current_of(p)),
-                    Some(_) => split.as_mut().and_then(Iterator::next),
-                })
-                .collect();
             let products = members
                 .iter()
                 .zip(&targets)

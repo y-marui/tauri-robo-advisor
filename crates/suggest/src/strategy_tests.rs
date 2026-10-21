@@ -98,6 +98,7 @@ fn run(p: &Portfolio, account: AccountId, mode: Mode) -> Result<Suggestion, Erro
             account: Some(account),
             mode,
             held_only: true,
+            method: Default::default(),
         },
     )
 }
@@ -281,6 +282,7 @@ fn excluded_products_are_never_traded_but_count_toward_the_total() {
         .apply(Edit::SetExcluded {
             id: f.b,
             products: vec![f2],
+            all: false,
         })
         .unwrap();
     hold(&mut f.portfolio, f.b, f1, dec!(0));
@@ -323,9 +325,53 @@ fn the_all_tab_leaves_a_strategy_account_alone() {
                 amount: dec!(10000),
             },
             held_only: true,
+            method: Default::default(),
         },
     )
     .unwrap();
     assert!(s.products.iter().all(|l| l.account != f.b));
     assert!(!s.products.is_empty());
+}
+
+#[test]
+fn a_strategy_line_reports_the_value_after_the_trade() {
+    let mut f = fixture();
+    let [f1, f2, ..] = f.funds[..] else {
+        unreachable!()
+    };
+    set(
+        &mut f.portfolio,
+        f.main,
+        items(&[(f1, Some(dec!(1))), (f2, Some(dec!(1)))]),
+    );
+    hold(&mut f.portfolio, f.main, f1, dec!(300000));
+    hold(&mut f.portfolio, f.main, f2, dec!(100000));
+    for (mode, buys) in [
+        (
+            Mode::FixedAdd {
+                amount: dec!(50000),
+            },
+            true,
+        ),
+        (
+            Mode::FixedSell {
+                amount: dec!(50000),
+            },
+            false,
+        ),
+    ] {
+        let s = run(&f.portfolio, f.main, mode).unwrap();
+        assert!(!s.products.is_empty());
+        for line in &s.products {
+            let held: Decimal = f
+                .portfolio
+                .holdings
+                .iter()
+                .filter(|h| h.account == line.account && h.product == line.product)
+                .map(|h| h.value)
+                .sum();
+            assert_eq!(line.after, held + line.delta, "{line:?}");
+            assert_eq!(line.delta > Decimal::ZERO, buys);
+        }
+    }
 }
