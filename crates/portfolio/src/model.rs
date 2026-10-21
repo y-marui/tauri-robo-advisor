@@ -27,9 +27,11 @@ use serde::{Deserialize, Serialize};
 /// Version 15 added the evaluation column of a mapping (`evaluation_column`, `evaluation_part`: an
 /// older app would read the value as quantity x price and skip the check against the page's
 /// evaluation, so it refuses). Records that were saved before keep working as they are.
+/// Version 16 added the products an account leaves out of trading (`excluded`: an older app would
+/// suggest trading them, so it refuses). An older file has none excluded.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 15;
+pub const SCHEMA_VERSION: u32 = 16;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -138,6 +140,10 @@ pub struct Account {
     /// Products that can be bought here; `None` means any product.
     #[serde(default)]
     pub tradable: Option<Vec<ProductId>>,
+    /// Products suggestions never buy or sell in this account. Their holdings still count toward
+    /// the value of their category.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded: Vec<ProductId>,
     /// Suggested amounts are rounded to a multiple of this value.
     pub rounding_unit: Decimal,
 }

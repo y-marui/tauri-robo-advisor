@@ -62,6 +62,8 @@ export function rebalancePanel(ctx: Context): Panel {
 
   function balanceView(view: PortfolioView, data: AccountBalance): HTMLElement {
     const rows: HTMLElement[] = [];
+    const account = accountNow();
+    const excluded = view.portfolio.accounts.find((a) => a.id === account)?.excluded ?? [];
     for (const category of data.categories) {
       if (category.products.length === 0) {
         continue;
@@ -81,7 +83,14 @@ export function rebalancePanel(ctx: Context): Panel {
           h(
             "tr",
             {},
-            h("th", { scope: "row" }, productName(view, product.product)),
+            h(
+              "th",
+              { scope: "row" },
+              productName(view, product.product),
+              excluded.includes(product.product)
+                ? h("span", { class: "note", title: t("Left out of trading in this account") }, ` (${t("Excluded")})`)
+                : "",
+            ),
             h("td", { class: "num" }, yen(product.current)),
             h("td", { class: "num" }, product.target === null ? "" : yen(product.target)),
             h(

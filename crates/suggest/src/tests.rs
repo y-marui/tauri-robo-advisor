@@ -403,11 +403,106 @@ fn equal_and_keep_current_products_split_new_money_sensibly() {
         deltas(&equal(ProductTargeting::KeepCurrent)),
         vec![(a, dec!(150000)), (b, dec!(50000))]
     );
-    // Free: no product targets, so new money is split evenly.
+    // Free: no product ratios were set, so equal weights are used and what is held counts: the
+    // smaller product is raised first, not an even split of the purchase.
     assert_eq!(
         deltas(&equal(ProductTargeting::Free)),
-        vec![(a, dec!(100000)), (b, dec!(100000))]
+        vec![(b, dec!(200000))]
     );
+}
+
+#[test]
+fn excluded_products_are_never_traded_but_still_count_for_the_category() {
+    let mut p = Portfolio::default();
+    let c = category(&mut p, "All", dec!(1));
+    let a = product(&mut p, "A", c, "JPY");
+    let b = product(&mut p, "B", c, "JPY");
+    let d = product(&mut p, "D", c, "JPY");
+    let acc = account(&mut p, "Main");
+    hold(&mut p, acc, a, dec!(300000));
+    hold(&mut p, acc, b, dec!(100000));
+    hold(&mut p, acc, d, dec!(100000));
+    apply(
+        &mut p,
+        Edit::SetExcluded {
+            id: acc,
+            products: vec![b],
+        },
+    );
+
+    // B would be the first to be raised; it is left out and D takes the amount instead.
+    let buy = run(
+        &p,
+        acc,
+        Mode::FixedAdd {
+            amount: dec!(100000),
+        },
+    )
+    .unwrap();
+    assert_eq!(deltas(&buy), vec![(d, dec!(100000))]);
+    // The held value of B is part of the category.
+    assert_eq!(category_line(&buy, c).current, dec!(500000));
+
+    // Selling: B is the smallest but A is above its share and gives first; B is never sold.
+    let sell = run(
+        &p,
+        acc,
+        Mode::FixedSell {
+            amount: dec!(400000),
+        },
+    )
+    .unwrap();
+    assert!(sell.products.iter().all(|l| l.product != b));
+    assert_eq!(
+        sell.products.iter().map(|l| l.delta).sum::<Decimal>(),
+        dec!(-400000)
+    );
+
+    // Nothing left to trade in the category.
+    apply(
+        &mut p,
+        Edit::SetExcluded {
+            id: acc,
+            products: vec![a, b, d],
+        },
+    );
+    assert!(
+        run(
+            &p,
+            acc,
+            Mode::FixedAdd {
+                amount: dec!(100000)
+            }
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn a_category_goes_one_way_and_products_are_brought_toward_equal() {
+    let mut p = Portfolio::default();
+    let c = category(&mut p, "Stocks", dec!(0.5));
+    let o = category(&mut p, "Bonds", dec!(0.5));
+    let a = product(&mut p, "A", c, "JPY");
+    let b = product(&mut p, "B", c, "JPY");
+    let x = product(&mut p, "X", o, "JPY");
+    let acc = account(&mut p, "Main");
+    hold(&mut p, acc, a, dec!(100000));
+    hold(&mut p, acc, b, dec!(300000));
+    hold(&mut p, acc, x, dec!(500000));
+
+    // Only stocks are below target, and inside them the purchase goes to the smaller product
+    // (A), not half to each.
+    let buy = run(
+        &p,
+        acc,
+        Mode::FixedAdd {
+            amount: dec!(100000),
+        },
+    )
+    .unwrap();
+    assert!(buy.products.iter().all(|l| l.delta > Decimal::ZERO));
+    assert_eq!(deltas(&buy), vec![(a, dec!(100000))]);
 }
 
 // ---- buy only to target ---------------------------------------------------

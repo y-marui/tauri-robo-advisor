@@ -262,6 +262,31 @@ fn set_tradable_checks_products_and_removes_duplicates() {
 }
 
 #[test]
+fn set_excluded_checks_products_and_follows_product_removal() {
+    let (mut p, _, prod, acc) = sample();
+
+    assert!(
+        p.apply(Edit::SetExcluded {
+            id: acc,
+            products: vec![ProductId(999)]
+        })
+        .is_err()
+    );
+    apply(
+        &mut p,
+        Edit::SetExcluded {
+            id: acc,
+            products: vec![prod, prod],
+        },
+    );
+    assert_eq!(p.accounts[0].excluded, vec![prod]);
+    p.validate_integrity().unwrap();
+
+    apply(&mut p, Edit::RemoveProduct { id: prod });
+    assert!(p.accounts[0].excluded.is_empty());
+}
+
+#[test]
 fn settings_are_range_checked() {
     let (mut p, _, _, _) = sample();
 
@@ -1587,7 +1612,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 15);
+    assert_eq!(SCHEMA_VERSION, 16);
 }
 
 #[test]
@@ -3188,11 +3213,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 16, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 17, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 16 })
+        Err(Error::UnsupportedVersion { found: 17 })
     ));
 }
 

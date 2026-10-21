@@ -213,9 +213,9 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["accounts.csv"]),
         [
-            "account_id,account,sellable,rounding_unit,tradable_product_ids,value_jpy",
-            "6,Main,true,1,all,650000",
-            "7,Tax-free,true,1,3;5,100000",
+            "account_id,account,sellable,rounding_unit,tradable_product_ids,excluded_product_ids,value_jpy",
+            "6,Main,true,1,all,,650000",
+            "7,Tax-free,true,1,3;5,,100000",
         ]
     );
 }
@@ -406,7 +406,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
             .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,,"))
     );
     assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,free,,");
-    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,all,");
+    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,all,,");
     // Shares need the total, which is also unknown.
     assert!(holdings[1].ends_with(",500000,"));
 }

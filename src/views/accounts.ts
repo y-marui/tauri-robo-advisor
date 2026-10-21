@@ -59,6 +59,33 @@ export function accountsPanel(ctx: Context): Panel {
           ),
         );
 
+        // Products ticked here are never bought or sold by a suggestion in this account (their
+        // holdings still count toward the category).
+        const excludedBoxes = products.map((product) => ({
+          id: product.id,
+          box: h("input", { type: "checkbox", "aria-label": product.name }),
+        }));
+        for (const p of excludedBoxes) {
+          p.box.addEventListener("change", () => {
+            const ids = excludedBoxes.filter((x) => x.box.checked).map((x) => x.id);
+            void ctx.apply({ type: "set_excluded", id, products: ids });
+          });
+        }
+        bind((v) => {
+          const excluded = find(v)?.excluded ?? [];
+          for (const p of excludedBoxes) {
+            p.box.checked = excluded.includes(p.id);
+          }
+        });
+        const leftOut = h(
+          "details",
+          {},
+          h("summary", {}, t("Left out of trading")),
+          ...excludedBoxes.map((p, index) =>
+            h("label", { class: "check" }, p.box, products[index]?.name ?? ""),
+          ),
+        );
+
         // The order of the accounts is the order everywhere (the tabs, the tables, the choices).
         const order = orderButtons(ctx, position, view.portfolio.accounts.length, (up) => ({
           type: "move_account",
@@ -104,6 +131,7 @@ export function accountsPanel(ctx: Context): Panel {
             }),
           ),
           h("td", {}, canBuy),
+          h("td", {}, leftOut),
           h("td", {}, order, deleteButton(() => void ctx.apply({ type: "remove_account", id }))),
         );
       });
@@ -164,6 +192,7 @@ export function accountsPanel(ctx: Context): Panel {
                 h("th", {}, t("Sellable")),
                 h("th", {}, t("Rounding unit")),
                 h("th", {}, t("Can buy")),
+                h("th", {}, t("Left out of trading")),
                 h("th", {}),
               ),
             ),
