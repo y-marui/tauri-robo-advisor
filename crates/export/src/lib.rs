@@ -307,7 +307,6 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
         "account",
         "sellable",
         "rounding_unit",
-        "tradable_product_ids",
         "excluded_product_ids",
         "strategy",
         "strategy_products",
@@ -320,7 +319,6 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
             text_cell(&account.name),
             plain_cell(if account.sellable { "true" } else { "false" }),
             number(account.rounding_unit),
-            plain_cell(&tradable(account)),
             plain_cell(&excluded(account)),
             plain_cell(if account.strategy.is_portfolio() {
                 "portfolio"
@@ -343,17 +341,6 @@ fn settings(portfolio: &Portfolio) -> Table {
     row("category_tolerance", number(s.category_tolerance));
     row("product_tolerance", number(s.product_tolerance));
     table
-}
-
-fn tradable(account: &Account) -> String {
-    match &account.tradable {
-        None => "all".to_owned(),
-        Some(ids) => ids
-            .iter()
-            .map(|id| id.0.to_string())
-            .collect::<Vec<_>>()
-            .join(";"),
-    }
 }
 
 fn excluded(account: &Account) -> String {
@@ -410,7 +397,7 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          categories.csv   Categories (with their group) with their target weight and current value.\n\
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
-         accounts.csv     Accounts with their rules (sellable, tradable products, rounding unit).\n\
+         accounts.csv     Accounts with their rules (sellable, rounding unit, products left out of trading).\n\
          settings.csv     Exchange rate and tolerances.\n\
          portfolio.json   The complete data in the app's own format (all of the above).\n\
          \n\
@@ -425,8 +412,7 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          * Names are written as text. A name that starts with = + - or @ is prefixed with an\n\
            apostrophe so a spreadsheet does not run it as a formula; remove the apostrophe if you\n\
            need the original name.\n\
-         * `tradable_product_ids` is `all` or a list of product ids separated by semicolons.\n\
-         * `excluded_product_ids` lists the products suggestions never buy or sell in the account\n\
+         * `excluded_product_ids` lists the products that do not take part in trading in the account\n\
            (product ids separated by semicolons; empty when none).\n\
          * `strategy` is `portfolio` (follow the portfolio's targets) or `products` (specified\n\
            products with ratios); `strategy_products` then lists them as `id` or `id:ratio`\n\

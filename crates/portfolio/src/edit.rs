@@ -151,12 +151,8 @@ pub enum Edit {
         sellable: Option<bool>,
         rounding_unit: Option<Decimal>,
     },
-    SetTradable {
-        id: AccountId,
-        /// `None` means the account can buy any product.
-        products: Option<Vec<ProductId>>,
-    },
-    /// Sets the products suggestions never buy or sell in the account.
+    /// Sets the products that do not take part in trading in the account (suggestions never buy or
+    /// sell them).
     SetExcluded {
         id: AccountId,
         products: Vec<ProductId>,
@@ -1018,9 +1014,6 @@ impl Portfolio {
                 self.products.retain(|p| p.id != id);
                 self.holdings.retain(|h| h.product != id);
                 for account in &mut self.accounts {
-                    if let Some(tradable) = &mut account.tradable {
-                        tradable.retain(|p| *p != id);
-                    }
                     account.excluded.retain(|p| *p != id);
                     account.drop_strategy_product(id);
                 }
@@ -1087,12 +1080,6 @@ impl Portfolio {
                     self.holdings.push(h);
                 }
                 for account in &mut self.accounts {
-                    if let Some(tradable) = &mut account.tradable {
-                        if tradable.contains(&remove) && !tradable.contains(&keep) {
-                            tradable.push(keep);
-                        }
-                        tradable.retain(|p| *p != remove);
-                    }
                     if account.excluded.contains(&remove) && !account.excluded.contains(&keep) {
                         account.excluded.push(keep);
                     }
@@ -1136,11 +1123,6 @@ impl Portfolio {
                     }
                 }
                 for account in &mut self.accounts {
-                    if let Some(tradable) = &mut account.tradable
-                        && tradable.contains(&product)
-                    {
-                        tradable.push(id);
-                    }
                     if account.excluded.contains(&product) {
                         account.excluded.push(id);
                     }
@@ -1172,7 +1154,6 @@ impl Portfolio {
                     id,
                     name: new_name,
                     sellable: true,
-                    tradable: None,
                     excluded: Vec::new(),
                     strategy: Strategy::Portfolio,
                     rounding_unit: Decimal::ONE,
@@ -1202,20 +1183,6 @@ impl Portfolio {
                 if let Some(u) = rounding_unit {
                     account.rounding_unit = u;
                 }
-            }
-            Edit::SetTradable { id, products } => {
-                self.account(id)?;
-                if let Some(list) = &products {
-                    for product in list {
-                        self.product(*product)?;
-                    }
-                }
-                let products = products.map(|mut list| {
-                    list.sort();
-                    list.dedup();
-                    list
-                });
-                self.account_mut(id)?.tradable = products;
             }
             Edit::SetExcluded { id, products } => {
                 for product in &products {

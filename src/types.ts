@@ -39,9 +39,7 @@ export interface Account {
   id: number;
   name: string;
   sellable: boolean;
-  /** `null` means the account can buy any product. */
-  tradable: number[] | null;
-  /** Products suggestions never buy or sell in this account. */
+  /** Products that do not take part in trading in this account: suggestions never buy or sell them. */
   excluded?: number[];
   /** What suggestions aim at; absent: follow the portfolio. */
   strategy?: Strategy;
@@ -278,7 +276,6 @@ export type Edit =
       sellable?: boolean;
       rounding_unit?: string;
     }
-  | { type: "set_tradable"; id: number; products: number[] | null }
   | { type: "set_excluded"; id: number; products: number[] }
   | { type: "set_strategy"; id: number; strategy: Strategy }
   | { type: "remove_account"; id: number }

@@ -21,7 +21,9 @@ _最終更新: 2026-10-19_
 | `src/views/groups.ts` | グループのカード（追加・名前の変更・削除）と、グループの表示の順序・名前の補助 | `src/panel.ts`, `src/fields.ts` |
 | `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
 | `src/subtabs.ts` | 保有タブの副タブの名前、保存した選択の検証、矢印キーの移動（テストあり） | — |
-| `src/views/rebalance.ts` | 保有タブの副タブ「リバランス」。先頭の「すべて」（口座ごとの売買に加える商品の選択と、全口座をまたぐ提案）と口座ごとのタブ（口座内の商品バランス、口座への追加の提案） | `src/rebalance-selection.ts` | 「すべて」のタブの、売買に加える商品の選択（保有する商品、すべて選択・解除。`excluded` の裏返し） | `src/types.ts` |
+| `src/views/rebalance.ts` | 保有タブの副タブ「リバランス」。先頭の「すべて」（全口座をまたぐ提案）と口座ごとのタブ（口座への追加の提案）。どちらも口座の商品一覧（売買に加えるチェック、表示の切り替え、口座の売却可と丸め単位）を同じ部品で出す | `src/account-products.ts`, `src/rebalance-selection.ts`, `src/views/suggestion.ts`, `src/types.ts` |
+| `src/account-products.ts` | 口座の商品一覧の行とグループの組み立て（全商品 / 売買に加えるものだけ。数字は Rust の `AccountBalance`。テストあり） | `src/types.ts` |
+| `src/rebalance-selection.ts` | 売買に加える商品の選択（すべて選択・解除・切り替え。`excluded` の裏返し。テストあり） | — |
 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「すべて」のタブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |

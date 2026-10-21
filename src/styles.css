@@ -935,3 +935,22 @@ details.product-tools summary {
   gap: 12px;
   margin-bottom: 4px;
 }
+
+.account-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin: 0 0 8px;
+}
+
+.account-settings .number {
+  width: 6rem;
+  margin-left: 4px;
+}
+
+.product-list .button-row {
+  display: flex;
+  gap: 12px;
+  margin: 4px 0;
+}

@@ -35,9 +35,13 @@ use serde::{Deserialize, Serialize};
 /// Version 18 added the strategy of an account (`strategy`: specified products with ratios; an older
 /// app would ignore it and suggest by the category targets, so it refuses). An older file follows
 /// the portfolio.
+/// Version 19 merged the buyable products (`tradable`) into the exclusion list: a product takes
+/// part in trading unless it is excluded (an older app would read the missing `tradable` as "any
+/// product" and trade left-out products it cannot see, so it refuses). An older file is converted on
+/// load (see `migrate`).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 18;
+pub const SCHEMA_VERSION: u32 = 19;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -143,11 +147,9 @@ pub struct Account {
     /// Whether suggestions may propose selling in this account (a record is also bound by the
     /// selling rule of its type).
     pub sellable: bool,
-    /// Products that can be bought here; `None` means any product.
-    #[serde(default)]
-    pub tradable: Option<Vec<ProductId>>,
-    /// Products suggestions never buy or sell in this account. Their holdings still count toward
-    /// the value of their category.
+    /// Products that do not take part in trading in this account: suggestions never buy or sell
+    /// them. Their holdings still count toward the value of their category. Every other product
+    /// takes part (buying a product the account does not hold is a separate rule).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded: Vec<ProductId>,
     /// What the account's suggestions aim at: the portfolio's targets (default), or a list of

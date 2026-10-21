@@ -76,7 +76,7 @@ struct Book<'a> {
     /// What each account holds per product in any record (selling allowed or not).
     held_here: BTreeMap<Slot, Decimal>,
     /// Pairs where the account holds the product, when only those may be bought; `None` when every
-    /// tradable product may be bought.
+    /// product that takes part may be bought.
     held_only: Option<BTreeSet<Slot>>,
     /// Holdings per product across all accounts.
     product_value: BTreeMap<ProductId, Decimal>,
@@ -194,10 +194,6 @@ impl<'a> Book<'a> {
     /// Whether the account may buy the product.
     fn can_buy(&self, account: &Account, product: ProductId) -> bool {
         !account.excluded.contains(&product)
-            && account
-                .tradable
-                .as_ref()
-                .is_none_or(|list| list.contains(&product))
             && self
                 .held_only
                 .as_ref()
