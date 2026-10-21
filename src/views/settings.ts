@@ -1,6 +1,6 @@
 import { cleanDecimal } from "../decimal.ts";
 import { h } from "../dom.ts";
-import { percentField, selectField, textField } from "../fields.ts";
+import { percentField, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 import type { PortfolioView } from "../types.ts";
@@ -57,21 +57,6 @@ export function settingsPanel(ctx: Context): Panel {
         }),
       });
 
-      const target = selectField({
-        ctx,
-        bind,
-        label: t("Rebalancing account"),
-        options: [
-          { value: "", label: t("None") },
-          ...view.portfolio.accounts.map((a) => ({ value: String(a.id), label: a.name })),
-        ],
-        get: (v) => String(v.portfolio.settings.target_account ?? ""),
-        edit: (value) => ({
-          type: "set_target_account",
-          account: value === "" ? null : Number(value),
-        }),
-      });
-
       return [
         h(
           "div",
@@ -79,7 +64,6 @@ export function settingsPanel(ctx: Context): Panel {
           field(t("USD/JPY rate"), rate),
           field(t("Category tolerance (%)"), categoryTolerance),
           field(t("Product tolerance (%)"), productTolerance),
-          field(t("Rebalancing account"), target),
         ),
         h("p", { class: "note" }, t("Taxes are not taken into account in suggestions.")),
       ];

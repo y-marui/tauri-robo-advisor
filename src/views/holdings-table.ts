@@ -292,6 +292,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
         ),
       ];
     },
+    { heading: false },
   );
   table.el.append(note);
 

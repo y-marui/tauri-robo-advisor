@@ -170,7 +170,6 @@ export interface Settings {
   usd_jpy: string | null;
   category_tolerance: string;
   product_tolerance: string;
-  target_account: number | null;
 }
 
 export interface Portfolio {
@@ -325,8 +324,7 @@ export type Edit =
   | { type: "split_product"; product: number; source: string; alias: string; name: string; accounts: number[] }
   | { type: "remove_alias"; product: number; source: string; name: string }
   | { type: "set_exchange_rate"; usd_jpy: string | null }
-  | { type: "set_tolerances"; category: string; product: string }
-  | { type: "set_target_account"; account: number | null };
+  | { type: "set_tolerances"; category: string; product: string };
 
 /** One category's value and share, next to its target. Mirrors `suggest::Overview`. */
 export interface CategoryOverview {
@@ -386,7 +384,8 @@ export type SuggestMode =
   | { type: "fixed_sell"; amount: string };
 
 export interface SuggestRequest {
-  account: number;
+  /** The account to trade in; `null` trades across every account. */
+  account: number | null;
   mode: SuggestMode;
   /** Only buy products the account holds. Omitted means false. */
   held_only?: boolean;
@@ -402,6 +401,7 @@ export interface CategoryLine {
 }
 
 export interface ProductLine {
+  account: number;
   product: number;
   delta: string;
 }
@@ -413,7 +413,8 @@ export type Note =
 
 export interface Suggestion {
   mode: SuggestMode["type"];
-  account: number;
+  /** `null` when the suggestion spans every account. */
+  account: number | null;
   requested: string | null;
   applied: string;
   required_total: string | null;

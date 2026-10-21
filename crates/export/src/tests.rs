@@ -222,14 +222,7 @@ fn categories_products_and_accounts_carry_their_totals() {
 
 #[test]
 fn aliases_and_settings_are_exported() {
-    let mut p = sample();
-    let main = p.accounts[0].id;
-    apply(
-        &mut p,
-        Edit::SetTargetAccount {
-            account: Some(main),
-        },
-    );
+    let p = sample();
     let f = files(&p);
 
     assert_eq!(
@@ -247,8 +240,6 @@ fn aliases_and_settings_are_exported() {
             "usd_jpy,150",
             "category_tolerance,0.01",
             "product_tolerance,0",
-            "rebalancing_account_id,6",
-            "rebalancing_account,Main",
         ]
     );
 }

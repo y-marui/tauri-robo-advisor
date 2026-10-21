@@ -1,4 +1,4 @@
-/** The sub-tabs of the Holdings tab. Only the visible area changes; the data stays the same. */
+/** The sub-tabs of the Holdings tab. Only the visible area changes; the data stays the same. The `holdings` id is kept although the tab is labelled "List", so a saved choice still works. */
 export const HOLDINGS_SUBTABS = ["holdings", "rebalance"] as const;
 export type HoldingsSubTab = (typeof HOLDINGS_SUBTABS)[number];
 

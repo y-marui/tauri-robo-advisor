@@ -116,7 +116,7 @@ fn run(p: &Portfolio, account: AccountId, mode: Mode) -> Result<Suggestion, Erro
     suggest(
         p,
         &Request {
-            account,
+            account: Some(account),
             mode,
             held_only: false,
         },
@@ -755,7 +755,7 @@ fn a_full_rebalance_works_for_any_account_that_may_sell() {
     let s = run(&f.portfolio, f.sub, Mode::FullRebalance).unwrap();
 
     // Only the sub account trades: it sells the stock excess and buys what it holds of bonds.
-    assert_eq!(s.account, f.sub);
+    assert_eq!(s.account, Some(f.sub));
     assert_eq!(
         deltas(&s),
         vec![(f.s1, dec!(-160000)), (f.b1, dec!(160000))]
@@ -1014,7 +1014,7 @@ fn requests_and_suggestions_use_exact_decimal_strings_in_json() {
     assert_eq!(
         request,
         Request {
-            account: AccountId(5),
+            account: Some(AccountId(5)),
             mode: Mode::FixedAdd {
                 amount: dec!(100000)
             },
@@ -1504,7 +1504,7 @@ fn held_only_never_buys_a_product_the_account_does_not_hold() {
     let f = fixture();
     // The sub account holds only bonds; stocks are under no restriction but not held there.
     let request = |held_only| Request {
-        account: f.sub,
+        account: Some(f.sub),
         mode: Mode::FixedAdd {
             amount: dec!(2000000),
         },
@@ -1519,18 +1519,12 @@ fn held_only_never_buys_a_product_the_account_does_not_hold() {
 }
 
 #[test]
-fn held_only_also_applies_to_the_rebalancing_account() {
+fn held_only_also_applies_to_a_single_account() {
     let mut f = fixture();
     // A second bond fund that nobody holds: bonds are under target, so it gets money.
     let b2 = product(&mut f.portfolio, "Bond Fund 2", f.bonds, "JPY");
-    apply(
-        &mut f.portfolio,
-        Edit::SetTargetAccount {
-            account: Some(f.main),
-        },
-    );
     let request = |mode, held_only| Request {
-        account: f.main,
+        account: Some(f.main),
         mode,
         held_only,
     };
@@ -1747,4 +1741,171 @@ fn a_full_rebalance_sells_only_whole_units_when_pieces_are_not_multiples() {
     assert_eq!(sum_of(&s, dec!(1)), sum_of(&s, dec!(-1)));
     assert!(sum_of(&s, dec!(-1)) <= dec!(3000));
     assert!(s.products.iter().all(|l| (l.delta % dec!(1000)).is_zero()));
+}
+
+// ---- trading across every account ------------------------------------------
+
+fn run_all(p: &Portfolio, mode: Mode, held_only: bool) -> Result<Suggestion, Error> {
+    suggest(
+        p,
+        &Request {
+            account: None,
+            mode,
+            held_only,
+        },
+    )
+}
+
+fn in_account(s: &Suggestion, account: AccountId) -> Vec<(ProductId, Decimal)> {
+    s.products
+        .iter()
+        .filter(|l| l.account == account)
+        .map(|l| (l.product, l.delta))
+        .collect()
+}
+
+#[test]
+fn a_full_rebalance_across_accounts_sells_only_where_selling_is_allowed() {
+    let f = fixture();
+
+    let s = run_all(&f.portfolio, Mode::FullRebalance, true).unwrap();
+
+    assert_eq!(s.account, None);
+    // Stocks are 160,000 over: sold in the main account (the sub account cannot sell).
+    assert_eq!(
+        in_account(&s, f.main)
+            .iter()
+            .filter(|(_, d)| *d < Decimal::ZERO)
+            .count(),
+        1
+    );
+    assert!(
+        in_account(&s, f.sub)
+            .iter()
+            .all(|(_, d)| *d > Decimal::ZERO)
+    );
+    // The bonds bought are spread over the accounts that hold bonds.
+    assert_eq!(
+        in_account(&s, f.main),
+        vec![(f.s1, dec!(-160000)), (f.b1, dec!(80000))]
+    );
+    assert_eq!(in_account(&s, f.sub), vec![(f.b1, dec!(80000))]);
+    assert_eq!(category_line(&s, f.bonds).after, dec!(360000));
+}
+
+#[test]
+fn a_product_excluded_in_one_account_is_traded_in_the_others() {
+    let mut f = fixture();
+    apply(
+        &mut f.portfolio,
+        Edit::SetExcluded {
+            id: f.sub,
+            products: vec![f.b1],
+        },
+    );
+
+    let s = run_all(
+        &f.portfolio,
+        Mode::FixedAdd {
+            amount: dec!(100000),
+        },
+        true,
+    )
+    .unwrap();
+
+    assert!(in_account(&s, f.sub).is_empty());
+    assert_eq!(in_account(&s, f.main), vec![(f.b1, dec!(100000))]);
+}
+
+#[test]
+fn a_fixed_sale_across_accounts_uses_only_sellable_accounts() {
+    let f = fixture();
+
+    let s = run_all(
+        &f.portfolio,
+        Mode::FixedSell {
+            amount: dec!(50000),
+        },
+        true,
+    )
+    .unwrap();
+
+    assert!(in_account(&s, f.sub).is_empty());
+    assert_eq!(
+        s.products.iter().map(|l| l.delta).sum::<Decimal>(),
+        dec!(-50000)
+    );
+    // Nothing can be sold when no account may sell.
+    let mut none = fixture();
+    apply(
+        &mut none.portfolio,
+        Edit::UpdateAccount {
+            id: none.main,
+            name: None,
+            sellable: Some(false),
+            rounding_unit: None,
+        },
+    );
+    assert_eq!(
+        run_all(
+            &none.portfolio,
+            Mode::FixedSell {
+                amount: dec!(50000)
+            },
+            true
+        ),
+        Err(Error::NotSellable)
+    );
+}
+
+#[test]
+fn each_account_rounds_to_its_own_unit() {
+    let mut f = fixture();
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateAccount {
+            id: f.sub,
+            name: None,
+            sellable: None,
+            rounding_unit: Some(dec!(300)),
+        },
+    );
+    hold(&mut f.portfolio, f.sub, f.s1, dec!(100000));
+
+    // The common step is 3,000 (the least common multiple of 1,000 and 300).
+    let s = run_all(
+        &f.portfolio,
+        Mode::FixedAdd {
+            amount: dec!(100000),
+        },
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(s.applied, dec!(99000));
+    assert_eq!(
+        s.products.iter().map(|l| l.delta).sum::<Decimal>(),
+        dec!(99000)
+    );
+    for line in &s.products {
+        let unit = if line.account == f.main {
+            dec!(1000)
+        } else {
+            dec!(300)
+        };
+        assert!((line.delta % unit).is_zero(), "{line:?}");
+    }
+}
+
+#[test]
+fn trading_across_accounts_matches_a_single_account_when_there_is_one() {
+    let f = fixture();
+    let mut one = fixture();
+    apply(&mut one.portfolio, Edit::RemoveAccount { id: one.sub });
+
+    let all = run_all(&one.portfolio, Mode::FullRebalance, true).unwrap();
+    let single = run(&one.portfolio, one.main, Mode::FullRebalance).unwrap();
+
+    assert_eq!(all.products, single.products);
+    assert_eq!(f.main, one.main);
 }

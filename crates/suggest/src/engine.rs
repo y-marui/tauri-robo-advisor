@@ -1,7 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use portfolio::{Account, Category, CategoryId, Portfolio, Product, ProductId, ProductTargeting};
+use portfolio::{
+    Account, AccountId, Category, CategoryId, Portfolio, Product, ProductId, ProductTargeting,
+};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 
 use crate::fill::{Item, fill_up};
 use crate::round::{ceil_to_unit, floor_to_unit, round_to_units};
@@ -15,7 +18,7 @@ pub(crate) const MAX_WEIGHT: Decimal = Decimal::from_parts(1_000_000_000, 0, 0, 
 /// A requirement below this is rounding noise, not a real need.
 const NOISE: Decimal = Decimal::from_parts(1, 0, 0, false, 9);
 
-/// Computes a suggestion for one account.
+/// Computes a suggestion for one account, or across every account when the request names none.
 pub fn suggest(portfolio: &Portfolio, request: &Request) -> Result<Suggestion, Error> {
     portfolio
         .validate_integrity()
@@ -49,15 +52,25 @@ fn check_amount(amount: Decimal) -> Result<(), Error> {
     }
 }
 
-/// The portfolio valued in JPY, seen from one account.
+/// An (account, product) pair: the unit a suggestion trades in.
+type Slot = (AccountId, ProductId);
+
+/// The portfolio valued in JPY, seen from the accounts a suggestion trades in.
 struct Book<'a> {
     portfolio: &'a Portfolio,
-    account: &'a Account,
-    /// This account's holdings per product.
-    account_value: BTreeMap<ProductId, Decimal>,
-    /// Products this account holds in any record (selling allowed or not), when only those
-    /// may be bought; `None` when every tradable product may be bought.
-    held_only: Option<BTreeSet<ProductId>>,
+    /// The accounts the suggestion trades in: the requested one, or all of them.
+    scope: Vec<&'a Account>,
+    request_account: Option<AccountId>,
+    /// The step amounts are a multiple of: the rounding unit of the accounts in scope (the least
+    /// common multiple when they differ, so every account's own unit divides it).
+    unit: Decimal,
+    /// What each account holds per product in records it may sell.
+    account_value: BTreeMap<Slot, Decimal>,
+    /// What each account holds per product in any record (selling allowed or not).
+    held_here: BTreeMap<Slot, Decimal>,
+    /// Pairs where the account holds the product, when only those may be bought; `None` when every
+    /// tradable product may be bought.
+    held_only: Option<BTreeSet<Slot>>,
     /// Holdings per product across all accounts.
     product_value: BTreeMap<ProductId, Decimal>,
     category_value: BTreeMap<CategoryId, Decimal>,
@@ -66,11 +79,16 @@ struct Book<'a> {
 
 impl<'a> Book<'a> {
     fn new(portfolio: &'a Portfolio, request: &Request) -> Result<Self, Error> {
-        let account = portfolio
-            .accounts
-            .iter()
-            .find(|a| a.id == request.account)
-            .ok_or(Error::UnknownAccount)?;
+        let scope: Vec<&Account> = match request.account {
+            Some(id) => vec![
+                portfolio
+                    .accounts
+                    .iter()
+                    .find(|a| a.id == id)
+                    .ok_or(Error::UnknownAccount)?,
+            ],
+            None => portfolio.accounts.iter().collect(),
+        };
         if portfolio
             .holdings
             .iter()
@@ -80,7 +98,7 @@ impl<'a> Book<'a> {
         }
 
         let mut account_value = BTreeMap::new();
-        let mut held_here: BTreeMap<ProductId, Decimal> = BTreeMap::new();
+        let mut held_here: BTreeMap<Slot, Decimal> = BTreeMap::new();
         let mut product_value: BTreeMap<ProductId, Decimal> = BTreeMap::new();
         for holding in &portfolio.holdings {
             let product = portfolio
@@ -90,15 +108,13 @@ impl<'a> Book<'a> {
                 .ok_or(Error::Inconsistent)?;
             let value = to_jpy(portfolio, &product.currency, holding.value)?;
             *product_value.entry(product.id).or_default() += value;
-            if holding.account == account.id {
-                *held_here.entry(product.id).or_default() += value;
-            }
+            *held_here.entry((holding.account, product.id)).or_default() += value;
             // Only what a suggestion may sell counts as held here (the type of a record can forbid
             // selling it, like a NISA record).
-            if holding.account == account.id
-                && portfolio.type_sellable(holding.account_type.as_deref())
-            {
-                *account_value.entry(product.id).or_default() += value;
+            if portfolio.type_sellable(holding.account_type.as_deref()) {
+                *account_value
+                    .entry((holding.account, product.id))
+                    .or_default() += value;
             }
         }
 
@@ -114,17 +130,22 @@ impl<'a> Book<'a> {
         if total <= Decimal::ZERO || portfolio.categories.is_empty() {
             return Err(Error::EmptyPortfolio);
         }
+        let held_only = request.held_only.then(|| {
+            held_here
+                .iter()
+                .filter(|(_, value)| **value > Decimal::ZERO)
+                .map(|(slot, _)| *slot)
+                .collect()
+        });
+        let unit = common_unit(scope.iter().map(|a| a.rounding_unit));
         Ok(Self {
             portfolio,
-            account,
+            scope,
+            request_account: request.account,
+            unit,
             account_value,
-            held_only: request.held_only.then(|| {
-                held_here
-                    .into_iter()
-                    .filter(|(_, value)| *value > Decimal::ZERO)
-                    .map(|(id, _)| id)
-                    .collect()
-            }),
+            held_here,
+            held_only,
             product_value,
             category_value,
             total,
@@ -132,7 +153,7 @@ impl<'a> Book<'a> {
     }
 
     fn unit(&self) -> Decimal {
-        self.account.rounding_unit
+        self.unit
     }
 
     fn value_of(&self, category: &Category) -> Decimal {
@@ -153,49 +174,187 @@ impl<'a> Book<'a> {
         self.portfolio.categories.iter().find(|c| c.id == id)
     }
 
-    /// Products of the category this account is allowed to buy.
+    fn any_sellable(&self) -> bool {
+        self.scope.iter().any(|a| a.sellable)
+    }
+
+    /// Whether the account may buy the product.
+    fn can_buy(&self, account: &Account, product: ProductId) -> bool {
+        !account.excluded.contains(&product)
+            && account
+                .tradable
+                .as_ref()
+                .is_none_or(|list| list.contains(&product))
+            && self
+                .held_only
+                .as_ref()
+                .is_none_or(|held| held.contains(&(account.id, product)))
+    }
+
+    /// The accounts in scope that may buy the product.
+    fn buyers(&self, product: ProductId) -> Vec<&'a Account> {
+        self.scope
+            .iter()
+            .copied()
+            .filter(|a| self.can_buy(a, product))
+            .collect()
+    }
+
+    /// The accounts in scope that may sell the product, with the value each can give.
+    fn sellers(&self, product: ProductId) -> Vec<(&'a Account, Decimal)> {
+        self.scope
+            .iter()
+            .copied()
+            .filter(|a| a.sellable && !a.excluded.contains(&product))
+            .filter_map(|a| {
+                let value = self
+                    .account_value
+                    .get(&(a.id, product))
+                    .copied()
+                    .unwrap_or_default();
+                (value > Decimal::ZERO).then_some((a, value))
+            })
+            .collect()
+    }
+
+    /// Products of the category some account in scope is allowed to buy.
     fn candidates(&self, category: CategoryId) -> Vec<&'a Product> {
         self.portfolio
             .products
             .iter()
             .filter(|p| p.category == category)
-            .filter(|p| !self.account.excluded.contains(&p.id))
-            .filter(|p| {
-                self.account
-                    .tradable
-                    .as_ref()
-                    .is_none_or(|list| list.contains(&p.id))
-            })
-            .filter(|p| {
-                self.held_only
-                    .as_ref()
-                    .is_none_or(|held| held.contains(&p.id))
-            })
+            .filter(|p| !self.buyers(p.id).is_empty())
             .collect()
     }
 
-    /// Products of the category this account holds, with the value held here.
+    /// Products of the category the accounts in scope can sell, with the value they hold.
     fn held(&self, category: CategoryId) -> Vec<(&'a Product, Decimal)> {
         self.portfolio
             .products
             .iter()
             .filter(|p| p.category == category)
-            .filter(|p| !self.account.excluded.contains(&p.id))
             .filter_map(|p| {
-                let value = self.account_value.get(&p.id).copied().unwrap_or_default();
+                let value: Decimal = self.sellers(p.id).iter().map(|(_, v)| *v).sum();
                 (value > Decimal::ZERO).then_some((p, value))
             })
             .collect()
     }
 
-    /// What can be sold from the category in whole rounding units: each product
-    /// only gives multiples of the unit, so the remainder below one unit of
-    /// every product cannot be sold.
+    /// What can be sold from the category in whole rounding units: each (account, product) pair
+    /// only gives multiples of its account's unit, so the remainder below one unit of every pair
+    /// cannot be sold.
     fn sellable_total(&self, category: CategoryId) -> Decimal {
-        self.held(category)
+        self.portfolio
+            .products
             .iter()
-            .map(|(_, value)| floor_to_unit(*value, self.unit()))
+            .filter(|p| p.category == category)
+            .flat_map(|p| self.sellers(p.id))
+            .map(|(account, value)| floor_to_unit(value, account.rounding_unit))
             .sum()
+    }
+
+    /// Spreads each product's buy amount over the accounts that may buy it: the account holding
+    /// the least of it first (equal weights), like the products inside a category.
+    fn place_buy(&self, flat: Vec<(ProductId, Decimal)>) -> Vec<(Slot, Decimal)> {
+        let mut out = Vec::new();
+        for (product, share) in flat {
+            let buyers = self.buyers(product);
+            let items: Vec<Item> = buyers
+                .iter()
+                .map(|a| Item {
+                    weight: Decimal::ONE,
+                    current: self
+                        .held_here
+                        .get(&(a.id, product))
+                        .copied()
+                        .unwrap_or_default(),
+                    cap: None,
+                })
+                .collect();
+            let shares =
+                fill_up(&items, share).unwrap_or_else(|_| vec![Decimal::ZERO; items.len()]);
+            out.extend(buyers.iter().map(|a| (a.id, product)).zip(shares));
+        }
+        out
+    }
+
+    /// Spreads each product's sell amount over the accounts that hold it, in proportion to what
+    /// each can give.
+    fn place_sell(&self, flat: Vec<(ProductId, Decimal)>) -> Vec<(Slot, Decimal)> {
+        let mut out = Vec::new();
+        for (product, share) in flat {
+            let sellers = self.sellers(product);
+            let caps: Vec<Decimal> = sellers.iter().map(|(_, v)| *v).collect();
+            let shares = proportional(&caps, share);
+            out.extend(sellers.iter().map(|(a, _)| (a.id, product)).zip(shares));
+        }
+        out
+    }
+
+    /// Rounds the amounts to each account's unit so they add up to exactly `total` (a multiple of
+    /// the common unit). The per-account totals are rounded first, to the common unit, then the
+    /// amounts inside each account to its own unit. A sale never takes more of a pair than is held.
+    fn round_slots(
+        &self,
+        flat: &[(Slot, Decimal)],
+        total: Decimal,
+        selling: bool,
+    ) -> Option<Vec<Decimal>> {
+        let mut groups: BTreeMap<AccountId, Vec<usize>> = BTreeMap::new();
+        for (index, ((account, _), _)) in flat.iter().enumerate() {
+            groups.entry(*account).or_default().push(index);
+        }
+        let unit_of = |id: AccountId| {
+            self.scope
+                .iter()
+                .find(|a| a.id == id)
+                .map_or(self.unit, |a| a.rounding_unit)
+        };
+        let cap_of = |index: usize| {
+            selling
+                .then(|| self.account_value.get(&flat[index].0))
+                .flatten()
+                .copied()
+        };
+        let sums: Vec<Decimal> = groups
+            .values()
+            .map(|ids| ids.iter().map(|&i| flat[i].1).sum())
+            .collect();
+        let group_caps: Vec<Option<Decimal>> = groups
+            .iter()
+            .map(|(account, ids)| {
+                selling.then(|| {
+                    let sum: Decimal = ids
+                        .iter()
+                        .map(|&i| floor_to_unit(cap_of(i).unwrap_or_default(), unit_of(*account)))
+                        .sum();
+                    floor_to_unit(sum, self.unit)
+                })
+            })
+            .collect();
+        let totals = round_to_units(&sums, self.unit, total, &group_caps)?;
+        let mut out = vec![Decimal::ZERO; flat.len()];
+        for ((account, ids), group_total) in groups.iter().zip(totals) {
+            // The account's share was rounded to the common unit; bring its amounts to that sum
+            // before rounding them to the account's own unit.
+            let sum: Decimal = ids.iter().map(|&i| flat[i].1).sum();
+            let values: Vec<Decimal> = ids
+                .iter()
+                .map(|&i| {
+                    if sum > Decimal::ZERO {
+                        flat[i].1 * group_total / sum
+                    } else {
+                        flat[i].1
+                    }
+                })
+                .collect();
+            let caps: Vec<Option<Decimal>> = ids.iter().map(|&i| cap_of(i)).collect();
+            let rounded = round_to_units(&values, unit_of(*account), group_total, &caps)?;
+            for (&i, amount) in ids.iter().zip(rounded) {
+                out[i] = amount;
+            }
+        }
+        Some(out)
     }
 
     // ---- splitting a category's amount over its products -------------------
@@ -379,17 +538,7 @@ impl<'a> Book<'a> {
                 flat.extend(self.split_buy(category, share)?);
             }
         }
-        let values: Vec<Decimal> = flat.iter().map(|(_, value)| *value).collect();
-        let rounded =
-            round_to_units(&values, self.unit(), spend, &[]).ok_or(Error::NothingToBuy)?;
-        let lines = flat
-            .iter()
-            .zip(rounded)
-            .map(|((product, _), delta)| ProductLine {
-                product: *product,
-                delta,
-            })
-            .collect();
+        let lines = self.buy_lines(flat, spend)?;
 
         let mut notes = Vec::new();
         if mode == ModeName::FixedAdd && spend != amount {
@@ -451,7 +600,7 @@ impl<'a> Book<'a> {
     }
 
     fn fixed_sell(&self, amount: Decimal) -> Result<Suggestion, Error> {
-        if !self.account.sellable {
+        if !self.any_sellable() {
             return Err(Error::NotSellable);
         }
         let sell = floor_to_unit(amount, self.unit());
@@ -501,7 +650,7 @@ impl<'a> Book<'a> {
             if delta > Decimal::ZERO && !self.candidates(category.id).is_empty() {
                 max_buy.push((category.id, delta));
             }
-            if delta < Decimal::ZERO && self.account.sellable {
+            if delta < Decimal::ZERO && self.any_sellable() {
                 let can_sell = (-delta).min(self.sellable_total(category.id));
                 if can_sell > Decimal::ZERO {
                     max_sell.push((category.id, can_sell));
@@ -534,17 +683,7 @@ impl<'a> Book<'a> {
                     flat.extend(self.split_buy(category, share)?);
                 }
             }
-            let values: Vec<Decimal> = flat.iter().map(|(_, v)| *v).collect();
-            let rounded =
-                round_to_units(&values, self.unit(), trade, &[]).ok_or(Error::NothingToBuy)?;
-            lines.extend(
-                flat.iter()
-                    .zip(rounded)
-                    .map(|((product, _), delta)| ProductLine {
-                        product: *product,
-                        delta,
-                    }),
-            );
+            lines.extend(self.buy_lines(flat, trade)?);
             lines.extend(self.sell_lines(&self.fill_categories_sell(&max_sell, trade)?, trade)?);
         }
 
@@ -573,6 +712,27 @@ impl<'a> Book<'a> {
         Ok(self.finish(ModeName::FullRebalance, None, applied, None, lines, notes))
     }
 
+    /// Turns per-product buy amounts into per-account purchases, rounded to the units.
+    fn buy_lines(
+        &self,
+        flat: Vec<(ProductId, Decimal)>,
+        total: Decimal,
+    ) -> Result<Vec<ProductLine>, Error> {
+        let placed = self.place_buy(flat);
+        let rounded = self
+            .round_slots(&placed, total, false)
+            .ok_or(Error::NothingToBuy)?;
+        Ok(placed
+            .iter()
+            .zip(rounded)
+            .map(|(((account, product), _), delta)| ProductLine {
+                account: *account,
+                product: *product,
+                delta,
+            })
+            .collect())
+    }
+
     /// Turns per-category sale amounts into per-product sales (negative lines),
     /// rounded to the unit without selling more of a product than is held here.
     fn sell_lines(
@@ -588,17 +748,15 @@ impl<'a> Book<'a> {
                 flat.extend(self.split_sell(category, *share));
             }
         }
-        let values: Vec<Decimal> = flat.iter().map(|(_, v)| *v).collect();
-        let caps: Vec<Option<Decimal>> = flat
-            .iter()
-            .map(|(product, _)| self.account_value.get(product).copied())
-            .collect();
-        let rounded =
-            round_to_units(&values, self.unit(), total, &caps).ok_or(Error::NotEnoughToSell)?;
-        Ok(flat
+        let placed = self.place_sell(flat);
+        let rounded = self
+            .round_slots(&placed, total, true)
+            .ok_or(Error::NotEnoughToSell)?;
+        Ok(placed
             .iter()
             .zip(rounded)
-            .map(|((product, _), amount)| ProductLine {
+            .map(|(((account, product), _), amount)| ProductLine {
+                account: *account,
                 product: *product,
                 delta: -amount,
             })
@@ -632,7 +790,7 @@ impl<'a> Book<'a> {
         notes: Vec<Note>,
     ) -> Suggestion {
         lines.retain(|line| !line.delta.is_zero());
-        lines.sort_by_key(|line| line.product);
+        lines.sort_by_key(|line| (line.account, line.product));
         let deltas = self.category_deltas(&lines);
         let total_after = self.total + lines.iter().map(|l| l.delta).sum::<Decimal>();
         let categories = self
@@ -653,7 +811,7 @@ impl<'a> Book<'a> {
             .collect();
         Suggestion {
             mode,
-            account: self.account.id,
+            account: self.request_account,
             requested,
             applied,
             required_total,
@@ -683,6 +841,30 @@ pub(crate) fn to_jpy(
         return Err(Error::TooLarge);
     }
     Ok(jpy)
+}
+
+/// The step suggested amounts are a multiple of: the least common multiple of the units when they
+/// are whole numbers, else the largest unit.
+fn common_unit(units: impl Iterator<Item = Decimal>) -> Decimal {
+    fn gcd(a: u128, b: u128) -> u128 {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    let units: Vec<Decimal> = units.collect();
+    let largest = units.iter().copied().max().unwrap_or(Decimal::ONE);
+    let mut lcm: u128 = 1;
+    for unit in &units {
+        let Some(whole) = unit.to_u128().filter(|_| unit.fract().is_zero()) else {
+            return largest;
+        };
+        if whole == 0 {
+            return largest;
+        }
+        match (lcm / gcd(lcm, whole)).checked_mul(whole) {
+            Some(next) if next <= 1_000_000_000_000 => lcm = next,
+            _ => return largest,
+        }
+    }
+    Decimal::from(lcm)
 }
 
 /// Splits `amount` in proportion to `caps`, never giving an item more than its cap.
