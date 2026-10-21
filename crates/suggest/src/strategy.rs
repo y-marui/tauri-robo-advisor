@@ -22,7 +22,7 @@ use crate::{Mode, ModeName, Note, ProductLine, Suggestion};
 /// A requirement below this is rounding noise, not a real need.
 const NOISE: Decimal = Decimal::from_parts(1, 0, 0, false, 9);
 
-/// The strategy products of an account against their ratios.
+/// The strategy products of an account with what it holds of them.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StrategyBalance {
     /// What the account holds of the strategy's products, in JPY.
@@ -419,28 +419,17 @@ pub(crate) fn suggest(
     }
 }
 
-/// The strategy's products against their ratios of the account's strategy total, in whole yen
-/// that add up to the total.
+/// The strategy's products with what the account holds of each, and their total.
 pub(crate) fn balance(portfolio: &Portfolio, account: &Account) -> Result<StrategyBalance, Error> {
     let plan = Plan::new(portfolio, account)?;
-    let exact: Vec<Decimal> = plan.rows.iter().map(|r| plan.total * r.share).collect();
-    let caps = vec![None; exact.len()];
-    let targets: Vec<Option<Decimal>> =
-        match round_to_units(&exact, Decimal::ONE, plan.total.round_dp(0), &caps) {
-            Some(whole) => whole.into_iter().map(Some).collect(),
-            None => vec![None; exact.len()],
-        };
     let mut types = crate::split::type_values(portfolio);
     let products = plan
         .rows
         .iter()
-        .zip(targets)
-        .map(|(row, target)| ProductBalance {
+        .map(|row| ProductBalance {
             product: row.product,
             current: row.held,
             types: types.remove(&(account.id, row.product)).unwrap_or_default(),
-            target,
-            shortfall: target.map(|t| (t - row.held).round_dp(0)),
         })
         .collect();
     Ok(StrategyBalance {

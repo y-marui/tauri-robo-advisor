@@ -21,14 +21,14 @@ const balance = {
       category: 1,
       total: "300",
       products: [
-        { product: 10, current: "300", target: "200", shortfall: "-100" },
-        { product: 11, current: "0", target: "100", shortfall: "100" },
+        { product: 10, current: "300" },
+        { product: 11, current: "0" },
       ],
     },
     {
       category: 2,
       total: "80",
-      products: [{ product: 12, current: "80", target: null, shortfall: null }],
+      products: [{ product: 12, current: "80" }],
     },
   ],
 } as unknown as AccountBalance;
@@ -62,7 +62,7 @@ test("a product strategy lists the products it names in one group", () => {
   const figures = {
     account: 6,
     categories: [],
-    strategy: { total: "50", products: [{ product: 10, current: "50", target: "40", shortfall: "-10" }] },
+    strategy: { total: "50", products: [{ product: 10, current: "50" }] },
   } as unknown as AccountBalance;
 
   const groups = productGroups(view, strategy, figures, true);

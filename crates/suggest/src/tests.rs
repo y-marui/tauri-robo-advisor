@@ -1186,36 +1186,22 @@ fn weighted_pair() -> (Portfolio, AccountId, ProductId, ProductId, CategoryId) {
 }
 
 #[test]
-fn account_balance_compares_products_with_their_weights() {
+fn account_balance_lists_what_the_account_holds_per_product() {
     let (p, acc, a, b, c) = weighted_pair();
 
     let balance = account_balance(&p, acc).unwrap();
 
     let line = &balance.categories.iter().find(|x| x.category == c).unwrap();
     assert_eq!(line.total, dec!(200000));
-    let for_product = |id| line.products.iter().find(|x| x.product == id).unwrap();
-    assert_eq!(for_product(a).target, Some(dec!(150000)));
-    assert_eq!(for_product(a).shortfall, Some(dec!(50000)));
-    assert_eq!(for_product(b).target, Some(dec!(50000)));
-    assert_eq!(for_product(b).shortfall, Some(dec!(-50000)));
-}
-
-#[test]
-fn account_balance_shows_an_equal_share_for_free_categories() {
-    let (mut p, acc, a, b, c) = weighted_pair();
-    hold(&mut p, acc, a, dec!(300000));
-    let set = |p: &mut Portfolio, targeting| target(p, c, targeting);
-    let line = |p: &Portfolio| account_balance(p, acc).unwrap().categories[0].clone();
-
-    // Free is an equal split, like the suggestions treat it: 300000 and 100000 held -> 200000 each.
-    set(&mut p, Targeting::Free);
-    let free = line(&p);
-    let of = |l: &CategoryBalance, id| l.products.iter().find(|x| x.product == id).unwrap().clone();
-    assert_eq!(of(&free, a).current, dec!(300000));
-    assert_eq!(of(&free, a).target, Some(dec!(200000)));
-    assert_eq!(of(&free, a).shortfall, Some(dec!(-100000)));
-    assert_eq!(of(&free, b).target, Some(dec!(200000)));
-    assert_eq!(of(&free, b).shortfall, Some(dec!(100000)));
+    let current = |id| {
+        line.products
+            .iter()
+            .find(|x| x.product == id)
+            .unwrap()
+            .current
+    };
+    assert_eq!(current(a), dec!(100000));
+    assert_eq!(current(b), dec!(100000));
 }
 
 #[test]
@@ -1244,27 +1230,6 @@ fn account_balance_rejects_an_unknown_account() {
         account_balance(&p, AccountId(9999)),
         Err(Error::UnknownAccount)
     );
-}
-
-#[test]
-fn account_balance_targets_add_up_to_the_category_total() {
-    let mut p = Portfolio::default();
-    let c = category(&mut p, "All", dec!(1));
-    let ids: Vec<_> = ["A", "B", "C"]
-        .into_iter()
-        .map(|n| product(&mut p, n, c, "JPY"))
-        .collect();
-    let acc = account(&mut p, "Main");
-    hold(&mut p, acc, ids[0], dec!(100));
-    target(&mut p, c, Targeting::Equal);
-
-    let balance = account_balance(&p, acc).unwrap();
-
-    let line = &balance.categories[0];
-    let sum: Decimal = line.products.iter().filter_map(|x| x.target).sum();
-    assert_eq!(sum, dec!(100));
-    let shortfalls: Decimal = line.products.iter().filter_map(|x| x.shortfall).sum();
-    assert_eq!(shortfalls, Decimal::ZERO);
 }
 
 #[test]
@@ -1319,33 +1284,6 @@ fn each_mode_uses_the_product_setting_of_its_own_mode() {
     .unwrap();
     // Afterwards 75000 and 25000 are left, 3:1.
     assert_eq!(deltas(&sell), vec![(a, dec!(-25000)), (b, dec!(-75000))]);
-}
-
-#[test]
-fn the_account_balance_follows_the_fixed_add_setting() {
-    let (mut p, acc, a, b, c) = weighted_pair();
-    // The other modes disagree; the table does not look at them.
-    for id in [a, b] {
-        share(&mut p, SuggestionMode::FullRebalance, id, dec!(1));
-    }
-    let target = |p: &Portfolio, product| {
-        let balance = account_balance(p, acc).unwrap();
-        let line = balance.categories.iter().find(|x| x.category == c).unwrap();
-        line.products
-            .iter()
-            .find(|x| x.product == product)
-            .unwrap()
-            .target
-    };
-    assert_eq!(target(&p, a), Some(dec!(150000)));
-
-    // A third product without a setting has the weight 1; A is raised to 2: 300000 is split 2:1:1.
-    share(&mut p, SuggestionMode::FixedAdd, a, dec!(2));
-    let third = product(&mut p, "C", c, "JPY");
-    hold(&mut p, acc, third, dec!(100000));
-    assert_eq!(target(&p, a), Some(dec!(150000)));
-    assert_eq!(target(&p, b), Some(dec!(75000)));
-    assert_eq!(target(&p, third), Some(dec!(75000)));
 }
 
 #[test]

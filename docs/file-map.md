@@ -95,7 +95,7 @@ _最終更新: 2026-10-19_
 | `crates/portfolio/src/error.rs` | `Error` と `Issue` | `thiserror` |
 | `crates/suggest/src/engine.rs` | 評価額の換算、4 つのモード（1 口座または全口座）、2 つの配り方（ポートフォリオに従う / 商品の比率でカテゴリをまたいで配る）、口座への配り、結果の組み立て | `fill.rs`, `round.rs`, `portfolio` |
 | `crates/suggest/src/overview.rs` | グループごと（目標はカテゴリの合計）、カテゴリごと、保有ごと、種別ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
-| `crates/suggest/src/account_balance.rs` | 口座内の商品バランス（商品比率に対する現在額と不足・超過。種別ごとの現在額つき。定額追加の設定を使う） | `engine.rs`, `portfolio` |
+| `crates/suggest/src/account_balance.rs` | 口座内の商品バランス（商品ごとの現在額とカテゴリの合計。種別ごとの現在額つき） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/strategy.rs` | 商品と比率を指定した口座（戦略）の提案（4 つのモード）と、指定商品の比率に対する口座内バランス | `fill.rs`, `round.rs`, `engine.rs`, `portfolio` |
 | `crates/suggest/src/account_level_tests.rs` | 口座のタブはその口座の保有と比率で水位を数え、「すべて」は全口座の保有と「すべて」の比率で数えるテスト | `engine.rs`, `portfolio` |
 | `crates/suggest/src/split.rs` | 売りを種別のレコードに割り振る最後の手順（NISA 系は最後。丸め単位を守り、合計を保つ）と、口座の残高用の種別ごとの現在額 | `engine.rs`, `portfolio` |

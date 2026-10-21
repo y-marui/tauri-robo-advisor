@@ -16,6 +16,7 @@
 
 ### Changed
 
+- The account balance (`get_account_balance`) no longer computes a target or shortfall per product (the Rebalance table stopped showing them): `ProductBalance` keeps `product`, `current` and `types`. Suggestions are unchanged.
 - Rebalance, account tabs: a suggestion on an account's tab now levels by that account's own holdings (products and, with "Follow the portfolio", categories and the total), in every mode and both allocation methods, so the After values of a fixed add follow the weights; the All tab still looks at every account. Weights are kept per tab: each account tab and All have their own weight for a product and mode (`ProductShareEntry::account`, edit `SetProductShare.account`), and the balance table of an account uses its own. Schema version 24: an older file copies every weight to each account's tab and keeps it for All; an older app refuses the new file. `product_targets.csv` gains `account_id` (empty for All).
 - Schema version 22: a product share is now just a weight (default 1, replacing equal share); "keep current" is removed. Older files are converted on load. `product_targets.csv` loses `targeting`; the "Target" and "Short(+)/over(-)" columns of the Rebalance product table are gone.
 - Schema version 21 adds `Account::excluded_all` (edit `SetExcluded.all`); an older file starts with it equal to `excluded`. `accounts.csv` gets `excluded_all_product_ids`.
