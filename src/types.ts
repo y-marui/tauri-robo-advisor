@@ -41,6 +41,8 @@ export interface Account {
   sellable: boolean;
   /** `null` means the account can buy any product. */
   tradable: number[] | null;
+  /** Products suggestions never buy or sell in this account. */
+  excluded?: number[];
   rounding_unit: string;
 }
 
@@ -271,6 +273,7 @@ export type Edit =
       rounding_unit?: string;
     }
   | { type: "set_tradable"; id: number; products: number[] | null }
+  | { type: "set_excluded"; id: number; products: number[] }
   | { type: "remove_account"; id: number }
   | { type: "move_account"; id: number; up: boolean }
   | { type: "move_group"; id: number; up: boolean }

@@ -159,6 +159,7 @@ impl<'a> Book<'a> {
             .products
             .iter()
             .filter(|p| p.category == category)
+            .filter(|p| !self.account.excluded.contains(&p.id))
             .filter(|p| {
                 self.account
                     .tradable
@@ -179,6 +180,7 @@ impl<'a> Book<'a> {
             .products
             .iter()
             .filter(|p| p.category == category)
+            .filter(|p| !self.account.excluded.contains(&p.id))
             .filter_map(|p| {
                 let value = self.account_value.get(&p.id).copied().unwrap_or_default();
                 (value > Decimal::ZERO).then_some((p, value))
@@ -212,12 +214,8 @@ impl<'a> Book<'a> {
             .map(|p| {
                 let value = self.global_value(p);
                 match category.targeting {
-                    ProductTargeting::Free => Item {
-                        weight: Decimal::ONE,
-                        current: Decimal::ZERO,
-                        cap: None,
-                    },
-                    ProductTargeting::Equal => Item {
+                    // No product ratios were set: aim at equal weights, counting what is held.
+                    ProductTargeting::Free | ProductTargeting::Equal => Item {
                         weight: Decimal::ONE,
                         current: value,
                         cap: None,
@@ -251,8 +249,7 @@ impl<'a> Book<'a> {
             .map(|(p, here)| {
                 let value = self.global_value(p);
                 let (weight, current) = match category.targeting {
-                    ProductTargeting::Free => (*here, -*here),
-                    ProductTargeting::Equal => (Decimal::ONE, -value),
+                    ProductTargeting::Free | ProductTargeting::Equal => (Decimal::ONE, -value),
                     ProductTargeting::Weighted => (
                         self.portfolio.product_weight(p.id).unwrap_or_default(),
                         -value,

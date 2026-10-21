@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Per-account exclusion of products from trading (#142): `Account::excluded` (edit `SetExcluded`, "Left out of trading" in the Accounts card of the settings tab) lists products that suggestions never buy or sell in that account, in any mode; their holdings still count toward the category's value. The Rebalance account tab marks them "Excluded". `accounts.csv` gets `excluded_product_ids`. Schema version 16 (an older app refuses the file); an older file loads with nothing excluded, no conversion needed.
+
+### Changed
+
+- Products inside a category are brought toward equal weights taking what is held into account (#142): the default "Free" targeting no longer splits a purchase evenly (or sells in proportion to the account holding); it behaves like "Equal", so the product furthest below its share is raised first. A category still goes one way only, and a product that cannot be traded (excluded, not tradable, nothing to sell) is left out so the rest take the amount.
+
 ### Fixed
 
 - Suggestion rounding keeps the total (#141): the amount that can be sold is now counted per product in whole rounding units (each holding rounded down to the unit), so a fixed sell and the sell side of a full rebalance no longer fail or mismatch when holdings are not multiples of the unit; a full rebalance lowers the trade to what whole units can deliver and reports the rest. Buys and sells still add up exactly to the applied amount. No saved format changes.

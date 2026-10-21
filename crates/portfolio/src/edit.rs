@@ -156,6 +156,11 @@ pub enum Edit {
         /// `None` means the account can buy any product.
         products: Option<Vec<ProductId>>,
     },
+    /// Sets the products suggestions never buy or sell in the account.
+    SetExcluded {
+        id: AccountId,
+        products: Vec<ProductId>,
+    },
     /// Moves an account to a given place in the list, like `MoveGroupTo`.
     MoveAccountTo {
         id: AccountId,
@@ -1014,6 +1019,7 @@ impl Portfolio {
                     if let Some(tradable) = &mut account.tradable {
                         tradable.retain(|p| *p != id);
                     }
+                    account.excluded.retain(|p| *p != id);
                 }
             }
             Edit::MergeProducts {
@@ -1064,6 +1070,10 @@ impl Portfolio {
                         }
                         tradable.retain(|p| *p != remove);
                     }
+                    if account.excluded.contains(&remove) && !account.excluded.contains(&keep) {
+                        account.excluded.push(keep);
+                    }
+                    account.excluded.retain(|p| *p != remove);
                 }
                 self.product_mut(keep)?.aliases.extend(from.aliases);
                 self.products.retain(|p| p.id != remove);
@@ -1107,6 +1117,9 @@ impl Portfolio {
                     {
                         tradable.push(id);
                     }
+                    if account.excluded.contains(&product) {
+                        account.excluded.push(id);
+                    }
                 }
             }
             Edit::AddAlias {
@@ -1136,6 +1149,7 @@ impl Portfolio {
                     name: new_name,
                     sellable: true,
                     tradable: None,
+                    excluded: Vec::new(),
                     rounding_unit: Decimal::ONE,
                 });
             }
@@ -1177,6 +1191,15 @@ impl Portfolio {
                     list
                 });
                 self.account_mut(id)?.tradable = products;
+            }
+            Edit::SetExcluded { id, products } => {
+                for product in &products {
+                    self.product(*product)?;
+                }
+                let mut products = products;
+                products.sort();
+                products.dedup();
+                self.account_mut(id)?.excluded = products;
             }
             Edit::MoveAccount { id, up } => {
                 self.account(id)?;

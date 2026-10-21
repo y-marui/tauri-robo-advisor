@@ -308,6 +308,7 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
         "sellable",
         "rounding_unit",
         "tradable_product_ids",
+        "excluded_product_ids",
         "value_jpy",
     ]);
     for account in &portfolio.accounts {
@@ -318,6 +319,7 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
             plain_cell(if account.sellable { "true" } else { "false" }),
             number(account.rounding_unit),
             plain_cell(&tradable(account)),
+            plain_cell(&excluded(account)),
             optional_number(value),
         ]);
     }
@@ -355,6 +357,15 @@ fn tradable(account: &Account) -> String {
             .collect::<Vec<_>>()
             .join(";"),
     }
+}
+
+fn excluded(account: &Account) -> String {
+    account
+        .excluded
+        .iter()
+        .map(|id| id.0.to_string())
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 fn product_of(portfolio: &Portfolio, id: portfolio::ProductId) -> Option<&Product> {
@@ -404,6 +415,8 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
            apostrophe so a spreadsheet does not run it as a formula; remove the apostrophe if you\n\
            need the original name.\n\
          * `tradable_product_ids` is `all` or a list of product ids separated by semicolons.\n\
+         * `excluded_product_ids` lists the products suggestions never buy or sell in the account\n\
+           (product ids separated by semicolons; empty when none).\n\
          * Ids are stable numbers and are never reused.\n\
          \n\
          This export has {categories} categories, {products} products, {accounts} accounts, and {holdings} holdings.\n",
