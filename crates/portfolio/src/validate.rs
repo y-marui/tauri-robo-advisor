@@ -69,7 +69,7 @@ pub(crate) fn currency(value: &str) -> Result<String, Error> {
 /// The most products a strategy lists, and the largest ratio (ratios are relative, so a huge one
 /// is a typing mistake) and its decimals (so sums and divisions stay exact).
 const MAX_STRATEGY_ITEMS: usize = 100;
-const MAX_STRATEGY_RATIO: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
+pub(crate) const MAX_STRATEGY_RATIO: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
 const MAX_STRATEGY_RATIO_SCALE: u32 = 6;
 
 impl Portfolio {

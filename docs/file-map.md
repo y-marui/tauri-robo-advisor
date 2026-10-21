@@ -7,8 +7,9 @@ _最終更新: 2026-10-19_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `index.html` | HTML のエントリ | `src/main.ts`, `src/styles.css` |
-| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、タブとパネルの組み立て | `src/views/account-strategy.ts` | 設定の口座の「戦略」（ポートフォリオに従う / 商品と比率を指定）の編集 | `src/views/accounts.ts`, `src/types.ts` |
-| `src/api.ts`, `src/views/*` |
+| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、タブとパネルの組み立て | `src/api.ts`, `src/views/*` |
+| `src/views/account-strategy.ts` | 設定の口座の「戦略」（ポートフォリオに従う / 商品と比率を指定）の編集（下書きを整合したときだけ保存） | `src/views/accounts.ts`, `src/strategy-draft.ts`, `src/types.ts` |
+| `src/strategy-draft.ts` | 戦略の下書きの検証（商品あり・比率は全部空欄か全部入力・正の数）。保存の可否と理由を返す | `src/decimal.ts` |
 | `src/api.ts` | Rust のコマンド（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）の呼び出し | `@tauri-apps/api/core` |
 | `src/types.ts` | Rust の JSON に対応する型（金額は十進数の文字列） | — |
 | `src/decimal.ts` | 十進数の文字列の変換（％ ↔ 小数、桁区切り表示）。浮動小数点を使わない | — |

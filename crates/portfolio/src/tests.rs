@@ -376,6 +376,44 @@ fn merging_products_merges_their_strategy_ratios() {
 }
 
 #[test]
+fn merging_products_whose_strategy_ratios_would_exceed_the_limit_is_refused() {
+    let (mut p, cat, prod, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddProduct {
+            name: "Second".to_owned(),
+            category: cat,
+            currency: "JPY".to_owned(),
+        },
+    );
+    let second = p.products.last().unwrap().id;
+    let item = |product, ratio| StrategyItem {
+        product,
+        ratio: Some(ratio),
+    };
+    apply(
+        &mut p,
+        Edit::SetStrategy {
+            id: acc,
+            strategy: Strategy::Products {
+                items: vec![item(prod, dec!(600000)), item(second, dec!(600000))],
+            },
+        },
+    );
+    let before = p.clone();
+    assert!(
+        p.apply(Edit::MergeProducts {
+            keep: prod,
+            remove: second,
+            on_conflict: MergeConflict::default(),
+        })
+        .is_err()
+    );
+    assert_eq!(p, before);
+    p.validate_integrity().unwrap();
+}
+
+#[test]
 fn settings_are_range_checked() {
     let (mut p, _, _, _) = sample();
 

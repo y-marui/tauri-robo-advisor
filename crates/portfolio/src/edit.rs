@@ -1033,6 +1033,26 @@ impl Portfolio {
                 if keep == remove {
                     return Err(Error::Invalid("choose two different products".to_owned()));
                 }
+                // Ratios of a product listed twice add up; refuse a merge whose sum would break the
+                // limit of a ratio before anything changes.
+                for account in &self.accounts {
+                    let ratio = |id| {
+                        account
+                            .strategy
+                            .items()
+                            .iter()
+                            .find(|i| i.product == id)
+                            .and_then(|i| i.ratio)
+                    };
+                    if let (Some(a), Some(b)) = (ratio(keep), ratio(remove))
+                        && a.checked_add(b)
+                            .is_none_or(|sum| sum > crate::validate::MAX_STRATEGY_RATIO)
+                    {
+                        return Err(Error::Invalid(
+                            "the merged strategy ratio would be too large".to_owned(),
+                        ));
+                    }
+                }
                 let from = self.product(remove)?.clone();
                 let into = self.product(keep)?;
                 if from.currency != into.currency {

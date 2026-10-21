@@ -1,7 +1,7 @@
-import { cleanDecimal } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Bind, Context } from "../panel.ts";
+import { type DraftProblem, strategyFromDraft } from "../strategy-draft.ts";
 import type { PortfolioView, Product, Strategy } from "../types.ts";
 
 // The strategy of one account in the settings: follow the portfolio's targets, or aim at a list
@@ -39,43 +39,79 @@ export function strategyEditor(
   const list = h(
     "div",
     {},
-    h("p", { class: "note" }, t("Tick the products and type a ratio for each (blank = equal share). Category targets are not used for this account, and products outside the list are neither bought nor sold.")),
+    h("p", { class: "note" }, t("Tick the products and type a ratio for each (blank = equal share), then save. Category targets are not used for this account, and products outside the list are neither bought nor sold.")),
     ...rows.map((row, index) =>
       h("label", { class: "check" }, row.box, products[index]?.name ?? "", " ", row.ratio),
     ),
   );
 
-  const send = (): void => {
-    const ticked = rows.filter((row) => row.box.checked);
-    if (mode.value === "portfolio") {
-      void ctx.apply({ type: "set_strategy", id: account, strategy: { type: "portfolio" } });
-      return;
+  // Edits are a draft until "Save" (enabled only when the draft is consistent, with the reason shown
+  // otherwise), so the saved strategy never passes through an invalid state.
+  let dirty = false;
+  const save = h("button", { type: "button" }, t("Save strategy"));
+  const reason = h("p", { class: "note" });
+
+  const problemText = (problem: DraftProblem): string => {
+    switch (problem) {
+      case "no_product":
+        return t("Tick at least one product.");
+      case "mixed_ratios":
+        return t("Give a ratio to every ticked product, or leave them all blank.");
+      case "invalid_number":
+        return t("Enter a valid number.");
+      case "not_positive":
+        return t("Ratios must be positive.");
     }
-    if (ticked.length === 0) {
-      // Unticking the last product leaves the strategy as it was saved until another is ticked.
-      return;
-    }
-    const items: { product: number; ratio: string | null }[] = [];
-    for (const row of ticked) {
-      const text = row.ratio.value.trim();
-      const ratio = text === "" ? null : cleanDecimal(text);
-      if (text !== "" && ratio === null) {
-        ctx.fail(t("Enter a valid number."));
-        return;
-      }
-      items.push({ product: row.id, ratio });
-    }
-    void ctx.apply({ type: "set_strategy", id: account, strategy: { type: "products", items } });
   };
+
+  const draft = () =>
+    strategyFromDraft(rows.map((row) => ({ id: row.id, checked: row.box.checked, ratio: row.ratio.value })));
+
+  const refreshSave = (): void => {
+    const result = draft();
+    const editing = mode.value === "products" && dirty;
+    save.hidden = !editing;
+    save.disabled = !result.ok;
+    reason.textContent = editing && !result.ok ? problemText(result.problem) : "";
+  };
+
+  const touch = (): void => {
+    dirty = true;
+    refreshSave();
+  };
+
+  save.addEventListener("click", () => {
+    const result = draft();
+    if (!result.ok) {
+      return;
+    }
+    save.disabled = true;
+    void ctx
+      .apply({ type: "set_strategy", id: account, strategy: { type: "products", items: result.items } })
+      .then((ok) => {
+        if (ok) {
+          dirty = false;
+        }
+      })
+      .finally(refreshSave);
+  });
 
   mode.addEventListener("change", () => {
     wantProducts = mode.value === "products";
     list.hidden = !wantProducts;
-    send();
+    if (wantProducts) {
+      // The list is edited as a draft; the saved strategy is unchanged until it is saved.
+      dirty = true;
+      refreshSave();
+    } else {
+      dirty = false;
+      refreshSave();
+      void ctx.apply({ type: "set_strategy", id: account, strategy: { type: "portfolio" } });
+    }
   });
   for (const row of rows) {
-    row.box.addEventListener("change", send);
-    row.ratio.addEventListener("change", send);
+    row.box.addEventListener("change", touch);
+    row.ratio.addEventListener("input", touch);
   }
 
   bind((view: PortfolioView) => {
@@ -87,14 +123,16 @@ export function strategyEditor(
     }
     mode.value = wantProducts ? "products" : "portfolio";
     list.hidden = !wantProducts;
-    for (const row of rows) {
-      const item = strategy.type === "products" ? strategy.items.find((i) => i.product === row.id) : undefined;
-      row.box.checked = item !== undefined;
-      if (document.activeElement !== row.ratio) {
+    // A draft in progress is not overwritten by a refresh.
+    if (!dirty) {
+      for (const row of rows) {
+        const item = strategy.type === "products" ? strategy.items.find((i) => i.product === row.id) : undefined;
+        row.box.checked = item !== undefined;
         row.ratio.value = item?.ratio ?? "";
       }
     }
+    refreshSave();
   });
 
-  return h("details", {}, h("summary", {}, t("Strategy")), mode, list);
+  return h("details", {}, h("summary", {}, t("Strategy")), mode, list, reason, save);
 }
