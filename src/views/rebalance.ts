@@ -2,27 +2,19 @@ import { getAccountBalance } from "../api.ts";
 import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
+import { accountFor, type Selection } from "../rebalance-account.ts";
 import type { AccountBalance, PortfolioView } from "../types.ts";
 import { categoryName, deltaClass, signed, suggestionBox, yen } from "./suggestion.ts";
 
-// The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". "All" is the
-// overall suggestion for the rebalancing account (its choice included). An account tab compares
-// the products the account holds with their weights and suggests how to spend an addition there;
-// products the account does not hold are left out of both. Every figure comes from Rust.
-
-type Selection = number | "all";
+// The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Every tab has the
+// same layout: the suggestion form and its result on top, the account's holdings (balance inside
+// the account) below. An account tab works on its account; "All" works on the rebalancing account,
+// which it also lets the person choose. Products the account does not hold are left out of both
+// the list and the suggestion. Every figure comes from Rust.
 
 export function rebalancePanel(ctx: Context): Panel {
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("Rebalance") });
   const balance = h("div", { class: "account-balance" });
-  const accountPart = h(
-    "div",
-    {},
-    h("h3", {}, t("Balance inside the account")),
-    balance,
-    h("h3", {}, t("Add to this account")),
-  );
-  const body = h("div", { role: "tabpanel", class: "tab-body" });
 
   let current: PortfolioView | null = null;
   let selected: Selection = "all";
@@ -30,39 +22,38 @@ export function rebalancePanel(ctx: Context): Panel {
   let sequence = 0;
   let shownAccount: number | null = null;
 
-  const box = suggestionBox({
-    modes: ["fixed_add", "buy_only_to_target"],
-    account: () => (selected === "all" ? null : selected),
-    heldOnly: true,
-    noAccountMessage: () => t("Choose an account first."),
-  });
-  accountPart.append(box.el);
+  const accountNow = (): number | null =>
+    accountFor(selected, current?.portfolio.settings.target_account ?? null);
 
-  const allBox = suggestionBox({
+  // The same form for "All" and the account tabs; "All" works on the rebalancing account.
+  const box = suggestionBox({
     modes: ["fixed_add", "buy_only_to_target", "full_rebalance", "fixed_sell"],
-    account: () => current?.portfolio.settings.target_account ?? null,
+    account: accountNow,
     heldOnly: true,
-    noAccountMessage: () => t("Choose the rebalancing account first."),
+    noAccountMessage: () =>
+      selected === "all" ? t("Choose the rebalancing account first.") : t("Choose an account first."),
   });
   const targetSelect = h("select", { "aria-label": t("Rebalancing account") });
   // The suggestion must use the saved account, so it waits while the choice is being saved.
   targetSelect.addEventListener("change", () => {
-    allBox.setBusy(true);
+    box.setBusy(true);
     void ctx
       .apply({
         type: "set_target_account",
         account: targetSelect.value === "" ? null : Number(targetSelect.value),
       })
-      .finally(() => allBox.setBusy(false));
+      .finally(() => box.setBusy(false));
   });
   let targetSignature: string | null = null;
-  const allPart = h(
+  const targetField = h("label", { class: "field" }, h("span", {}, t("Rebalancing account")), targetSelect);
+  const body = h(
     "div",
-    {},
-    h("label", { class: "field" }, h("span", {}, t("Rebalancing account")), targetSelect),
-    allBox.el,
+    { role: "tabpanel", class: "tab-body" },
+    targetField,
+    box.el,
+    h("h3", {}, t("Balance inside the account")),
+    balance,
   );
-  body.append(allPart, accountPart);
 
   const el = h("section", { class: "card rebalance" }, h("h2", {}, t("Rebalance")), tabs, body);
 
@@ -103,7 +94,7 @@ export function rebalancePanel(ctx: Context): Panel {
       }
     }
     if (rows.length === 0) {
-      return h("p", { class: "note" }, t("This account holds nothing yet. Use the All tab, or add a record in Settings."));
+      return h("p", { class: "note" }, t("This account holds nothing yet. Add a record in Settings."));
     }
     return h(
       "div",
@@ -129,10 +120,13 @@ export function rebalancePanel(ctx: Context): Panel {
   }
 
   function refreshBalance(view: PortfolioView): void {
-    const account = selected === "all" ? null : selected;
+    const account = accountNow();
     if (account === null) {
       shownAccount = null;
-      balance.replaceChildren();
+      sequence += 1;
+      balance.replaceChildren(
+        h("p", { class: "note" }, selected === "all" ? t("Choose the rebalancing account first.") : ""),
+      );
       return;
     }
     const mine = ++sequence;
@@ -164,11 +158,9 @@ export function rebalancePanel(ctx: Context): Panel {
       tab.setAttribute("aria-selected", String(active));
       tab.tabIndex = active ? 0 : -1;
     }
-    allPart.hidden = id !== "all";
-    accountPart.hidden = id === "all";
+    targetField.hidden = id !== "all";
     if (current) {
       box.update(current);
-      allBox.update(current);
       refreshBalance(current);
     }
   }

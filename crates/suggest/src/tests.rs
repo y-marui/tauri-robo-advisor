@@ -625,20 +625,9 @@ fn a_fixed_sell_always_adds_up_and_stays_within_holdings() {
 
 // ---- full rebalance -------------------------------------------------------
 
-fn with_target(f: &mut Fixture) {
-    let account = f.main;
-    apply(
-        &mut f.portfolio,
-        Edit::SetTargetAccount {
-            account: Some(account),
-        },
-    );
-}
-
 #[test]
 fn a_full_rebalance_sells_the_excess_and_buys_the_shortfall() {
-    let mut f = fixture();
-    with_target(&mut f);
+    let f = fixture();
 
     let s = run(&f.portfolio, f.main, Mode::FullRebalance).unwrap();
 
@@ -653,24 +642,48 @@ fn a_full_rebalance_sells_the_excess_and_buys_the_shortfall() {
 }
 
 #[test]
-fn a_full_rebalance_needs_the_rebalancing_account() {
+fn a_full_rebalance_works_for_any_account_that_may_sell() {
     let mut f = fixture();
-
-    assert_eq!(
-        run(&f.portfolio, f.main, Mode::FullRebalance),
-        Err(Error::NoTargetAccount)
+    // No rebalancing account is set. The sub account may sell and holds the stocks.
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateAccount {
+            id: f.sub,
+            name: None,
+            sellable: Some(true),
+            rounding_unit: None,
+        },
     );
-    with_target(&mut f);
+    hold(&mut f.portfolio, f.main, f.s1, dec!(50000));
+    hold(&mut f.portfolio, f.sub, f.s1, dec!(650000));
+
+    let s = run(&f.portfolio, f.sub, Mode::FullRebalance).unwrap();
+
+    // Only the sub account trades: it sells the stock excess and buys what it holds of bonds.
+    assert_eq!(s.account, f.sub);
     assert_eq!(
-        run(&f.portfolio, f.sub, Mode::FullRebalance),
-        Err(Error::NotTargetAccount)
+        deltas(&s),
+        vec![(f.s1, dec!(-160000)), (f.b1, dec!(160000))]
+    );
+}
+
+#[test]
+fn a_full_rebalance_in_an_account_that_may_not_sell_only_reports() {
+    let f = fixture();
+
+    let s = run(&f.portfolio, f.sub, Mode::FullRebalance).unwrap();
+
+    assert!(s.products.is_empty());
+    assert!(
+        s.notes
+            .iter()
+            .any(|n| matches!(n, Note::CategoryNotFilled { .. }))
     );
 }
 
 #[test]
 fn deviations_within_the_tolerance_are_left_alone() {
     let mut f = fixture();
-    with_target(&mut f);
     apply(
         &mut f.portfolio,
         Edit::SetTolerances {
@@ -688,7 +701,6 @@ fn deviations_within_the_tolerance_are_left_alone() {
 #[test]
 fn a_full_rebalance_reports_what_the_account_cannot_do() {
     let mut f = fixture();
-    with_target(&mut f);
     apply(
         &mut f.portfolio,
         Edit::UpdateAccount {
@@ -714,7 +726,6 @@ fn a_full_rebalance_reports_what_the_account_cannot_do() {
 #[test]
 fn a_partial_full_rebalance_balances_buys_and_sells() {
     let mut f = fixture();
-    with_target(&mut f);
     // The account holds only 50,000 of stocks, so it can sell at most that.
     hold(&mut f.portfolio, f.main, f.s1, dec!(50000));
     hold(&mut f.portfolio, f.sub, f.s1, dec!(650000));
@@ -883,8 +894,7 @@ fn huge_holdings_and_weights_are_refused_instead_of_overflowing() {
 
 #[test]
 fn suggestions_never_change_the_portfolio() {
-    let mut f = fixture();
-    with_target(&mut f);
+    let f = fixture();
     let before = f.portfolio.clone();
 
     run(

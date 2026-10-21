@@ -479,14 +479,6 @@ impl<'a> Book<'a> {
     }
 
     fn full_rebalance(&self) -> Result<Suggestion, Error> {
-        let target = self
-            .portfolio
-            .settings
-            .target_account
-            .ok_or(Error::NoTargetAccount)?;
-        if target != self.account.id {
-            return Err(Error::NotTargetAccount);
-        }
         let tolerance = self.portfolio.settings.category_tolerance;
 
         // How far each category is from its target, ignoring small deviations.

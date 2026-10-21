@@ -27,10 +27,6 @@ pub enum Error {
     NotEnoughToSell,
     #[error("this account has no product it can buy in the categories that need money")]
     NothingToBuy,
-    #[error("choose the rebalancing account in the settings first")]
-    NoTargetAccount,
-    #[error("this account is not the rebalancing account")]
-    NotTargetAccount,
     #[error(
         "a category with a target of zero still holds value, so the target cannot be reached without selling"
     )]
