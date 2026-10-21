@@ -159,6 +159,7 @@ export function accountsPanel(ctx: Context): Panel {
           h("td", {}),
           h("td", {}),
           h("td", {}),
+          h("td", {}),
           h("td", { class: "add-cell" }, h("button", { type: "submit", form: formId }, t("Add an account"))),
         ),
       );
