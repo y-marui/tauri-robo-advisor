@@ -79,7 +79,7 @@ scripts/     # dev-charter 配布のチェックスクリプト
 - [CONTRIBUTING.md](CONTRIBUTING.md): PR・Issue のルール
 - [docs/architecture.md](docs/architecture.md): モジュール・コンポーネント構造
 - [docs/specification.md](docs/specification.md): 仕様とデータフロー（索引。詳細は `docs/specification-*.md`）
-- [docs/ui-design.md](docs/ui-design.md): UI 設計（設定タブは `docs/ui-design-settings.md`）
+- [docs/ui-design.md](docs/ui-design.md): UI 設計（設定タブは `docs/ui-design-settings.md` と `docs/ui-design-settings-data.md`）
 - [docs/design-constraints.md](docs/design-constraints.md): 設計上の制約とプロジェクトの規則の全文
 
 ## Disclaimer

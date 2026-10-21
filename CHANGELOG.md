@@ -4,6 +4,7 @@
 
 ### Added
 
+- Rebalance remembers, per tab (All and each account), the last chosen allocation method and the "Show all" / "Tradable only" switch of the product list, between tab switches and restarts (`localStorage`).
 - Account types can be sold or not per type, built-in types included (`Portfolio::type_sellable_overrides`, edit `SetTypeSellable`, "Account types" card in Settings); the NISA family stays off by default. Sales of a product held in several types of one account now take from the other types first and from the NISA types last, and the Rebalance table shows such a sale per type (`ProductLine::account_type` / `by_type`, `ProductBalance::types`). Schema version 23; an older app refuses the file.
 - Allocation method in the suggestion form: "Follow the portfolio" (category targets, then product weights inside a category) or "By product weights across categories" (category targets ignored; all candidate products share the money by weight, across categories). `suggest::Request.method`.
 - The Rebalance product table shows a suggestion's "Change" and "After" (current + change) per product; `ProductLine` carries `after`. The per-account trade tables of the result are gone.
@@ -16,6 +17,7 @@
 
 ### Changed
 
+- The account balance (`get_account_balance`) no longer computes a target or shortfall per product (the Rebalance table stopped showing them): `ProductBalance` keeps `product`, `current` and `types`. Suggestions are unchanged.
 - Rebalance, account tabs: a suggestion on an account's tab now levels by that account's own holdings (products and, with "Follow the portfolio", categories and the total), in every mode and both allocation methods, so the After values of a fixed add follow the weights; the All tab still looks at every account. Weights are kept per tab: each account tab and All have their own weight for a product and mode (`ProductShareEntry::account`, edit `SetProductShare.account`), and the balance table of an account uses its own. Schema version 24: an older file copies every weight to each account's tab and keeps it for All; an older app refuses the new file. `product_targets.csv` gains `account_id` (empty for All).
 - Schema version 22: a product share is now just a weight (default 1, replacing equal share); "keep current" is removed. Older files are converted on load. `product_targets.csv` loses `targeting`; the "Target" and "Short(+)/over(-)" columns of the Rebalance product table are gone.
 - Schema version 21 adds `Account::excluded_all` (edit `SetExcluded.all`); an older file starts with it equal to `excluded`. `accounts.csv` gets `excluded_all_product_ids`.

@@ -82,7 +82,7 @@
 
 ## Detail Files
 
-設定タブのカード（bitFlyer、Coincheck、GMO コイン、Binance、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups）と Settings Tab は [ui-design-settings.md](ui-design-settings.md) に分けてある。
+設定タブのカードは [ui-design-settings.md](ui-design-settings.md)（bitFlyer、Coincheck、GMO コイン、Binance、表の取り込み、ブラウザで取得、取得レシピ）と [ui-design-settings-data.md](ui-design-settings-data.md)（保存先、Records、Groups、Settings Tab、Accounts）に分けてある。
 
 ## Remembered Account on Exchange Cards
 

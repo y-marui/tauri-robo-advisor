@@ -19,7 +19,7 @@ AI はタスク開始時に以下の順で参照する:
 - `docs/file-map.md`（ファイルレベルの依存関係 ※情報が足りない・古い場合は適宜探索し、追記・更新する）
 - `docs/design-constraints.md`（Design Constraints などの全文）
 - `docs/specification.md`（機能仕様の索引。詳細は `docs/specification-*.md`）
-- `docs/ui-design.md`（UI 設計。設定タブは `docs/ui-design-settings.md`）
+- `docs/ui-design.md`（UI 設計。設定タブは `docs/ui-design-settings*.md`）
 
 ---
 

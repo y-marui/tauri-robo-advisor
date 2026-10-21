@@ -180,11 +180,8 @@ fn sub_account_a_spreads_over_funds_one_to_five_equally() {
     let strategy = balance.strategy.unwrap();
     assert!(balance.categories.is_empty());
     assert_eq!(strategy.total, dec!(400000));
-    for line in &strategy.products {
-        assert_eq!(line.target, Some(dec!(80000)));
-    }
-    assert_eq!(strategy.products[4].shortfall, Some(dec!(80000)));
-    assert_eq!(strategy.products[0].shortfall, Some(dec!(-20000)));
+    assert_eq!(strategy.products[0].current, dec!(100000));
+    assert_eq!(strategy.products[4].current, dec!(0));
 
     // The fifth fund is empty, so it takes the money even though the account holds none of it.
     let s = run(

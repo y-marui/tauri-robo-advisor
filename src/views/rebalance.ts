@@ -5,6 +5,7 @@ import { cleanDecimal } from "../decimal.ts";
 import { amountField, checkboxField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import type { Bind, Context, Panel } from "../panel.ts";
+import { loadListMode, loadMethod, saveListMode, saveMethod, type ListMode } from "../rebalance-choices.ts";
 import { clearAll, selectAll, toggle } from "../rebalance-selection.ts";
 import { weightOf } from "../product-shares.ts";
 import type { Account, AccountBalance, PortfolioView, ProductLine } from "../types.ts";
@@ -20,7 +21,6 @@ import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from 
 // product the account does not hold is still not suggested. Every figure comes from Rust.
 
 type Selection = number | "all";
-type ListMode = "all" | "tradable";
 
 export function rebalancePanel(ctx: Context): Panel {
   const tabs = h("div", { class: "tabs", role: "tablist", "aria-label": t("Rebalance") });
@@ -56,6 +56,8 @@ export function rebalancePanel(ctx: Context): Panel {
       renderLists(current);
     }
   });
+
+  box.onMethodChange((method) => saveMethod(selected, method));
 
   const settingsRows = new Map<number, HTMLElement>();
   let settingsBinders: Bind[] = [];
@@ -252,7 +254,7 @@ export function rebalancePanel(ctx: Context): Panel {
   // account column. Only products an account holds are candidates for it.
   function productList(view: PortfolioView, accounts: Account[]): HTMLElement {
     const multi = selected === "all";
-    const mode = listModes.get(selected) ?? "all";
+    const mode = listModes.get(selected) ?? loadListMode(selected) ?? "all";
     const showAll = mode === "all";
     // A strategy account has its own ratios, so the shares of the portfolio do not apply to it, and
     // it takes no part in All.
@@ -290,7 +292,9 @@ export function rebalancePanel(ctx: Context): Panel {
       showAll ? t("Tradable only") : t("Show all"),
     );
     toggleButton.addEventListener("click", () => {
-      listModes.set(selected, showAll ? "tradable" : "all");
+      const next: ListMode = showAll ? "tradable" : "all";
+      listModes.set(selected, next);
+      saveListMode(selected, next);
       if (current) {
         renderLists(current);
       }
@@ -472,6 +476,7 @@ export function rebalancePanel(ctx: Context): Panel {
 
   function select(id: Selection): void {
     selected = id;
+    box.setMethod(loadMethod(id) ?? "follow_portfolio");
     for (const tab of tabs.querySelectorAll<HTMLButtonElement>("[role=tab]")) {
       const active = tab.dataset["account"] === String(id);
       tab.setAttribute("aria-selected", String(active));

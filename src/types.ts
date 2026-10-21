@@ -457,15 +457,11 @@ export interface Suggestion {
   notes: Note[];
 }
 
-/** One product in one account against its weight. Mirrors `suggest::AccountBalance`. */
+/** One product in one account. Mirrors `suggest::AccountBalance`. */
 export interface ProductBalance {
   product: number;
   /** JPY held in the account. */
   current: string;
-  /** Whole yen the weights ask for; `null` when the category asks for no split. */
-  target: string | null;
-  /** `target` minus `current`: positive when short, negative when over. */
-  shortfall: string | null;
   /** `current` by record type, in the order a sale takes them. Absent when nothing is held. */
   types?: TypeValue[];
 }
@@ -476,7 +472,7 @@ export interface CategoryBalance {
   products: ProductBalance[];
 }
 
-/** An account with a product strategy: its products against their ratios. */
+/** An account with a product strategy: its products and what the account holds of them. */
 export interface StrategyBalance {
   total: string;
   products: ProductBalance[];
