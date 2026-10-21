@@ -43,9 +43,13 @@ use serde::{Deserialize, Serialize};
 /// (`Category::targeting`) and the records (`Holding::weight`) to the Rebalance tab: a setting per
 /// suggestion mode and product (`Portfolio::product_shares`). An older app would read every product
 /// as an equal share, so it refuses. An older file is converted on load (see `migrate`).
+/// Version 21 gave the All tab its own list of products left out of trading
+/// (`Account::excluded_all`, next to `excluded`, which the account's own tab keeps): an older app
+/// would trade in All by the account's list. An older file starts with the two lists equal (see
+/// `migrate`).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 20;
+pub const SCHEMA_VERSION: u32 = 21;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -181,11 +185,15 @@ pub struct Account {
     /// Whether suggestions may propose selling in this account (a record is also bound by the
     /// selling rule of its type).
     pub sellable: bool,
-    /// Products that do not take part in trading in this account: suggestions never buy or sell
-    /// them. Their holdings still count toward the value of their category. Every other product
+    /// Products that do not take part in trading in this account's own suggestions: they are never
+    /// bought or sold. Their holdings still count toward the value of their category. Every other product
     /// takes part (buying a product the account does not hold is a separate rule).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded: Vec<ProductId>,
+    /// The same for a suggestion across all accounts (the All tab). Kept apart from `excluded`, so
+    /// what is traded in All can differ from what is traded in the account alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_all: Vec<ProductId>,
     /// What the account's suggestions aim at: the portfolio's targets (default), or a list of
     /// products with ratios chosen for this account alone.
     #[serde(default, skip_serializing_if = "Strategy::is_portfolio")]

@@ -30,15 +30,16 @@ export interface ProductGroup {
 /**
  * The groups to show. "Show all" lists every product the account holds; otherwise only those that
  * also take part. Products the account does not hold are never candidates (not every account can
- * trade every product). A product strategy lists the products it names, held or not.
+ * trade every product). `forAll` reads the list kept for the All tab. A product strategy lists the products it names, held or not.
  */
 export function productGroups(
   view: PortfolioView,
   account: Account,
   balance: AccountBalance | null,
   showAll: boolean,
+  forAll = false,
 ): ProductGroup[] {
-  const excluded = new Set(account.excluded ?? []);
+  const excluded = new Set((forAll ? account.excluded_all : account.excluded) ?? []);
   const row = (product: number, figures: ProductBalance | undefined): ProductRow => ({
     product,
     current: figures?.current ?? "0",

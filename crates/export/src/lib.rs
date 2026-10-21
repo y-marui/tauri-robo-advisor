@@ -10,7 +10,7 @@
 
 mod csv;
 
-use portfolio::{Account, Category, Portfolio, Product, ProductShare};
+use portfolio::{Account, Category, Portfolio, Product, ProductId, ProductShare};
 use rust_decimal::Decimal;
 
 use csv::{Table, number, optional_number, plain_cell, text_cell};
@@ -343,6 +343,7 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
         "sellable",
         "rounding_unit",
         "excluded_product_ids",
+        "excluded_all_product_ids",
         "strategy",
         "strategy_products",
         "value_jpy",
@@ -354,7 +355,8 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
             text_cell(&account.name),
             plain_cell(if account.sellable { "true" } else { "false" }),
             number(account.rounding_unit),
-            plain_cell(&excluded(account)),
+            plain_cell(&id_list(&account.excluded)),
+            plain_cell(&id_list(&account.excluded_all)),
             plain_cell(if account.strategy.is_portfolio() {
                 "portfolio"
             } else {
@@ -378,10 +380,8 @@ fn settings(portfolio: &Portfolio) -> Table {
     table
 }
 
-fn excluded(account: &Account) -> String {
-    account
-        .excluded
-        .iter()
+fn id_list(ids: &[ProductId]) -> String {
+    ids.iter()
         .map(|id| id.0.to_string())
         .collect::<Vec<_>>()
         .join(";")
@@ -449,7 +449,8 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
            apostrophe so a spreadsheet does not run it as a formula; remove the apostrophe if you\n\
            need the original name.\n\
          * `excluded_product_ids` lists the products that do not take part in trading in the account\n\
-           (product ids separated by semicolons; empty when none).\n\
+           (product ids separated by semicolons; empty when none). `excluded_all_product_ids` is the same\n\
+           for a suggestion across all accounts.\n\
          * `strategy` is `portfolio` (follow the portfolio's targets) or `products` (specified\n\
            products with ratios); `strategy_products` then lists them as `id` or `id:ratio`\n\
            separated by semicolons (a missing ratio means an equal share).\n\

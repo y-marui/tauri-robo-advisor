@@ -82,6 +82,7 @@ fn limit_to(p: &mut Portfolio, account: AccountId, keep: &[ProductId]) {
         Edit::SetExcluded {
             id: account,
             products: out,
+            all: false,
         },
     );
 }
@@ -443,6 +444,7 @@ fn excluded_products_are_never_traded_but_still_count_for_the_category() {
         Edit::SetExcluded {
             id: acc,
             products: vec![b],
+            all: false,
         },
     );
 
@@ -480,6 +482,7 @@ fn excluded_products_are_never_traded_but_still_count_for_the_category() {
         Edit::SetExcluded {
             id: acc,
             products: vec![a, b, d],
+            all: false,
         },
     );
     assert!(
@@ -1844,6 +1847,7 @@ fn a_product_excluded_in_one_account_is_traded_in_the_others() {
         Edit::SetExcluded {
             id: f.sub,
             products: vec![f.b1],
+            all: true,
         },
     );
 
@@ -2041,4 +2045,34 @@ fn what_can_be_sold_counts_each_account_at_the_common_step() {
     // A full rebalance lowers the trade instead of failing.
     let s = run_all(&f.portfolio, Mode::FullRebalance, true).unwrap();
     assert!(s.products.is_empty());
+}
+
+#[test]
+fn an_account_tab_and_all_use_their_own_exclusion_lists() {
+    let mut f = fixture();
+    // Left out for the account's own suggestions only: All still trades it there.
+    apply(
+        &mut f.portfolio,
+        Edit::SetExcluded {
+            id: f.sub,
+            products: vec![f.b1],
+            all: false,
+        },
+    );
+
+    let s = run_all(
+        &f.portfolio,
+        Mode::FixedAdd {
+            amount: dec!(100000),
+        },
+        true,
+    )
+    .unwrap();
+
+    assert!(
+        in_account(&s, f.sub)
+            .iter()
+            .chain(&in_account(&s, f.main))
+            .any(|(p, _)| *p == f.b1)
+    );
 }

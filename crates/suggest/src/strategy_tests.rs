@@ -281,6 +281,7 @@ fn excluded_products_are_never_traded_but_count_toward_the_total() {
         .apply(Edit::SetExcluded {
             id: f.b,
             products: vec![f2],
+            all: false,
         })
         .unwrap();
     hold(&mut f.portfolio, f.b, f1, dec!(0));

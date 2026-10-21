@@ -225,7 +225,8 @@ fn set_excluded_checks_products_and_follows_product_removal() {
     assert!(
         p.apply(Edit::SetExcluded {
             id: acc,
-            products: vec![ProductId(999)]
+            products: vec![ProductId(999)],
+            all: false
         })
         .is_err()
     );
@@ -234,6 +235,7 @@ fn set_excluded_checks_products_and_follows_product_removal() {
         Edit::SetExcluded {
             id: acc,
             products: vec![prod, prod],
+            all: false,
         },
     );
     assert_eq!(p.accounts[0].excluded, vec![prod]);
@@ -1656,7 +1658,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 20);
+    assert_eq!(SCHEMA_VERSION, 21);
 }
 
 #[test]
@@ -2834,6 +2836,7 @@ fn merging_moves_aliases_and_records_and_removes_the_product() {
         Edit::SetExcluded {
             id: acc2,
             products: vec![b],
+            all: false,
         },
     );
 
@@ -2937,6 +2940,7 @@ fn splitting_cuts_out_an_alias_with_the_picked_records() {
         Edit::SetExcluded {
             id: acc1,
             products: vec![a],
+            all: false,
         },
     );
 
@@ -3305,11 +3309,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 21, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 22, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 21 })
+        Err(Error::UnsupportedVersion { found: 22 })
     ));
 }
 
@@ -3780,4 +3784,44 @@ fn a_malformed_exclusion_list_is_not_rewritten_by_the_migration() {
       "accounts": [{"id": 10, "name": "A", "sellable": true, "rounding_unit": "1", "tradable": [1], "excluded": "oops"}]}"#;
 
     assert!(parse(old.as_bytes()).is_err());
+}
+
+#[test]
+fn the_all_tab_has_its_own_exclusion_list_that_follows_the_products() {
+    let (mut p, _, prod, acc) = sample();
+
+    apply(
+        &mut p,
+        Edit::SetExcluded {
+            id: acc,
+            products: vec![prod],
+            all: true,
+        },
+    );
+    assert_eq!(p.accounts[0].excluded_all, vec![prod]);
+    assert!(p.accounts[0].excluded.is_empty());
+    p.validate_integrity().unwrap();
+
+    apply(&mut p, Edit::RemoveProduct { id: prod });
+    assert!(p.accounts[0].excluded_all.is_empty());
+}
+
+#[test]
+fn an_older_file_starts_with_the_same_list_for_all() {
+    let old = r#"{"schema_version": 20, "next_id": 20,
+      "products": [
+        {"id": 1, "name": "A", "category": 5, "currency": "JPY"},
+        {"id": 2, "name": "B", "category": 5, "currency": "JPY"}],
+      "categories": [{"id": 5, "name": "X", "target_weight": "1"}],
+      "accounts": [
+        {"id": 10, "name": "One", "sellable": true, "rounding_unit": "1", "excluded": [2]},
+        {"id": 11, "name": "Two", "sellable": true, "rounding_unit": "1"}]}"#;
+
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+
+    p.validate_integrity().unwrap();
+    assert_eq!(p.accounts[0].excluded_all, vec![ProductId(2)]);
+    assert_eq!(p.accounts[0].excluded, vec![ProductId(2)]);
+    assert!(p.accounts[1].excluded_all.is_empty());
 }

@@ -249,8 +249,8 @@ export const MESSAGES = {
   "No product takes part in trading.": { ja: "売買に加える商品はありません。" },
   "No products are held yet.": { ja: "保有している商品がありません。" },
   "Account settings": { ja: "口座の設定" },
-  "Only products the account holds are listed. Ticked products take part in trading in their account. Products you leave out are never bought or sold, but still count toward their category. Tradable only lists just the ticked products.": {
-    ja: "口座で保有している商品だけを表示します。チェックした商品が、その口座の売買に加わります。外した商品は買いも売りもしませんが、カテゴリの保有額には数えます。「売買に加えるものだけ」は、チェックした商品だけを表示します。",
+  "Only products the account holds are listed. Ticked products take part in trading in their account. All and each account keep their own ticks. Products you leave out are never bought or sold, but still count toward their category. Tradable only lists just the ticked products.": {
+    ja: "口座で保有している商品だけを表示します。チェックした商品が、その口座の売買に加わります。「すべて」と口座のタブは、それぞれ別にチェックを持ちます。外した商品は買いも売りもしませんが、カテゴリの保有額には数えます。「売買に加えるものだけ」は、チェックした商品だけを表示します。",
   },
   "Ticked products take part in trading in this account. Products you leave out are never bought or sold, but still count toward their category. A product the account does not hold is not bought. Tradable only lists just the ticked products.": {
     ja: "チェックした商品が、この口座の売買に加わります。外した商品は買いも売りもしませんが、カテゴリの保有額には数えます。口座で保有していない商品は買いません。「売買に加えるものだけ」は、チェックした商品だけを表示します。",

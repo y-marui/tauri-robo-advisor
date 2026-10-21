@@ -24,7 +24,7 @@ _最終更新: 2026-10-19_
 | `src/views/rebalance.ts` | 保有タブの副タブ「リバランス」。商品一覧に、選んだモードのカテゴリ内の比率（商品ごと）の編集も出す。先頭の「すべて」（全口座をまたぐ提案）と口座ごとのタブ（口座への追加の提案）。どちらも保有している商品の一覧（「すべて」は口座の列つきの 1 つの表。売買に加えるチェック、表示の切り替え、口座の売却可と丸め単位）を同じ部品で出す | `src/account-products.ts`, `src/rebalance-selection.ts`, `src/product-shares.ts`, `src/views/suggestion.ts`, `src/types.ts` |
 | `src/product-shares.ts` | 商品のカテゴリ内の比率（モードごと）の読み出しと、切り替えの編集の組み立て（テストあり） | `src/types.ts` |
 | `src/account-products.ts` | 口座の商品一覧の行とグループの組み立て（保有している商品 / 売買に加えるものだけ。数字は Rust の `AccountBalance`。テストあり） | `src/types.ts` |
-| `src/rebalance-selection.ts` | 売買に加える商品の選択（すべて選択・解除・切り替え。`excluded` の裏返し。テストあり） | — |
+| `src/rebalance-selection.ts` | 売買に加える商品の選択（すべて選択・解除・切り替え。`excluded` / `excluded_all` の裏返し。テストあり） | — |
 | `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄と結果の表示（「すべて」のタブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |

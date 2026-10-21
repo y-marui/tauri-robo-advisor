@@ -75,6 +75,7 @@ fn sample() -> Portfolio {
         Edit::SetExcluded {
             id: nisa,
             products: vec![us],
+            all: false,
         },
     );
     for (account, product, account_type, value) in [
@@ -214,9 +215,9 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["accounts.csv"]),
         [
-            "account_id,account,sellable,rounding_unit,excluded_product_ids,strategy,strategy_products,value_jpy",
-            "6,Main,true,1,,portfolio,,650000",
-            "7,Tax-free,true,1,4,portfolio,,100000",
+            "account_id,account,sellable,rounding_unit,excluded_product_ids,excluded_all_product_ids,strategy,strategy_products,value_jpy",
+            "6,Main,true,1,,,portfolio,,650000",
+            "7,Tax-free,true,1,4,,portfolio,,100000",
         ]
     );
 }
@@ -397,7 +398,7 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
             .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,"))
     );
     assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,,");
-    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,,portfolio,,");
+    assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,,,portfolio,,");
     // Shares need the total, which is also unknown.
     assert!(holdings[1].ends_with(",500000,"));
 }

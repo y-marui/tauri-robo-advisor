@@ -193,9 +193,19 @@ impl<'a> Book<'a> {
         self.scope.iter().any(|a| a.sellable)
     }
 
+    /// Whether the account leaves the product out of this suggestion: by the account's own list
+    /// when it trades alone, by the list for All when every account trades.
+    fn is_excluded(&self, account: &Account, product: ProductId) -> bool {
+        if self.request_account.is_some() {
+            account.excluded.contains(&product)
+        } else {
+            account.excluded_all.contains(&product)
+        }
+    }
+
     /// Whether the account may buy the product.
     fn can_buy(&self, account: &Account, product: ProductId) -> bool {
-        !account.excluded.contains(&product)
+        !self.is_excluded(account, product)
             && self
                 .held_only
                 .as_ref()
@@ -216,7 +226,7 @@ impl<'a> Book<'a> {
         self.scope
             .iter()
             .copied()
-            .filter(|a| a.sellable && !a.excluded.contains(&product))
+            .filter(|a| a.sellable && !self.is_excluded(a, product))
             .filter_map(|a| {
                 let value = self
                     .account_value

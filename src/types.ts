@@ -52,6 +52,8 @@ export interface Account {
   sellable: boolean;
   /** Products that do not take part in trading in this account: suggestions never buy or sell them. */
   excluded?: number[];
+  /** The same for the All tab's suggestions. */
+  excluded_all?: number[];
   /** What suggestions aim at; absent: follow the portfolio. */
   strategy?: Strategy;
   rounding_unit: string;
@@ -278,7 +280,7 @@ export type Edit =
       sellable?: boolean;
       rounding_unit?: string;
     }
-  | { type: "set_excluded"; id: number; products: number[] }
+  | { type: "set_excluded"; id: number; products: number[]; all?: boolean }
   | { type: "set_strategy"; id: number; strategy: Strategy }
   | { type: "remove_account"; id: number }
   | { type: "move_account"; id: number; up: boolean }

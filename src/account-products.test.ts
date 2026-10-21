@@ -77,3 +77,9 @@ test("a product strategy lists the products it names in one group", () => {
 test("without a balance nothing is known to be held, so nothing is listed", () => {
   assert.deepEqual(productGroups(view, account, null, true), []);
 });
+
+test("the All tab reads its own list of products left out", () => {
+  const both = { ...account, excluded: [], excluded_all: [10] } as Account;
+  assert.equal(productGroups(view, both, balance, true)[0]?.rows[0]?.takesPart, true);
+  assert.equal(productGroups(view, both, balance, true, true)[0]?.rows[0]?.takesPart, false);
+});

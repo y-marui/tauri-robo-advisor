@@ -36,6 +36,9 @@ fn to_current(value: &mut Value) -> Result<(), Error> {
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..20).contains(&v)) {
         targeting_into_product_shares(value)?;
     }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..21).contains(&v)) {
+        copy_excluded_for_all(value);
+    }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
@@ -138,6 +141,22 @@ fn tradable_into_excluded(value: &mut Value) {
         }
         excluded.sort_by_key(Value::as_u64);
         object.insert("excluded".to_owned(), Value::Array(excluded));
+    }
+}
+
+/// Version 21: the All tab has its own exclusion list (`excluded_all`). It starts as a copy of the
+/// account's list, so nothing changes for the user.
+fn copy_excluded_for_all(value: &mut Value) {
+    let Some(accounts) = value.get_mut("accounts").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for account in accounts {
+        let Some(object) = account.as_object_mut() else {
+            continue;
+        };
+        if let Some(list @ Value::Array(_)) = object.get("excluded").cloned() {
+            object.insert("excluded_all".to_owned(), list);
+        }
     }
 }
 
