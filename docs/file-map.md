@@ -25,7 +25,6 @@ _最終更新: 2026-10-19_
 | `src/product-shares.ts` | 商品の比率（重み。モードごと。設定がなければ 1）の読み出し（テストあり） | `src/types.ts` |
 | `src/account-products.ts` | 口座の商品一覧の行とグループの組み立て（保有している商品 / 売買に加えるものだけ。数字は Rust の `AccountBalance`。テストあり） | `src/types.ts` |
 | `src/rebalance-selection.ts` | 売買に加える商品の選択（すべて選択・解除・切り替え。`excluded` / `excluded_all` の裏返し。テストあり） | — |
-| `src/views/suggestion.ts` |
 | `src/views/suggestion.ts` | 提案の入力欄（種類、配り方、金額）と結果の表示（「すべて」のタブと口座のタブで共有） | `src/api.ts` |
 | `src/views/bitflyer.ts` | bitFlyer のカード。キーの保存・削除、残高の取得と対応づけ、保有の置き換え | `src/api.ts` |
 | `src/views/browser-controls.ts` | ブラウザの選択・プロファイルのフォルダ・開く・閉じる（「ブラウザで取得」と取得レシピで共有。最後の選択を初期値にする） | `src/api.ts`, `src/browser-defaults.ts` |
@@ -124,7 +123,8 @@ _最終更新: 2026-10-19_
 | `docs/specification-browser.md` | ブラウザで取得（Browser Fetch） |
 | `docs/specification-recipes.md` | 取得レシピ（リンクのたどり方、メニューのクリック、表の選び方） |
 | `docs/specification-presets.md` | 組み込みのレシピ（プリセット）、ログインのページ、結果の反映 |
-| `docs/specification-suggestions.md` | リバランスの計算、提案モード、口座タブ |
+| `docs/specification-suggestions.md` | リバランスの計算、提案モード、計算の詳細 |
+| `docs/specification-suggestions-accounts.md` | 「すべて」のタブ、口座の戦略、口座タブの提案 |
 | `docs/specification-data.md` | ポートフォリオのモデル、口座、保存、エクスポート |
 | `docs/ui-design.md` | UI 設計（レイアウトと各パネル） |
 | `docs/ui-design-settings.md` | 設定タブのカード（bitFlyer、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups） |
