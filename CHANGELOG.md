@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Suggestion rounding keeps the total (#141): the amount that can be sold is now counted per product in whole rounding units (each holding rounded down to the unit), so a fixed sell and the sell side of a full rebalance no longer fail or mismatch when holdings are not multiples of the unit; a full rebalance lowers the trade to what whole units can deliver and reports the rest. Buys and sells still add up exactly to the applied amount. No saved format changes.
+
 ### Changed
 
 - Rebalance sub-tab layout (#139, #140): every tab (All and each account) now has the suggestion form and result on top and the account's holdings list ("Balance inside the account") below. "All" shows the holdings of the rebalancing account; account tabs offer all four modes (full rebalance and sell a fixed amount were All-only) for the tab's account, still with `held_only`. Full rebalance no longer requires the rebalancing account: it trades inside the requested account (selling follows that account's `sellable` and the record types), so the `NoTargetAccount` / `NotTargetAccount` errors are gone. UI only plus that relaxation; no saved format changes.
