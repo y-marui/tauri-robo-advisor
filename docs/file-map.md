@@ -127,8 +127,10 @@ _最終更新: 2026-10-19_
 | `docs/specification-presets.md` | 組み込みのレシピ（プリセット）、ログインのページ、結果の反映 |
 | `docs/specification-suggestions.md` | リバランスの計算、提案モード、計算の詳細 |
 | `docs/specification-suggestions-accounts.md` | 「すべて」のタブ、口座の戦略、口座タブの提案 |
-| `docs/specification-data.md` | ポートフォリオのモデル、口座、保存、エクスポート |
+| `docs/specification-data.md` | ポートフォリオのモデル、口座 |
+| `docs/specification-storage.md` | 保存、エクスポート |
 | `docs/specification-data-versions.md` | スキーマのバージョン 22 以下の経緯 |
 | `docs/ui-design.md` | UI 設計（レイアウトと各パネル） |
-| `docs/ui-design-settings.md` | 設定タブのカード（bitFlyer、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups） |
+| `docs/ui-design-settings.md` | 設定タブのカード（bitFlyer、表の取り込み、ブラウザで取得、取得レシピ） |
+| `docs/ui-design-settings-data.md` | 設定タブのカード（保存先、Records、Groups）、Settings Tab、Accounts |
 | `docs/design-constraints.md` | Design Constraints・Tauri Notes・CI コマンド・ライセンス・技術スタックの全文（`AI_CONTEXT.md` に要点） |
