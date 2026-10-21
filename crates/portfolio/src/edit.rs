@@ -224,10 +224,12 @@ pub enum Edit {
         account_type: Option<String>,
     },
     /// Sets the weight of a product for one suggestion mode (the default weight 1 clears the
-    /// setting). Global: it applies to every account.
+    /// setting). The weight belongs to the tab of an account, or to the All tab without one.
     SetProductShare {
         mode: SuggestionMode,
         product: ProductId,
+        #[serde(default)]
+        account: Option<AccountId>,
         weight: Decimal,
     },
     /// Makes the account hold exactly these products, as an import does. The
@@ -1219,6 +1221,7 @@ impl Portfolio {
                 self.accounts.retain(|a| a.id != id);
                 self.holdings.retain(|h| h.account != id);
                 self.recipes.retain(|r| r.account != id);
+                self.product_shares.retain(|e| e.account != Some(id));
             }
             Edit::AddAccountType {
                 name: new_name,
@@ -1356,23 +1359,29 @@ impl Portfolio {
             Edit::SetProductShare {
                 mode,
                 product,
+                account,
                 weight,
             } => {
                 self.product(product)?;
+                if let Some(account) = account {
+                    self.account(account)?;
+                }
                 let weight = positive(weight, "weight")?;
                 if weight > MAX_PRODUCT_WEIGHT {
                     return Err(Error::Invalid("the weight is too large".to_owned()));
                 }
                 self.product_shares
-                    .retain(|e| !(e.mode == mode && e.product == product));
+                    .retain(|e| !(e.mode == mode && e.product == product && e.account == account));
                 if weight != Decimal::ONE {
                     self.check_capacity(self.product_shares.len())?;
                     self.product_shares.push(ProductShareEntry {
                         mode,
                         product,
+                        account,
                         weight,
                     });
-                    self.product_shares.sort_by_key(|e| (e.mode, e.product));
+                    self.product_shares
+                        .sort_by_key(|e| (e.mode, e.product, e.account));
                 }
             }
             Edit::RemoveHolding {

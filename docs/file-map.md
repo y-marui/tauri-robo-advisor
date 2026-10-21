@@ -22,7 +22,7 @@ _最終更新: 2026-10-19_
 | `src/views/import-steps.ts` | 取り込みタブの、組み込みのレシピで取り込む手順（済・未の表示） | `src/panel.ts` |
 | `src/subtabs.ts` | 保有タブの副タブの名前、保存した選択の検証、矢印キーの移動（テストあり） | — |
 | `src/views/rebalance.ts` | 保有タブの副タブ「リバランス」。商品一覧に、選んだ提案の種類の商品の比率（重み。商品ごと）の編集も出す。先頭の「すべて」（全口座をまたぐ提案）と口座ごとのタブ（口座への追加の提案）。どちらも保有している商品の一覧（「すべて」は口座の列つきの 1 つの表。売買に加えるチェック、表示の切り替え、口座の売却可と丸め単位）を同じ部品で出す。提案の結果があるときは、一覧に「増減」「実行後」の列を足す | `src/account-products.ts`, `src/rebalance-selection.ts`, `src/product-shares.ts`, `src/views/suggestion.ts`, `src/types.ts` |
-| `src/product-shares.ts` | 商品の比率（重み。モードごと。設定がなければ 1）の読み出し（テストあり） | `src/types.ts` |
+| `src/product-shares.ts` | 商品の比率（重み。モードごと、タブごと。設定がなければ 1）の読み出し（テストあり） | `src/types.ts` |
 | `src/account-products.ts` | 口座の商品一覧の行とグループの組み立て（保有している商品 / 売買に加えるものだけ。数字は Rust の `AccountBalance`。提案の売買を（口座, 商品）で引く補助と、種別ごとの売りの行の見せ方 `slotTrade` を含む。テストあり） | `src/types.ts` |
 | `src/rebalance-selection.ts` | 売買に加える商品の選択（すべて選択・解除・切り替え。`excluded` / `excluded_all` の裏返し。テストあり） | — |
 | `src/views/suggestion.ts` | 提案の入力欄（種類、配り方、金額）と結果（要約・注記・カテゴリの表）の表示。商品ごとの増減は表示せず、結果を商品一覧に渡す（「すべて」のタブと口座のタブで共有） | `src/api.ts` |
@@ -89,7 +89,7 @@ _最終更新: 2026-10-19_
 | `crates/binance/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
 | `crates/gmocoin/src/credentials.rs` | 値を表示しない認証情報の型 | — |
 | `crates/gmocoin/src/error.rs` | 認証情報を含まないエラー型 | `thiserror` |
-| `crates/portfolio/src/model.rs` | データ型（`Portfolio`、`Group`、`Category`、`Product`、`Account`、`Holding`、`Settings`、`ProductShare`、`SuggestionMode`）とスキーマのバージョン | `rust_decimal`, `serde` |
+| `crates/portfolio/src/model.rs` | データ型（`Portfolio`、`Group`、`Category`、`Product`、`Account`、`Holding`、`Settings`、`ProductShareEntry`、`SuggestionMode`）とスキーマのバージョン | `rust_decimal`, `serde` |
 | `crates/portfolio/src/edit.rs` | `Edit` と `Portfolio::apply`（検証してから変更し、ID を採番する） | `validate.rs` |
 | `crates/portfolio/src/validate.rs` | 入力の検査、`validate_integrity`（読み込み時の整合性）、`issues`（提案をブロックする不備） | `error.rs` |
 | `crates/portfolio/src/error.rs` | `Error` と `Issue` | `thiserror` |
@@ -97,6 +97,7 @@ _最終更新: 2026-10-19_
 | `crates/suggest/src/overview.rs` | グループごと（目標はカテゴリの合計）、カテゴリごと、保有ごと、種別ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/account_balance.rs` | 口座内の商品バランス（商品比率に対する現在額と不足・超過。種別ごとの現在額つき。定額追加の設定を使う） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/strategy.rs` | 商品と比率を指定した口座（戦略）の提案（4 つのモード）と、指定商品の比率に対する口座内バランス | `fill.rs`, `round.rs`, `engine.rs`, `portfolio` |
+| `crates/suggest/src/account_level_tests.rs` | 口座のタブはその口座の保有と比率で水位を数え、「すべて」は全口座の保有と「すべて」の比率で数えるテスト | `engine.rs`, `portfolio` |
 | `crates/suggest/src/split.rs` | 売りを種別のレコードに割り振る最後の手順（NISA 系は最後。丸め単位を守り、合計を保つ）と、口座の残高用の種別ごとの現在額 | `engine.rs`, `portfolio` |
 | `crates/suggest/src/fill.rs` | 水位配分（目標を最も下回るものから足す。売りは符号を反転して同じ関数を使う） | `rust_decimal` |
 | `crates/suggest/src/round.rs` | 丸め単位への丸め（合計を保つ最大剰余法。上限つき） | `rust_decimal` |
@@ -127,6 +128,7 @@ _最終更新: 2026-10-19_
 | `docs/specification-suggestions.md` | リバランスの計算、提案モード、計算の詳細 |
 | `docs/specification-suggestions-accounts.md` | 「すべて」のタブ、口座の戦略、口座タブの提案 |
 | `docs/specification-data.md` | ポートフォリオのモデル、口座、保存、エクスポート |
+| `docs/specification-data-versions.md` | スキーマのバージョン 22 以下の経緯 |
 | `docs/ui-design.md` | UI 設計（レイアウトと各パネル） |
 | `docs/ui-design-settings.md` | 設定タブのカード（bitFlyer、表の取り込み、ブラウザで取得、取得レシピ、保存先、Records、Groups） |
 | `docs/design-constraints.md` | Design Constraints・Tauri Notes・CI コマンド・ライセンス・技術スタックの全文（`AI_CONTEXT.md` に要点） |

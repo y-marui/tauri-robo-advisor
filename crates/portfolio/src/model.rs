@@ -58,9 +58,13 @@ use serde::{Deserialize, Serialize};
 /// (`Portfolio::type_sellable_overrides`: only the types whose setting differs from the built-in
 /// default are stored; an older app would ignore them and refuse to sell what the user allowed, or
 /// sell what the user forbade, so it refuses). An older file has no overrides.
+/// Version 24 gave each account tab its own product weights (`ProductShareEntry::account`; the
+/// entry without an account is the weight of the All tab). An older app would read every entry as
+/// the weight of All and ignore the tabs' own, so it refuses. An older file is converted on load
+/// (see `migrate`): each entry is copied for every account, so no tab changes.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 23;
+pub const SCHEMA_VERSION: u32 = 24;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -108,11 +112,14 @@ pub const MAX_PRODUCT_WEIGHT: Decimal = Decimal::from_parts(1_000_000_000, 0, 0,
 /// The setting of one product for one suggestion mode: its weight, positive and relative to the
 /// other products it is compared with (the products of its category, or every product when the
 /// suggestion allocates by product weights). A product without an entry has the weight 1, and a
-/// weight of 1 is never stored.
+/// weight of 1 is never stored. The weight belongs to an account's tab (`account`), or to the All
+/// tab when there is none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductShareEntry {
     pub mode: SuggestionMode,
     pub product: ProductId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<AccountId>,
     pub weight: Decimal,
 }
 
@@ -637,11 +644,17 @@ impl Portfolio {
         }
     }
 
-    /// The weight of a product when the given mode runs: its stored setting, or 1.
-    pub fn product_weight(&self, mode: SuggestionMode, product: ProductId) -> Decimal {
+    /// The weight of a product when the given mode runs on the tab of an account (`None`: the All
+    /// tab): its stored setting for that tab, or 1.
+    pub fn product_weight(
+        &self,
+        mode: SuggestionMode,
+        product: ProductId,
+        account: Option<AccountId>,
+    ) -> Decimal {
         self.product_shares
             .iter()
-            .find(|e| e.mode == mode && e.product == product)
+            .find(|e| e.mode == mode && e.product == product && e.account == account)
             .map_or(Decimal::ONE, |e| e.weight)
     }
 }

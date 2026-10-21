@@ -174,8 +174,8 @@ export const MESSAGES = {
   "Weight": { ja: "比率" },
   "{product}: weight ({mode})": { ja: "{product}: 比率（{mode}）" },
   "Enter a positive weight.": { ja: "比率には、0 より大きい数を入力してください。" },
-  "The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and it is the same in every account. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.": {
-    ja: "比率は、上で選んだ提案の種類（{mode}）のものです。種類ごとに商品の比率を別々に持ち、どの口座でも同じです。「ポートフォリオに従う」ではカテゴリに配った額を商品の間で、「商品の比率で配る」では全体の額をすべての商品の間で、この比率で分けます。",
+  "The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and every account tab and All keep their own. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.": {
+    ja: "比率は、上で選んだ提案の種類（{mode}）のものです。種類ごとに、また口座のタブと「すべて」のタブごとに、商品の比率を別々に持ちます。「ポートフォリオに従う」ではカテゴリに配った額を商品の間で、「商品の比率で配る」では全体の額をすべての商品の間で、この比率で分けます。",
   },
   "General account": { ja: "一般" },
   "Specific account": { ja: "特定" },

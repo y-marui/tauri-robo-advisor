@@ -89,7 +89,8 @@ struct Book<'a> {
     /// Pairs where the account holds the product, when only those may be bought; `None` when every
     /// product that takes part may be bought.
     held_only: Option<BTreeSet<Slot>>,
-    /// Holdings per product across all accounts.
+    /// Holdings per product the leveling goes by: across all accounts for All, the requested
+    /// account's own on its tab.
     product_value: BTreeMap<ProductId, Decimal>,
     category_value: BTreeMap<CategoryId, Decimal>,
     total: Decimal,
@@ -135,18 +136,28 @@ impl<'a> Book<'a> {
             }
         }
 
+        let portfolio_total: Decimal = product_value.values().copied().sum();
+        if portfolio_total > MAX_AMOUNT {
+            return Err(Error::TooLarge);
+        }
+        if portfolio_total <= Decimal::ZERO || portfolio.categories.is_empty() {
+            return Err(Error::EmptyPortfolio);
+        }
+        // An account's tab looks only at that account's holdings (all record types, like its
+        // "Current" column); the All tab considers every account's.
+        if let Some(id) = request.account {
+            product_value = held_here
+                .iter()
+                .filter(|((account, _), _)| *account == id)
+                .map(|((_, product), value)| (*product, *value))
+                .collect();
+        }
         let mut category_value: BTreeMap<CategoryId, Decimal> = BTreeMap::new();
         for product in &portfolio.products {
             let value = product_value.get(&product.id).copied().unwrap_or_default();
             *category_value.entry(product.category).or_default() += value;
         }
         let total: Decimal = category_value.values().copied().sum();
-        if total > MAX_AMOUNT {
-            return Err(Error::TooLarge);
-        }
-        if total <= Decimal::ZERO || portfolio.categories.is_empty() {
-            return Err(Error::EmptyPortfolio);
-        }
         let held_only = request.held_only.then(|| {
             held_here
                 .iter()
@@ -187,6 +198,14 @@ impl<'a> Book<'a> {
             .unwrap_or_default()
     }
 
+    /// The weight of a product on the tab being run: the account's own, or the All tab's.
+    fn weight(&self, product: ProductId) -> Decimal {
+        self.portfolio
+            .product_weight(self.mode, product, self.request_account)
+    }
+
+    /// What the product holds for the leveling: on an account's tab that account's holding in
+    /// records of any type (the "Current" column), on the All tab the holdings of all accounts.
     fn global_value(&self, product: &Product) -> Decimal {
         self.product_value
             .get(&product.id)
@@ -419,7 +438,7 @@ impl<'a> Book<'a> {
         let items: Vec<Item> = candidates
             .iter()
             .map(|p| Item {
-                weight: self.portfolio.product_weight(self.mode, p.id),
+                weight: self.weight(p.id),
                 current: self.global_value(p),
                 cap: None,
             })
@@ -442,7 +461,7 @@ impl<'a> Book<'a> {
         let items: Vec<Item> = held
             .iter()
             .map(|(p, here)| Item {
-                weight: self.portfolio.product_weight(self.mode, p.id),
+                weight: self.weight(p.id),
                 current: -self.global_value(p),
                 cap: Some(*here),
             })
@@ -665,7 +684,11 @@ impl<'a> Book<'a> {
         // How far each category is from its target, ignoring small deviations.
         let delta_of = |category: &Category| {
             let value = self.value_of(category);
-            let off = (value / self.total - category.target_weight).abs();
+            let off = if self.total.is_zero() {
+                Decimal::ZERO
+            } else {
+                (value / self.total - category.target_weight).abs()
+            };
             if off <= tolerance {
                 Decimal::ZERO
             } else {
@@ -853,10 +876,7 @@ impl<'a> Book<'a> {
     /// to 1) and what is held of them in all accounts.
     fn product_shares(&self) -> Vec<(&'a Product, Decimal, Decimal)> {
         let candidates = self.all_candidates();
-        let weights: Vec<Decimal> = candidates
-            .iter()
-            .map(|p| self.portfolio.product_weight(self.mode, p.id))
-            .collect();
+        let weights: Vec<Decimal> = candidates.iter().map(|p| self.weight(p.id)).collect();
         let sum: Decimal = weights.iter().copied().sum();
         candidates
             .into_iter()
@@ -978,7 +998,7 @@ impl<'a> Book<'a> {
                 .zip(&wanted)
                 .filter(|(_, w)| **w > Decimal::ZERO)
                 .map(|((p, _, held), w)| Item {
-                    weight: self.portfolio.product_weight(self.mode, p.id),
+                    weight: self.weight(p.id),
                     current: *held,
                     cap: Some(*w),
                 })
@@ -1000,7 +1020,7 @@ impl<'a> Book<'a> {
             let items: Vec<Item> = selling
                 .iter()
                 .map(|(p, cap)| Item {
-                    weight: self.portfolio.product_weight(self.mode, p.id),
+                    weight: self.weight(p.id),
                     current: -self.global_value(p),
                     cap: Some(*cap),
                 })

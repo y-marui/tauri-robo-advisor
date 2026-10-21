@@ -238,8 +238,14 @@ impl Portfolio {
             if !self.products.iter().any(|p| p.id == entry.product) {
                 return corrupt("a product setting refers to a missing product");
             }
-            if !shared.insert((entry.mode, entry.product)) {
-                return corrupt("a product has two settings for the same mode");
+            if entry
+                .account
+                .is_some_and(|id| !self.accounts.iter().any(|a| a.id == id))
+            {
+                return corrupt("a product setting refers to a missing account");
+            }
+            if !shared.insert((entry.mode, entry.product, entry.account)) {
+                return corrupt("a product has two settings for the same mode and tab");
             }
             positive(entry.weight, "weight").map_err(into_corrupt)?;
             if entry.weight > MAX_PRODUCT_WEIGHT {

@@ -7,6 +7,8 @@ export type SuggestionMode = "fixed_add" | "buy_only_to_target" | "full_rebalanc
 export interface ProductShareEntry {
   mode: SuggestionMode;
   product: number;
+  /** The account whose tab the weight belongs to; none: the All tab's. */
+  account?: number;
   weight: string;
 }
 /** A built-in account type id, or the id of a custom type (`custom-<n>`). */
@@ -259,7 +261,7 @@ export type Edit =
       category?: number;
       currency?: string;
     }
-  | { type: "set_product_share"; mode: SuggestionMode; product: number; weight: string }
+  | { type: "set_product_share"; mode: SuggestionMode; product: number; account?: number | null; weight: string }
   | { type: "add_account_type"; name: string; sellable: boolean }
   | { type: "update_account_type"; id: string; name?: string; sellable?: boolean }
   | { type: "set_type_sellable"; id: string; sellable: boolean }

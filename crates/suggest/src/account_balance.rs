@@ -114,7 +114,7 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .sum();
             let weights: Vec<Decimal> = members
                 .iter()
-                .map(|p| portfolio.product_weight(BALANCE_MODE, p.id))
+                .map(|p| portfolio.product_weight(BALANCE_MODE, p.id, Some(account.id)))
                 .collect();
             let weight_sum: Decimal = weights.iter().copied().sum();
             // Whole yen that add up to the total, so the shortfalls never suggest money is missing

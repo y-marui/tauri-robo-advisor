@@ -256,6 +256,7 @@ fn product_targets_are_exported_per_mode() {
         Edit::SetProductShare {
             mode: SuggestionMode::FixedAdd,
             product: s1,
+            account: None,
             weight: dec!(2.50),
         },
     );
@@ -264,7 +265,18 @@ fn product_targets_are_exported_per_mode() {
         Edit::SetProductShare {
             mode: SuggestionMode::FixedSell,
             product: s2,
+            account: None,
             weight: dec!(0.5),
+        },
+    );
+    let account = p.accounts[0].id;
+    apply(
+        &mut p,
+        Edit::SetProductShare {
+            mode: SuggestionMode::FixedSell,
+            product: s2,
+            account: Some(account),
+            weight: dec!(4),
         },
     );
     let f = files(&p);
@@ -272,11 +284,12 @@ fn product_targets_are_exported_per_mode() {
     let rows = lines(&f["product_targets.csv"]);
     assert_eq!(
         rows[0],
-        "mode,product_id,product,category_id,category,relative_weight"
+        "mode,account_id,product_id,product,category_id,category,relative_weight"
     );
-    assert_eq!(rows.len(), 3);
-    assert!(rows[1].starts_with("fixed_add,") && rows[1].ends_with(",2.5"));
-    assert!(rows[2].starts_with("fixed_sell,") && rows[2].ends_with(",0.5"));
+    assert_eq!(rows.len(), 4);
+    assert!(rows[1].starts_with("fixed_add,,") && rows[1].ends_with(",2.5"));
+    assert!(rows[2].starts_with("fixed_sell,,") && rows[2].ends_with(",0.5"));
+    assert!(rows[3].starts_with(&format!("fixed_sell,{},", account.0)) && rows[3].ends_with(",4"));
 }
 
 #[test]

@@ -30,13 +30,30 @@ enum Targeting {
     Weighted,
 }
 
-/// Sets one product's setting for one mode.
+/// Sets one product's setting for one mode, on the All tab and on every account's tab.
 fn share(p: &mut Portfolio, mode: SuggestionMode, product: ProductId, weight: Decimal) {
+    let tabs: Vec<Option<AccountId>> = std::iter::once(None)
+        .chain(p.accounts.iter().map(|a| Some(a.id)))
+        .collect();
+    for account in tabs {
+        share_on(p, mode, product, account, weight);
+    }
+}
+
+/// Sets one product's setting for one mode on one tab (`None`: All).
+pub(crate) fn share_on(
+    p: &mut Portfolio,
+    mode: SuggestionMode,
+    product: ProductId,
+    account: Option<AccountId>,
+    weight: Decimal,
+) {
     apply(
         p,
         Edit::SetProductShare {
             mode,
             product,
+            account,
             weight,
         },
     );
@@ -222,7 +239,8 @@ fn a_small_amount_goes_entirely_to_the_most_underweight_category() {
     assert_eq!(s.applied, dec!(100000));
     assert_eq!(category_line(&s, f.bonds).delta, dec!(100000));
     assert_eq!(category_line(&s, f.stocks).delta, dec!(0));
-    assert_eq!(s.total_after, dec!(1000000));
+    // An account's tab looks at that account's own holdings (800,000), not the sub account's.
+    assert_eq!(s.total_after, dec!(900000));
 }
 
 #[test]
@@ -238,10 +256,11 @@ fn a_large_amount_reaches_the_target_split_in_both_categories() {
     )
     .unwrap();
 
-    // Total after = 1,900,000: stocks 1,140,000 (+440,000), bonds 760,000 (+560,000).
-    assert_eq!(deltas(&s), vec![(f.s1, dec!(440000)), (f.b1, dec!(560000))]);
-    assert_eq!(category_line(&s, f.stocks).after, dec!(1140000));
-    assert_eq!(category_line(&s, f.stocks).target_after, dec!(1140000));
+    // The account holds 800,000 itself, so the total after is 1,800,000: stocks 1,080,000
+    // (+380,000), bonds 720,000 (+620,000).
+    assert_eq!(deltas(&s), vec![(f.s1, dec!(380000)), (f.b1, dec!(620000))]);
+    assert_eq!(category_line(&s, f.stocks).after, dec!(1080000));
+    assert_eq!(category_line(&s, f.stocks).target_after, dec!(1080000));
 }
 
 #[test]
@@ -526,11 +545,11 @@ fn buy_only_to_target_computes_the_amount_without_selling() {
 
     let s = run(&f.portfolio, f.main, Mode::BuyOnlyToTarget).unwrap();
 
-    // Stocks (700,000 / 0.6) set the level: the target total is 1,166,666.67,
-    // so 266,666.67 is needed, rounded up to 267,000 to spend.
+    // Stocks (700,000 / 0.6) set the level: the target total is 1,166,666.67, so 366,666.67 is
+    // needed for the account's own 800,000, rounded up to 367,000 to spend.
     let required = s.required_total.unwrap();
-    assert!((required - dec!(266666.666666666666666666667)).abs() < dec!(0.000001));
-    assert_eq!(s.applied, dec!(267000));
+    assert!((required - dec!(366666.666666666666666666667)).abs() < dec!(0.000001));
+    assert_eq!(s.applied, dec!(367000));
     assert!(s.products.iter().all(|l| l.delta > Decimal::ZERO));
     assert_eq!(category_line(&s, f.stocks).delta, dec!(0));
 }
@@ -539,7 +558,7 @@ fn buy_only_to_target_computes_the_amount_without_selling() {
 fn buy_only_to_target_on_a_balanced_portfolio_has_nothing_to_do() {
     let mut f = fixture();
     hold(&mut f.portfolio, f.main, f.s1, dec!(600000));
-    hold(&mut f.portfolio, f.main, f.b1, dec!(300000));
+    hold(&mut f.portfolio, f.main, f.b1, dec!(400000));
 
     let s = run(&f.portfolio, f.main, Mode::BuyOnlyToTarget).unwrap();
 
@@ -551,14 +570,15 @@ fn buy_only_to_target_on_a_balanced_portfolio_has_nothing_to_do() {
 #[test]
 fn buy_only_to_target_reports_what_the_account_cannot_buy() {
     let mut f = fixture();
-    limit_to(&mut f.portfolio, f.sub, &[f.s1]);
+    // The sub account holds only bonds, so it needs stocks, which it cannot buy.
+    limit_to(&mut f.portfolio, f.sub, &[f.b1]);
 
     let s = run(&f.portfolio, f.sub, Mode::BuyOnlyToTarget).unwrap();
 
     assert!(
-        s.notes
-            .iter()
-            .any(|n| matches!(n, Note::CategoryNotFilled { category, .. } if *category == f.bonds))
+        s.notes.iter().any(
+            |n| matches!(n, Note::CategoryNotFilled { category, .. } if *category == f.stocks)
+        )
     );
 }
 
@@ -604,7 +624,7 @@ fn a_fixed_sell_takes_from_the_most_overweight_category_first() {
     .unwrap();
 
     assert_eq!(deltas(&s), vec![(f.s1, dec!(-100000))]);
-    assert_eq!(s.total_after, dec!(800000));
+    assert_eq!(s.total_after, dec!(700000));
 }
 
 #[test]
@@ -731,13 +751,13 @@ fn a_full_rebalance_sells_the_excess_and_buys_the_shortfall() {
 
     let s = run(&f.portfolio, f.main, Mode::FullRebalance).unwrap();
 
-    // Total 900,000: stocks should be 540,000 (sell 160,000), bonds 360,000.
+    // The account holds 800,000: stocks should be 480,000 (sell 220,000), bonds 320,000.
     assert_eq!(
         deltas(&s),
-        vec![(f.s1, dec!(-160000)), (f.b1, dec!(160000))]
+        vec![(f.s1, dec!(-220000)), (f.b1, dec!(220000))]
     );
-    assert_eq!(s.total_after, dec!(900000));
-    assert_eq!(category_line(&s, f.stocks).after, dec!(540000));
+    assert_eq!(s.total_after, dec!(800000));
+    assert_eq!(category_line(&s, f.stocks).after, dec!(480000));
     assert!(s.notes.is_empty());
 }
 
@@ -759,11 +779,12 @@ fn a_full_rebalance_works_for_any_account_that_may_sell() {
 
     let s = run(&f.portfolio, f.sub, Mode::FullRebalance).unwrap();
 
-    // Only the sub account trades: it sells the stock excess and buys what it holds of bonds.
+    // Only the sub account trades, by its own 750,000: it sells the stock excess and buys what
+    // it holds of bonds.
     assert_eq!(s.account, Some(f.sub));
     assert_eq!(
         deltas(&s),
-        vec![(f.s1, dec!(-160000)), (f.b1, dec!(160000))]
+        vec![(f.s1, dec!(-200000)), (f.b1, dec!(200000))]
     );
 }
 
@@ -787,7 +808,7 @@ fn deviations_within_the_tolerance_are_left_alone() {
     apply(
         &mut f.portfolio,
         Edit::SetTolerances {
-            category: dec!(0.2),
+            category: dec!(0.3),
             product: dec!(0),
         },
     );
@@ -826,7 +847,7 @@ fn a_full_rebalance_reports_what_the_account_cannot_do() {
 #[test]
 fn a_partial_full_rebalance_balances_buys_and_sells() {
     let mut f = fixture();
-    // The account holds only 50,000 of stocks, so it can sell at most that.
+    // The account holds 50,000 of stocks and 100,000 of bonds: by itself it is short of stocks.
     hold(&mut f.portfolio, f.main, f.s1, dec!(50000));
     hold(&mut f.portfolio, f.sub, f.s1, dec!(650000));
 
@@ -845,12 +866,8 @@ fn a_partial_full_rebalance_balances_buys_and_sells() {
         .map(|l| -l.delta)
         .sum();
     assert_eq!(bought, sold);
-    assert_eq!(sold, dec!(50000));
-    assert!(
-        s.notes
-            .iter()
-            .any(|n| matches!(n, Note::CategoryNotFilled { .. }))
-    );
+    // 150,000 held: stocks should be 90,000 (buy 40,000), bonds 60,000 (sell 40,000).
+    assert_eq!(sold, dec!(40000));
 }
 
 // ---- valuation and guards -------------------------------------------------
@@ -877,7 +894,7 @@ fn usd_holdings_are_valued_with_the_exchange_rate() {
     .unwrap();
 
     // 1,000 USD at 150 = 150,000 JPY: the total is now 1,050,000.
-    assert_eq!(s.total_after, dec!(1150000));
+    assert_eq!(s.total_after, dec!(1050000));
     assert_eq!(category_line(&s, f.stocks).current, dec!(850000));
 }
 
@@ -982,6 +999,7 @@ fn huge_holdings_and_weights_are_refused_instead_of_overflowing() {
         .push(portfolio::ProductShareEntry {
             mode: SuggestionMode::FixedAdd,
             product: f.s1,
+            account: None,
             weight: MAX_WEIGHT + dec!(1),
         });
     // The integrity check refuses it before any calculation.
@@ -2145,7 +2163,9 @@ fn by_weights_a_single_account_allocates_across_categories_too() {
     );
 
     assert_eq!(s.account, Some(w.main));
-    assert_eq!(deltas(&s), vec![(w.s2, dec!(200000)), (w.b1, dec!(200000))]);
+    // The account's own holdings set the levels (S1 400,000, S2 100,000, B1 300,000 at weight 2),
+    // not the sub account's extra 100,000 of B1: S2 and B1 are raised to one level per weight.
+    assert_eq!(deltas(&s), vec![(w.s2, dec!(167000)), (w.b1, dec!(233000))]);
 }
 
 #[test]

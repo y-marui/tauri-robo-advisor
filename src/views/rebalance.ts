@@ -155,10 +155,10 @@ export function rebalancePanel(ctx: Context): Panel {
     );
 
   // The weight of a product for the mode chosen in the suggestion form: one setting per mode and
-  // product, the same in every account.
+  // product for each tab: an account's tab has its own, and "All" has its own.
   function shareCell(view: PortfolioView, product: number): HTMLElement {
     const mode = box.mode();
-    const saved = weightOf(view, mode, product);
+    const saved = weightOf(view, mode, product, accountNow());
     const weight = h("input", {
       type: "text",
       inputmode: "decimal",
@@ -174,7 +174,7 @@ export function rebalancePanel(ctx: Context): Panel {
         weight.value = saved;
         return;
       }
-      void ctx.apply({ type: "set_product_share", mode, product, weight: value });
+      void ctx.apply({ type: "set_product_share", mode, product, account: accountNow(), weight: value });
     });
     return h("td", { class: "share-cell" }, weight);
   }
@@ -405,7 +405,7 @@ export function rebalancePanel(ctx: Context): Panel {
         ? h(
             "p",
             { class: "note" },
-            t("The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and it is the same in every account. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.", {
+            t("The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and every account tab and All keep their own. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.", {
               mode: modeLabel(box.mode()),
             }),
           )

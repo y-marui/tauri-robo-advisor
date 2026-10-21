@@ -36,6 +36,8 @@ pub use strategy::StrategyBalance;
 pub use types::{CategoryLine, Method, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 
 #[cfg(test)]
+mod account_level_tests;
+#[cfg(test)]
 mod strategy_tests;
 #[cfg(test)]
 mod tests;
