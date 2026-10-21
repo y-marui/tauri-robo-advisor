@@ -3,7 +3,7 @@ import { h } from "../dom.ts";
 import { t } from "../i18n.ts";
 import type { Context, Panel } from "../panel.ts";
 import { clearAll, heldProducts, selectAll, toggle } from "../rebalance-selection.ts";
-import type { AccountBalance, PortfolioView } from "../types.ts";
+import type { AccountBalance, PortfolioView, ProductBalance, StrategyBalance } from "../types.ts";
 import { categoryName, deltaClass, signed, suggestionBox, yen } from "./suggestion.ts";
 
 // The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
@@ -81,6 +81,15 @@ export function rebalancePanel(ctx: Context): Panel {
     const name = (id: number): string => view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
     participation.replaceChildren(
       ...view.portfolio.accounts.map((account) => {
+        if (account.strategy?.type === "products") {
+          // Its own strategy applies in its own tab; it takes no part in the shared suggestion.
+          return h(
+            "fieldset",
+            { class: "participation-account" },
+            h("legend", {}, account.name),
+            h("p", { class: "note" }, t("This account has its own strategy (specified products with ratios). It takes no part here; use its own tab.")),
+          );
+        }
         const shown = heldProducts(view, account.id);
         const selectAllButton = h("button", { type: "button", class: "link-button" }, t("Select all"));
         selectAllButton.addEventListener("click", () =>
@@ -112,7 +121,7 @@ export function rebalancePanel(ctx: Context): Panel {
 
   function refreshParticipation(view: PortfolioView): void {
     const signature = view.portfolio.accounts
-      .map((a) => `${a.id}:${a.name}:${heldProducts(view, a.id).join("/")}`)
+      .map((a) => `${a.id}:${a.name}:${a.strategy?.type ?? "portfolio"}:${heldProducts(view, a.id).join("/")}`)
       .join(",") + view.portfolio.products.map((p) => `${p.id}:${p.name}`).join(",");
     if (signature !== participationSignature) {
       participationSignature = signature;
@@ -127,10 +136,73 @@ export function rebalancePanel(ctx: Context): Panel {
   const productName = (view: PortfolioView, id: number): string =>
     view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
 
+  const balanceHead = (): HTMLElement =>
+    h(
+      "thead",
+      {},
+      h(
+        "tr",
+        {},
+        h("th", {}, t("Product")),
+        h("th", {}, t("Current")),
+        h("th", {}, t("Target")),
+        h("th", {}, t("Short (+) / over (-)")),
+      ),
+    );
+
+  function productRow(view: PortfolioView, product: ProductBalance, excluded: number[]): HTMLElement {
+    return h(
+      "tr",
+      {},
+      h(
+        "th",
+        { scope: "row" },
+        productName(view, product.product),
+        excluded.includes(product.product)
+          ? h("span", { class: "note", title: t("Left out of trading in this account") }, ` (${t("Excluded")})`)
+          : "",
+      ),
+      h("td", { class: "num" }, yen(product.current)),
+      h("td", { class: "num" }, product.target === null ? "" : yen(product.target)),
+      h(
+        "td",
+        { class: `num ${product.shortfall === null ? "" : deltaClass(product.shortfall)}` },
+        product.shortfall === null ? "" : signed(product.shortfall),
+      ),
+    );
+  }
+
+  // An account with a product strategy: its products against their ratios of the strategy total.
+  function strategyBalanceView(view: PortfolioView, data: StrategyBalance, excluded: number[]): HTMLElement {
+    return h(
+      "div",
+      {},
+      h(
+        "p",
+        { class: "note" },
+        t("This account follows its own list of products and ratios. Category targets are not used, and products outside the list are neither bought nor sold."),
+      ),
+      h("p", {}, t("Total of the listed products: {amount} JPY", { amount: yen(data.total) })),
+      h(
+        "div",
+        { class: "table-wrap" },
+        h(
+          "table",
+          {},
+          balanceHead(),
+          h("tbody", {}, ...data.products.map((p) => productRow(view, p, excluded))),
+        ),
+      ),
+    );
+  }
+
   function balanceView(view: PortfolioView, data: AccountBalance): HTMLElement {
     const rows: HTMLElement[] = [];
     const account = accountNow();
     const excluded = view.portfolio.accounts.find((a) => a.id === account)?.excluded ?? [];
+    if (data.strategy) {
+      return strategyBalanceView(view, data.strategy, excluded);
+    }
     for (const category of data.categories) {
       if (category.products.length === 0) {
         continue;
@@ -146,27 +218,7 @@ export function rebalancePanel(ctx: Context): Panel {
         ),
       );
       for (const product of category.products) {
-        rows.push(
-          h(
-            "tr",
-            {},
-            h(
-              "th",
-              { scope: "row" },
-              productName(view, product.product),
-              excluded.includes(product.product)
-                ? h("span", { class: "note", title: t("Left out of trading in this account") }, ` (${t("Excluded")})`)
-                : "",
-            ),
-            h("td", { class: "num" }, yen(product.current)),
-            h("td", { class: "num" }, product.target === null ? "" : yen(product.target)),
-            h(
-              "td",
-              { class: `num ${product.shortfall === null ? "" : deltaClass(product.shortfall)}` },
-              product.shortfall === null ? "" : signed(product.shortfall),
-            ),
-          ),
-        );
+        rows.push(productRow(view, product, excluded));
       }
     }
     if (rows.length === 0) {
@@ -178,18 +230,7 @@ export function rebalancePanel(ctx: Context): Panel {
       h(
         "table",
         {},
-        h(
-          "thead",
-          {},
-          h(
-            "tr",
-            {},
-            h("th", {}, t("Product")),
-            h("th", {}, t("Current")),
-            h("th", {}, t("Target")),
-            h("th", {}, t("Short (+) / over (-)")),
-          ),
-        ),
+        balanceHead(),
         h("tbody", {}, ...rows),
       ),
     );

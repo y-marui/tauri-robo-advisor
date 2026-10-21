@@ -285,6 +285,97 @@ fn set_excluded_checks_products_and_follows_product_removal() {
 }
 
 #[test]
+fn strategies_are_validated_and_follow_product_changes() {
+    let (mut p, _, prod, acc) = sample();
+    let item = |product, ratio| StrategyItem { product, ratio };
+    let set = |p: &mut Portfolio, items: Vec<StrategyItem>| {
+        p.apply(Edit::SetStrategy {
+            id: acc,
+            strategy: Strategy::Products { items },
+        })
+    };
+
+    assert!(set(&mut p, vec![]).is_err());
+    assert!(set(&mut p, vec![item(ProductId(999), None)]).is_err());
+    assert!(set(&mut p, vec![item(prod, None), item(prod, None)]).is_err());
+    assert!(set(&mut p, vec![item(prod, Some(dec!(0)))]).is_err());
+    assert!(set(&mut p, vec![item(prod, Some(dec!(-1)))]).is_err());
+    assert!(set(&mut p, vec![item(prod, Some(dec!(0.0000001)))]).is_err());
+    assert!(set(&mut p, vec![item(prod, Some(dec!(2000000)))]).is_err());
+    assert_eq!(p.accounts[0].strategy, Strategy::Portfolio);
+
+    set(&mut p, vec![item(prod, Some(dec!(3)))]).unwrap();
+    p.validate_integrity().unwrap();
+    let json = serde_json::to_string(&p).unwrap();
+    let back: Portfolio = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.accounts[0].strategy, p.accounts[0].strategy);
+
+    // Back to the portfolio's targets, which are not stored.
+    apply(
+        &mut p,
+        Edit::SetStrategy {
+            id: acc,
+            strategy: Strategy::Portfolio,
+        },
+    );
+    assert!(!serde_json::to_string(&p).unwrap().contains("strategy"));
+
+    // A removed product leaves the strategy, and an empty strategy falls back to the portfolio.
+    set(&mut p, vec![item(prod, None)]).unwrap();
+    apply(&mut p, Edit::RemoveProduct { id: prod });
+    assert_eq!(p.accounts[0].strategy, Strategy::Portfolio);
+}
+
+#[test]
+fn merging_products_merges_their_strategy_ratios() {
+    let (mut p, cat, prod, acc) = sample();
+    apply(
+        &mut p,
+        Edit::AddProduct {
+            name: "Second".to_owned(),
+            category: cat,
+            currency: "JPY".to_owned(),
+        },
+    );
+    let second = p.products.last().unwrap().id;
+    apply(
+        &mut p,
+        Edit::SetStrategy {
+            id: acc,
+            strategy: Strategy::Products {
+                items: vec![
+                    StrategyItem {
+                        product: prod,
+                        ratio: Some(dec!(3)),
+                    },
+                    StrategyItem {
+                        product: second,
+                        ratio: Some(dec!(2)),
+                    },
+                ],
+            },
+        },
+    );
+    apply(
+        &mut p,
+        Edit::MergeProducts {
+            keep: prod,
+            remove: second,
+            on_conflict: MergeConflict::default(),
+        },
+    );
+    assert_eq!(
+        p.accounts[0].strategy,
+        Strategy::Products {
+            items: vec![StrategyItem {
+                product: prod,
+                ratio: Some(dec!(5)),
+            }]
+        }
+    );
+}
+
+#[test]
 fn settings_are_range_checked() {
     let (mut p, _, _, _) = sample();
 
@@ -1606,7 +1697,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 17);
+    assert_eq!(SCHEMA_VERSION, 18);
 }
 
 #[test]
@@ -3207,11 +3298,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 18, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 19, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 18 })
+        Err(Error::UnsupportedVersion { found: 19 })
     ));
 }
 

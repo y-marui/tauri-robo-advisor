@@ -7,7 +7,7 @@ use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, Alias, CardSource, Category, CategoryId, Error, FetchLink, Group, GroupId,
     Holding, ImportMapping, KindRead, KindRule, Portfolio, Product, ProductId, ProductTargeting,
-    Recipe, TypeRule,
+    Recipe, Strategy, TypeRule,
 };
 
 /// Which record stays when a merge finds a record of both products in one account.
@@ -160,6 +160,11 @@ pub enum Edit {
     SetExcluded {
         id: AccountId,
         products: Vec<ProductId>,
+    },
+    /// Sets what the account's suggestions aim at. A product strategy needs at least one product.
+    SetStrategy {
+        id: AccountId,
+        strategy: Strategy,
     },
     /// Moves an account to a given place in the list, like `MoveGroupTo`.
     MoveAccountTo {
@@ -1017,6 +1022,7 @@ impl Portfolio {
                         tradable.retain(|p| *p != id);
                     }
                     account.excluded.retain(|p| *p != id);
+                    account.drop_strategy_product(id);
                 }
             }
             Edit::MergeProducts {
@@ -1071,6 +1077,7 @@ impl Portfolio {
                         account.excluded.push(keep);
                     }
                     account.excluded.retain(|p| *p != remove);
+                    account.merge_strategy_product(keep, remove);
                 }
                 self.product_mut(keep)?.aliases.extend(from.aliases);
                 self.products.retain(|p| p.id != remove);
@@ -1147,6 +1154,7 @@ impl Portfolio {
                     sellable: true,
                     tradable: None,
                     excluded: Vec::new(),
+                    strategy: Strategy::Portfolio,
                     rounding_unit: Decimal::ONE,
                 });
             }
@@ -1197,6 +1205,11 @@ impl Portfolio {
                 products.sort();
                 products.dedup();
                 self.account_mut(id)?.excluded = products;
+            }
+            Edit::SetStrategy { id, strategy } => {
+                self.account(id)?;
+                let strategy = self.checked_strategy(strategy)?;
+                self.account_mut(id)?.strategy = strategy;
             }
             Edit::MoveAccount { id, up } => {
                 self.account(id)?;

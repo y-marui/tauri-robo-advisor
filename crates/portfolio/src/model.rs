@@ -32,9 +32,12 @@ use serde::{Deserialize, Serialize};
 /// Version 17 dropped the rebalancing account (`settings.target_account`: the All tab now trades
 /// across every account, so an older app would still read a target that no longer exists). An older
 /// file loses the setting on load (see `migrate`).
+/// Version 18 added the strategy of an account (`strategy`: specified products with ratios; an older
+/// app would ignore it and suggest by the category targets, so it refuses). An older file follows
+/// the portfolio.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 17;
+pub const SCHEMA_VERSION: u32 = 18;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -147,8 +150,90 @@ pub struct Account {
     /// the value of their category.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded: Vec<ProductId>,
+    /// What the account's suggestions aim at: the portfolio's targets (default), or a list of
+    /// products with ratios chosen for this account alone.
+    #[serde(default, skip_serializing_if = "Strategy::is_portfolio")]
+    pub strategy: Strategy,
     /// Suggested amounts are rounded to a multiple of this value.
     pub rounding_unit: Decimal,
+}
+
+impl Account {
+    /// A removed product leaves the strategy; a strategy left with no product follows the portfolio.
+    pub(crate) fn drop_strategy_product(&mut self, id: ProductId) {
+        if let Strategy::Products { items } = &mut self.strategy {
+            items.retain(|i| i.product != id);
+            if items.is_empty() {
+                self.strategy = Strategy::Portfolio;
+            }
+        }
+    }
+
+    /// A merged product takes the place of the removed one; when both were listed their ratios add up.
+    pub(crate) fn merge_strategy_product(&mut self, keep: ProductId, remove: ProductId) {
+        if let Strategy::Products { items } = &mut self.strategy
+            && let Some(position) = items.iter().position(|i| i.product == remove)
+        {
+            let removed = items.remove(position);
+            match items.iter_mut().find(|i| i.product == keep) {
+                Some(kept) => {
+                    kept.ratio = kept
+                        .ratio
+                        .zip(removed.ratio)
+                        .and_then(|(a, b)| a.checked_add(b));
+                }
+                None => items.insert(
+                    position,
+                    StrategyItem {
+                        product: keep,
+                        ratio: removed.ratio,
+                    },
+                ),
+            }
+        }
+    }
+}
+
+/// What an account's suggestions aim at.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Strategy {
+    /// Follow the portfolio's category and product targets.
+    #[default]
+    Portfolio,
+    /// Hold only these products, in these ratios. Category targets are not used, and products
+    /// outside the list are neither bought nor sold.
+    Products { items: Vec<StrategyItem> },
+}
+
+impl Strategy {
+    pub fn is_portfolio(&self) -> bool {
+        matches!(self, Strategy::Portfolio)
+    }
+
+    /// The items of a product strategy; empty for `Portfolio`.
+    pub fn items(&self) -> &[StrategyItem] {
+        match self {
+            Strategy::Portfolio => &[],
+            Strategy::Products { items } => items,
+        }
+    }
+}
+
+/// One product of a product strategy. The ratio is typed by hand and relative to the others;
+/// a blank ratio means an equal share (every item is blank, or none is).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StrategyItem {
+    pub product: ProductId,
+    #[serde(default)]
+    pub ratio: Option<Decimal>,
+}
+
+impl StrategyItem {
+    /// The relative weight used in calculations: the ratio, or 1 when it is blank.
+    pub fn weight(&self) -> Decimal {
+        self.ratio.unwrap_or(Decimal::ONE)
+    }
 }
 
 /// The record of a product in an account: what is held and how much of it is wanted.

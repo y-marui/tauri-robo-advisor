@@ -85,6 +85,13 @@ pub enum Note {
         #[serde(serialize_with = "crate::display::yen")]
         shortfall: Decimal,
     },
+    /// An account with a product strategy could not bring this product to its share; `shortfall`
+    /// is positive when buying was needed and negative when a sale could not be made.
+    ProductNotFilled {
+        product: ProductId,
+        #[serde(serialize_with = "crate::display::yen")]
+        shortfall: Decimal,
+    },
     /// Every category is already within its tolerance, or too close to the
     /// target for a trade of at least one rounding unit.
     AlreadyBalanced,

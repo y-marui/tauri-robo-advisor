@@ -7,7 +7,8 @@ _最終更新: 2026-10-19_
 | ファイル | 役割 | 主な依存先 |
 |---|---|---|
 | `index.html` | HTML のエントリ | `src/main.ts`, `src/styles.css` |
-| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、タブとパネルの組み立て | `src/api.ts`, `src/views/*` |
+| `src/main.ts` | アプリの起点。状態の保持、言語の切り替え、タブとパネルの組み立て | `src/views/account-strategy.ts` | 設定の口座の「戦略」（ポートフォリオに従う / 商品と比率を指定）の編集 | `src/views/accounts.ts`, `src/types.ts` |
+| `src/api.ts`, `src/views/*` |
 | `src/api.ts` | Rust のコマンド（`get_portfolio`、`apply_portfolio_edit`、`get_overview`、`get_account_balance`、`suggest_rebalance`）の呼び出し | `@tauri-apps/api/core` |
 | `src/types.ts` | Rust の JSON に対応する型（金額は十進数の文字列） | — |
 | `src/decimal.ts` | 十進数の文字列の変換（％ ↔ 小数、桁区切り表示）。浮動小数点を使わない | — |
@@ -92,6 +93,7 @@ _最終更新: 2026-10-19_
 | `crates/suggest/src/engine.rs` | 評価額の換算、4 つのモード（1 口座または全口座）、口座への配り、結果の組み立て | `fill.rs`, `round.rs`, `portfolio` |
 | `crates/suggest/src/overview.rs` | グループごと（目標はカテゴリの合計）、カテゴリごと、保有ごと、種別ごとの評価額、現在・目標の比率と差（グラフと一覧用。目標が未完成でも計算できる） | `engine.rs`, `portfolio` |
 | `crates/suggest/src/account_balance.rs` | 口座内の商品バランス（商品比率に対する現在額と不足・超過） | `engine.rs`, `portfolio` |
+| `crates/suggest/src/strategy.rs` | 商品と比率を指定した口座（戦略）の提案（4 つのモード）と、指定商品の比率に対する口座内バランス | `fill.rs`, `round.rs`, `engine.rs`, `portfolio` |
 | `crates/suggest/src/fill.rs` | 水位配分（目標を最も下回るものから足す。売りは符号を反転して同じ関数を使う） | `rust_decimal` |
 | `crates/suggest/src/round.rs` | 丸め単位への丸め（合計を保つ最大剰余法。上限つき） | `rust_decimal` |
 | `crates/suggest/src/types.rs`, `error.rs` | `Mode`、`Request`、`Suggestion`、`Note`、`Error` | `portfolio` |

@@ -309,6 +309,8 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
         "rounding_unit",
         "tradable_product_ids",
         "excluded_product_ids",
+        "strategy",
+        "strategy_products",
         "value_jpy",
     ]);
     for account in &portfolio.accounts {
@@ -320,6 +322,12 @@ fn accounts(portfolio: &Portfolio, values: &Values) -> Table {
             number(account.rounding_unit),
             plain_cell(&tradable(account)),
             plain_cell(&excluded(account)),
+            plain_cell(if account.strategy.is_portfolio() {
+                "portfolio"
+            } else {
+                "products"
+            }),
+            plain_cell(&strategy_products(account)),
             optional_number(value),
         ]);
     }
@@ -353,6 +361,20 @@ fn excluded(account: &Account) -> String {
         .excluded
         .iter()
         .map(|id| id.0.to_string())
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// The products of a product strategy as `id` or `id:ratio`, separated by semicolons.
+fn strategy_products(account: &Account) -> String {
+    account
+        .strategy
+        .items()
+        .iter()
+        .map(|item| match item.ratio {
+            Some(ratio) => format!("{}:{}", item.product.0, ratio.normalize()),
+            None => item.product.0.to_string(),
+        })
         .collect::<Vec<_>>()
         .join(";")
 }
@@ -406,6 +428,9 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          * `tradable_product_ids` is `all` or a list of product ids separated by semicolons.\n\
          * `excluded_product_ids` lists the products suggestions never buy or sell in the account\n\
            (product ids separated by semicolons; empty when none).\n\
+         * `strategy` is `portfolio` (follow the portfolio's targets) or `products` (specified\n\
+           products with ratios); `strategy_products` then lists them as `id` or `id:ratio`\n\
+           separated by semicolons (a missing ratio means an equal share).\n\
          * Ids are stable numbers and are never reused.\n\
          \n\
          This export has {categories} categories, {products} products, {accounts} accounts, and {holdings} holdings.\n",

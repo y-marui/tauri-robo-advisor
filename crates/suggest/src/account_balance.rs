@@ -7,6 +7,7 @@ use serde::Serialize;
 use crate::Error;
 use crate::engine::{MAX_AMOUNT, MAX_WEIGHT, to_jpy};
 use crate::round::round_to_units;
+use crate::strategy::{StrategyBalance, balance};
 
 /// One product's value in the account against the share of the account's
 /// holdings in its category that the product weights ask for.
@@ -41,6 +42,10 @@ pub struct CategoryBalance {
 pub struct AccountBalance {
     pub account: AccountId,
     pub categories: Vec<CategoryBalance>,
+    /// For an account with a product strategy: its products against their ratios (the categories
+    /// are then empty). `None` for an account that follows the portfolio.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<StrategyBalance>,
 }
 
 /// Compares the products inside one account with the product weights. The
@@ -56,6 +61,13 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
         .iter()
         .find(|a| a.id == account)
         .ok_or(Error::UnknownAccount)?;
+    if !account.strategy.is_portfolio() {
+        return Ok(AccountBalance {
+            account: account.id,
+            categories: Vec::new(),
+            strategy: Some(balance(portfolio, account)?),
+        });
+    }
     if portfolio
         .holdings
         .iter()
@@ -151,5 +163,6 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
     Ok(AccountBalance {
         account: account.id,
         categories,
+        strategy: None,
     })
 }
