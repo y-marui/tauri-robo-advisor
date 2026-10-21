@@ -148,8 +148,6 @@ export function rebalancePanel(ctx: Context): Panel {
         h("th", {}, t("Product")),
         withShare ? h("th", {}, t("Weight")) : "",
         h("th", {}, t("Current")),
-        h("th", {}, t("Target")),
-        h("th", {}, t("Short (+) / over (-)")),
         withTrade ? h("th", {}, t("Change")) : "",
         withTrade ? h("th", {}, t("After")) : "",
       ),
@@ -209,12 +207,6 @@ export function rebalancePanel(ctx: Context): Panel {
       h("th", { scope: "row" }, productName(view, row.product)),
       withShare ? shareCell(view, row.product) : "",
       h("td", { class: "num" }, yen(row.current)),
-      h("td", { class: "num" }, row.target === null ? "" : yen(row.target)),
-      h(
-        "td",
-        { class: `num ${row.shortfall === null ? "" : deltaClass(row.shortfall)}` },
-        row.shortfall === null ? "" : signed(row.shortfall),
-      ),
       ...tradeCells(trades, account.id, row),
     );
   }
@@ -310,8 +302,6 @@ export function rebalancePanel(ctx: Context): Panel {
             h("th", { scope: "rowgroup" }, categoryName(view, category)),
             withShare ? h("td", {}) : "",
             h("td", { class: "num" }, group.total === null ? "" : yen(group.total)),
-            h("td", {}),
-            h("td", {}),
             trades === null ? "" : h("td", {}),
             trades === null ? "" : h("td", {}),
           ),

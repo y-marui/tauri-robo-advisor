@@ -39,7 +39,6 @@ test("show all lists the products the account holds, with the figures Rust gave"
   const groups = productGroups(view, account, balance, true);
   assert.deepEqual(groups.map((g) => g.category), [1, 2]);
   assert.deepEqual(groups[0]?.rows.map((r) => [r.product, r.current, r.takesPart]), [[10, "300", true]]);
-  assert.equal(groups[0]?.rows[0]?.target, "200");
   assert.equal(groups[0]?.total, "300");
   assert.equal(groups[1]?.total, "80");
 });

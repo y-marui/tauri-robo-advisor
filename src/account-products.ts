@@ -9,8 +9,6 @@ export interface ProductRow {
   product: number;
   /** JPY held in the account. */
   current: string;
-  target: string | null;
-  shortfall: string | null;
   /** False when the account leaves the product out of trading. */
   takesPart: boolean;
 }
@@ -43,8 +41,6 @@ export function productGroups(
   const row = (product: number, figures: ProductBalance | undefined): ProductRow => ({
     product,
     current: figures?.current ?? "0",
-    target: figures?.target ?? null,
-    shortfall: figures?.shortfall ?? null,
     takesPart: !excluded.has(product),
   });
   const wanted = (r: ProductRow): boolean => showAll || r.takesPart;

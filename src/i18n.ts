@@ -301,7 +301,6 @@ export const MESSAGES = {
   "By type": { ja: "種別ごと" },
   "Show type": { ja: "表示する種別" },
   "All types": { ja: "すべての種別" },
-  "Short (+) / over (-)": { ja: "不足 (+) / 超過 (-)" },
   "No accounts yet.": { ja: "口座がまだありません。" },
   "Choose an account first.": { ja: "先に口座を選んでください。" },
   "API key": { ja: "API キー" },
