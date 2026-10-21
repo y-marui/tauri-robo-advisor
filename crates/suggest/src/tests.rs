@@ -1450,3 +1450,199 @@ fn held_only_defaults_to_false_in_json() {
         serde_json::from_str(r#"{"account":5,"mode":{"type":"buy_only_to_target"}}"#).unwrap();
     assert!(!request.held_only);
 }
+
+// ---- rounding keeps the total (#141) --------------------------------------
+
+fn set_unit(f: &mut Fixture, unit: Decimal) {
+    for account in [f.main, f.sub] {
+        apply(
+            &mut f.portfolio,
+            Edit::UpdateAccount {
+                id: account,
+                name: None,
+                sellable: None,
+                rounding_unit: Some(unit),
+            },
+        );
+    }
+}
+
+fn sum_of(s: &Suggestion, sign: Decimal) -> Decimal {
+    s.products
+        .iter()
+        .filter(|l| l.delta * sign > Decimal::ZERO)
+        .map(|l| l.delta.abs())
+        .sum()
+}
+
+#[test]
+fn a_fixed_sell_reaches_the_amount_when_holdings_are_not_multiples_of_the_unit() {
+    let mut f = fixture();
+    // Each holds 1,500 with a unit of 1,000: only 1,000 of each can be sold, so
+    // 2,000 is possible but the two halves of 3,000 are not.
+    hold(&mut f.portfolio, f.main, f.b1, dec!(1500));
+    hold(&mut f.portfolio, f.main, f.s1, dec!(1500));
+
+    let s = run(&f.portfolio, f.main, Mode::FixedSell { amount: dec!(2000) }).unwrap();
+
+    assert_eq!(sum_of(&s, dec!(-1)), dec!(2000));
+    assert!(s.products.iter().all(|l| l.delta == dec!(-1000)));
+    // 3,000 would need more than can be sold in whole units.
+    assert_eq!(
+        run(&f.portfolio, f.main, Mode::FixedSell { amount: dec!(3000) }),
+        Err(Error::NotEnoughToSell)
+    );
+}
+
+#[test]
+fn a_fixed_sell_adds_up_for_awkward_units() {
+    for unit in [dec!(100), dec!(1000), dec!(10000)] {
+        let mut f = fixture();
+        set_unit(&mut f, unit);
+        // Holdings that are not multiples of any of the units.
+        hold(&mut f.portfolio, f.main, f.s1, dec!(703457));
+        hold(&mut f.portfolio, f.main, f.b1, dec!(98765));
+        for n in 1..=40 {
+            let amount = Decimal::from(n * 20_000) + dec!(333);
+            let result = run(&f.portfolio, f.main, Mode::FixedSell { amount });
+            let Ok(s) = result else { continue };
+            assert_eq!(sum_of(&s, dec!(-1)), s.applied, "unit {unit}, {amount}");
+            assert_eq!(s.applied, floor_unit(amount, unit), "unit {unit}, {amount}");
+            for line in &s.products {
+                assert!((line.delta % unit).is_zero());
+                let held = if line.product == f.s1 {
+                    dec!(703457)
+                } else {
+                    dec!(98765)
+                };
+                assert!(-line.delta <= held);
+            }
+        }
+    }
+}
+
+fn floor_unit(amount: Decimal, unit: Decimal) -> Decimal {
+    (amount / unit).floor() * unit
+}
+
+#[test]
+fn a_fixed_add_over_many_products_adds_up_for_awkward_units() {
+    for unit in [dec!(100), dec!(1000), dec!(10000)] {
+        let mut f = fixture();
+        set_unit(&mut f, unit);
+        for name in ["S2", "S3"] {
+            product(&mut f.portfolio, name, f.stocks, "JPY");
+        }
+        for name in ["B2", "B3", "B4"] {
+            product(&mut f.portfolio, name, f.bonds, "JPY");
+        }
+        for n in 1..=40 {
+            let amount = Decimal::from(n * 17_777) + dec!(55);
+            let s = run(&f.portfolio, f.main, Mode::FixedAdd { amount }).unwrap();
+            assert_eq!(
+                sum_of(&s, dec!(1)),
+                floor_unit(amount, unit),
+                "{unit} {amount}"
+            );
+            assert_eq!(s.applied, floor_unit(amount, unit));
+            assert!(s.products.iter().all(|l| (l.delta % unit).is_zero()));
+        }
+    }
+}
+
+#[test]
+fn a_full_rebalance_buys_and_sells_the_same_total_for_awkward_units() {
+    for unit in [dec!(100), dec!(1000), dec!(10000)] {
+        let mut f = fixture();
+        with_target(&mut f);
+        set_unit(&mut f, unit);
+        product(&mut f.portfolio, "B2", f.bonds, "JPY");
+        product(&mut f.portfolio, "S2", f.stocks, "JPY");
+        let s2 = f.portfolio.products.last().unwrap().id;
+        hold(&mut f.portfolio, f.main, f.s1, dec!(703457));
+        hold(&mut f.portfolio, f.main, s2, dec!(1500));
+        hold(&mut f.portfolio, f.main, f.b1, dec!(98765));
+
+        let s = run(&f.portfolio, f.main, Mode::FullRebalance).unwrap();
+
+        assert_eq!(sum_of(&s, dec!(1)), sum_of(&s, dec!(-1)), "unit {unit}");
+        assert!(s.products.iter().all(|l| (l.delta % unit).is_zero()));
+    }
+}
+
+#[test]
+fn a_full_rebalance_cannot_sell_what_is_below_the_unit_and_says_so() {
+    let mut f = fixture();
+    with_target(&mut f);
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateCategory {
+            id: f.stocks,
+            name: None,
+            target_weight: Some(dec!(0.1)),
+            targeting: None,
+        },
+    );
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateCategory {
+            id: f.bonds,
+            name: None,
+            target_weight: Some(dec!(0.9)),
+            targeting: None,
+        },
+    );
+    // Stocks are far overweight but are held in four pieces of 900, each below
+    // the unit of 1,000, so nothing can be sold in whole units.
+    hold(&mut f.portfolio, f.main, f.s1, dec!(900));
+    for name in ["S2", "S3", "S4"] {
+        let id = product(&mut f.portfolio, name, f.stocks, "JPY");
+        hold(&mut f.portfolio, f.main, id, dec!(900));
+    }
+    hold(&mut f.portfolio, f.main, f.b1, dec!(0));
+    hold(&mut f.portfolio, f.sub, f.b1, dec!(4000));
+
+    let s = run(&f.portfolio, f.main, Mode::FullRebalance).unwrap();
+
+    assert!(s.products.is_empty());
+    assert!(!s.notes.is_empty());
+}
+
+#[test]
+fn a_full_rebalance_sells_only_whole_units_when_pieces_are_not_multiples() {
+    let mut f = fixture();
+    with_target(&mut f);
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateCategory {
+            id: f.stocks,
+            name: None,
+            target_weight: Some(dec!(0.1)),
+            targeting: None,
+        },
+    );
+    apply(
+        &mut f.portfolio,
+        Edit::UpdateCategory {
+            id: f.bonds,
+            name: None,
+            target_weight: Some(dec!(0.9)),
+            targeting: None,
+        },
+    );
+    // Pieces of 1,900 can give 1,000 each: the overweight is 2,000+ but the
+    // trade must stay at what whole units can deliver.
+    hold(&mut f.portfolio, f.main, f.s1, dec!(1900));
+    for name in ["S2", "S3"] {
+        let id = product(&mut f.portfolio, name, f.stocks, "JPY");
+        hold(&mut f.portfolio, f.main, id, dec!(1900));
+    }
+    hold(&mut f.portfolio, f.main, f.b1, dec!(0));
+    hold(&mut f.portfolio, f.sub, f.b1, dec!(2000));
+
+    let s = run(&f.portfolio, f.main, Mode::FullRebalance).unwrap();
+
+    assert_eq!(sum_of(&s, dec!(1)), sum_of(&s, dec!(-1)));
+    assert!(sum_of(&s, dec!(-1)) <= dec!(3000));
+    assert!(s.products.iter().all(|l| (l.delta % dec!(1000)).is_zero()));
+}

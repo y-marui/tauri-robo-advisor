@@ -186,8 +186,14 @@ impl<'a> Book<'a> {
             .collect()
     }
 
-    fn held_total(&self, category: CategoryId) -> Decimal {
-        self.held(category).iter().map(|(_, value)| *value).sum()
+    /// What can be sold from the category in whole rounding units: each product
+    /// only gives multiples of the unit, so the remainder below one unit of
+    /// every product cannot be sold.
+    fn sellable_total(&self, category: CategoryId) -> Decimal {
+        self.held(category)
+            .iter()
+            .map(|(_, value)| floor_to_unit(*value, self.unit()))
+            .sum()
     }
 
     // ---- splitting a category's amount over its products -------------------
@@ -459,7 +465,7 @@ impl<'a> Book<'a> {
             .portfolio
             .categories
             .iter()
-            .map(|c| (c.id, self.held_total(c.id)))
+            .map(|c| (c.id, self.sellable_total(c.id)))
             .filter(|(_, cap)| *cap > Decimal::ZERO)
             .collect();
         let capacity: Decimal = caps.iter().map(|(_, cap)| *cap).sum();
@@ -507,7 +513,7 @@ impl<'a> Book<'a> {
                 max_buy.push((category.id, delta));
             }
             if delta < Decimal::ZERO && self.account.sellable {
-                let can_sell = (-delta).min(self.held_total(category.id));
+                let can_sell = (-delta).min(self.sellable_total(category.id));
                 if can_sell > Decimal::ZERO {
                     max_sell.push((category.id, can_sell));
                 }

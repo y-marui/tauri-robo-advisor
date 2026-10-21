@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Suggestion rounding keeps the total (#141): the amount that can be sold is now counted per product in whole rounding units (each holding rounded down to the unit), so a fixed sell and the sell side of a full rebalance no longer fail or mismatch when holdings are not multiples of the unit; a full rebalance lowers the trade to what whole units can deliver and reports the rest. Buys and sells still add up exactly to the applied amount. No saved format changes.
+
 ### Changed
 
 - Holdings tab sub-tabs are now Holdings / Rebalance. The old Suggestions sub-tab is the first account tab of Rebalance, "All" (the rebalancing account, mode, amount and result work as before), followed by one tab per account (the old By account content). In an account tab a product the account does not hold (record value 0 or no record, any type) is out of scope: it is left out of the balance table and is never bought by the account's suggestion (`Request::held_only`, default false; `account_balance` lists only held products). "All" does not hide anything, but its suggestion also uses `held_only` for the rebalancing account, so it never starts buying a product that account does not hold (to start one, add a record for it first). A saved `suggestions` or `accounts` sub-tab choice opens Rebalance. No saved format changes.
