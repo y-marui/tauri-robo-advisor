@@ -21,6 +21,8 @@ pub enum Error {
     MissingExchangeRate,
     #[error("an amount or weight is too large to calculate")]
     TooLarge,
+    #[error("the accounts' rounding units have no common step small enough to calculate with")]
+    IncompatibleUnits,
     #[error("this account is not set to allow selling")]
     NotSellable,
     #[error("this account does not hold enough to sell that amount")]

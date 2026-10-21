@@ -55,9 +55,25 @@ export function rebalancePanel(ctx: Context): Panel {
     view.portfolio.accounts.find((a) => a.id === account)?.excluded ?? [];
 
   // The suggestion must use the saved list, so it waits while a change is being saved.
+  // The controls are held while saving: a second change would start from the list as it was before
+  // the first one was saved and overwrite it.
+  let saving = false;
+  const holdControls = (): void => {
+    for (const control of participation.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, button")) {
+      control.disabled = saving;
+    }
+  };
   const save = (account: number, products: number[]): void => {
+    saving = true;
+    holdControls();
     box.setBusy(true);
-    void ctx.apply({ type: "set_excluded", id: account, products }).finally(() => box.setBusy(false));
+    void ctx
+      .apply({ type: "set_excluded", id: account, products })
+      .finally(() => {
+        saving = false;
+        holdControls();
+        box.setBusy(false);
+      });
   };
 
   function buildParticipation(view: PortfolioView): void {
@@ -91,6 +107,7 @@ export function rebalancePanel(ctx: Context): Panel {
         );
       }),
     );
+    holdControls();
   }
 
   function refreshParticipation(view: PortfolioView): void {

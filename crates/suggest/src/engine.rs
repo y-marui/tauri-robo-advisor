@@ -137,7 +137,7 @@ impl<'a> Book<'a> {
                 .map(|(slot, _)| *slot)
                 .collect()
         });
-        let unit = common_unit(scope.iter().map(|a| a.rounding_unit));
+        let unit = common_unit(scope.iter().map(|a| a.rounding_unit))?;
         Ok(Self {
             portfolio,
             scope,
@@ -241,15 +241,24 @@ impl<'a> Book<'a> {
     }
 
     /// What can be sold from the category in whole rounding units: each (account, product) pair
-    /// only gives multiples of its account's unit, so the remainder below one unit of every pair
-    /// cannot be sold.
+    /// only gives multiples of its account's unit, and an account's total only a multiple of the
+    /// common step, so the remainders below them cannot be sold.
     fn sellable_total(&self, category: CategoryId) -> Decimal {
-        self.portfolio
+        let mut per_account: BTreeMap<AccountId, Decimal> = BTreeMap::new();
+        for product in self
+            .portfolio
             .products
             .iter()
             .filter(|p| p.category == category)
-            .flat_map(|p| self.sellers(p.id))
-            .map(|(account, value)| floor_to_unit(value, account.rounding_unit))
+        {
+            for (account, value) in self.sellers(product.id) {
+                *per_account.entry(account.id).or_default() +=
+                    floor_to_unit(value, account.rounding_unit);
+            }
+        }
+        per_account
+            .values()
+            .map(|sum| floor_to_unit(*sum, self.unit))
             .sum()
     }
 
@@ -284,7 +293,10 @@ impl<'a> Book<'a> {
         let mut out = Vec::new();
         for (product, share) in flat {
             let sellers = self.sellers(product);
-            let caps: Vec<Decimal> = sellers.iter().map(|(_, v)| *v).collect();
+            let caps: Vec<Decimal> = sellers
+                .iter()
+                .map(|(a, v)| floor_to_unit(*v, a.rounding_unit))
+                .collect();
             let shares = proportional(&caps, share);
             out.extend(sellers.iter().map(|(a, _)| (a.id, product)).zip(shares));
         }
@@ -843,28 +855,32 @@ pub(crate) fn to_jpy(
     Ok(jpy)
 }
 
-/// The step suggested amounts are a multiple of: the least common multiple of the units when they
-/// are whole numbers, else the largest unit.
-fn common_unit(units: impl Iterator<Item = Decimal>) -> Decimal {
+/// The step suggested amounts are a multiple of: the least common multiple of the units, worked
+/// out exactly on the decimals. A step too large to calculate with is refused.
+fn common_unit(units: impl Iterator<Item = Decimal>) -> Result<Decimal, Error> {
     fn gcd(a: u128, b: u128) -> u128 {
         if b == 0 { a } else { gcd(b, a % b) }
     }
     let units: Vec<Decimal> = units.collect();
-    let largest = units.iter().copied().max().unwrap_or(Decimal::ONE);
+    let scale = units.iter().map(Decimal::scale).max().unwrap_or(0);
+    let factor = 10u128.pow(scale);
     let mut lcm: u128 = 1;
     for unit in &units {
-        let Some(whole) = unit.to_u128().filter(|_| unit.fract().is_zero()) else {
-            return largest;
-        };
-        if whole == 0 {
-            return largest;
-        }
-        match (lcm / gcd(lcm, whole)).checked_mul(whole) {
-            Some(next) if next <= 1_000_000_000_000 => lcm = next,
-            _ => return largest,
-        }
+        // The unit as a whole number of 10^-scale.
+        let whole = (*unit * Decimal::from(factor))
+            .to_u128()
+            .filter(|w| *w > 0)
+            .ok_or(Error::IncompatibleUnits)?;
+        lcm = (lcm / gcd(lcm, whole))
+            .checked_mul(whole)
+            .filter(|next| *next <= 1_000_000_000_000_000_000)
+            .ok_or(Error::IncompatibleUnits)?;
     }
-    Decimal::from(lcm)
+    let step = Decimal::from_i128_with_scale(
+        i128::try_from(lcm).map_err(|_| Error::IncompatibleUnits)?,
+        scale,
+    );
+    Ok(step)
 }
 
 /// Splits `amount` in proportion to `caps`, never giving an item more than its cap.

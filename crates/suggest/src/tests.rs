@@ -1909,3 +1909,93 @@ fn trading_across_accounts_matches_a_single_account_when_there_is_one() {
     assert_eq!(all.products, single.products);
     assert_eq!(f.main, one.main);
 }
+
+#[test]
+fn the_common_step_of_decimal_units_is_an_exact_common_multiple() {
+    let mut f = fixture();
+    for (id, unit) in [(f.main, dec!(0.5)), (f.sub, dec!(0.3))] {
+        apply(
+            &mut f.portfolio,
+            Edit::UpdateAccount {
+                id,
+                name: None,
+                sellable: None,
+                rounding_unit: Some(unit),
+            },
+        );
+    }
+
+    let s = run_all(
+        &f.portfolio,
+        Mode::FixedAdd {
+            amount: dec!(1000.7),
+        },
+        false,
+    )
+    .unwrap();
+
+    // The step is 1.5.
+    assert_eq!(s.applied, dec!(1000.5));
+    assert_eq!(
+        s.products.iter().map(|l| l.delta).sum::<Decimal>(),
+        s.applied
+    );
+    for line in &s.products {
+        let unit = if line.account == f.main {
+            dec!(0.5)
+        } else {
+            dec!(0.3)
+        };
+        assert!((line.delta % unit).is_zero(), "{line:?}");
+    }
+}
+
+#[test]
+fn units_without_a_calculable_common_step_are_refused() {
+    let mut f = fixture();
+    for (id, unit) in [(f.main, dec!(999999999989)), (f.sub, dec!(999999999979))] {
+        apply(
+            &mut f.portfolio,
+            Edit::UpdateAccount {
+                id,
+                name: None,
+                sellable: None,
+                rounding_unit: Some(unit),
+            },
+        );
+    }
+
+    assert_eq!(
+        run_all(&f.portfolio, Mode::BuyOnlyToTarget, false),
+        Err(Error::IncompatibleUnits)
+    );
+}
+
+#[test]
+fn what_can_be_sold_counts_each_account_at_the_common_step() {
+    // Units 1,000 and 1,500 make the step 3,000; neither account holds a whole step.
+    let mut f = fixture();
+    for (id, unit) in [(f.main, dec!(1000)), (f.sub, dec!(1500))] {
+        apply(
+            &mut f.portfolio,
+            Edit::UpdateAccount {
+                id,
+                name: None,
+                sellable: Some(true),
+                rounding_unit: Some(unit),
+            },
+        );
+    }
+    hold(&mut f.portfolio, f.main, f.s1, dec!(2000));
+    hold(&mut f.portfolio, f.main, f.b1, dec!(0));
+    hold(&mut f.portfolio, f.sub, f.s1, dec!(1500));
+    hold(&mut f.portfolio, f.sub, f.b1, dec!(0));
+
+    assert_eq!(
+        run_all(&f.portfolio, Mode::FixedSell { amount: dec!(3000) }, true),
+        Err(Error::NotEnoughToSell)
+    );
+    // A full rebalance lowers the trade instead of failing.
+    let s = run_all(&f.portfolio, Mode::FullRebalance, true).unwrap();
+    assert!(s.products.is_empty());
+}
