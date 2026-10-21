@@ -14,9 +14,9 @@ import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from 
 // The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
 // have the suggestion form and its result on top. An account tab trades in its account; "All" trades
 // across every account. Below the form, an account tab shows the account's product list and "All"
-// shows the same list once per account. The list is one component: every product with a checkbox
-// "takes part in trading" (the account's exclusion list, shown the other way round), or just the
-// ticked ones. The account's "sell allowed" flag and rounding unit are edited here too. Buying a
+// shows one table of every account's list with an account column. A list holds only the products
+// the account holds. Each row has a checkbox "takes part in trading" (the account's exclusion list,
+// shown the other way round); the list can also show just the ticked ones. The account's "sell allowed" flag and rounding unit are edited here too. Buying a
 // product the account does not hold is still not suggested. Every figure comes from Rust.
 
 type Selection = number | "all";
@@ -31,7 +31,7 @@ export function rebalancePanel(ctx: Context): Panel {
   let settingsSignature: string | null = null;
   // Per account: the figures last received, and whether the list shows every product.
   const balances = new Map<number, AccountBalance>();
-  const listModes = new Map<number, ListMode>();
+  const listModes = new Map<Selection, ListMode>();
   let sequence = 0;
 
   const accountNow = (): number | null => (selected === "all" ? null : selected);
@@ -106,12 +106,16 @@ export function rebalancePanel(ctx: Context): Panel {
       control.disabled = saving;
     }
   };
-  const save = (account: number, products: number[]): void => {
+  const save = (changes: [number, number[]][]): void => {
     saving = true;
     holdControls();
     box.setBusy(true);
-    void ctx
-      .apply({ type: "set_excluded", id: account, products })
+    // One account after the other: each change starts from the list as the previous one saved it.
+    void changes
+      .reduce(
+        (done, [id, products]) => done.then(() => ctx.apply({ type: "set_excluded", id, products })),
+        Promise.resolve() as Promise<unknown>,
+      )
       .finally(() => {
         saving = false;
         holdControls();
@@ -122,7 +126,7 @@ export function rebalancePanel(ctx: Context): Panel {
   const productName = (view: PortfolioView, id: number): string =>
     view.portfolio.products.find((p) => p.id === id)?.name ?? "?";
 
-  const head = (withBox: boolean, withShare: boolean): HTMLElement =>
+  const head = (withBox: boolean, withShare: boolean, withAccount: boolean): HTMLElement =>
     h(
       "thead",
       {},
@@ -130,6 +134,7 @@ export function rebalancePanel(ctx: Context): Panel {
         "tr",
         {},
         withBox ? h("th", {}, t("Takes part")) : "",
+        withAccount ? h("th", {}, t("Account")) : "",
         h("th", {}, t("Product")),
         withShare ? h("th", {}, t("Share in the category")) : "",
         h("th", {}, t("Current")),
@@ -183,6 +188,7 @@ export function rebalancePanel(ctx: Context): Panel {
     row: ProductRow,
     withBox: boolean,
     withShare: boolean,
+    withAccount: boolean,
   ): HTMLElement {
     let cell: HTMLElement | string = "";
     if (withBox) {
@@ -192,7 +198,7 @@ export function rebalancePanel(ctx: Context): Panel {
       });
       check.checked = row.takesPart;
       check.addEventListener("change", () =>
-        save(account.id, toggle(accountOf(current ?? view, account.id)?.excluded ?? [], row.product, check.checked)),
+        save([[account.id, toggle(accountOf(current ?? view, account.id)?.excluded ?? [], row.product, check.checked)]]),
       );
       cell = h("td", { class: "center" }, check);
     }
@@ -200,6 +206,7 @@ export function rebalancePanel(ctx: Context): Panel {
       "tr",
       {},
       cell,
+      withAccount ? h("td", {}, account.name) : "",
       h("th", { scope: "row" }, productName(view, row.product)),
       withShare ? shareCell(view, row.product) : "",
       h("td", { class: "num" }, yen(row.current)),
@@ -212,14 +219,41 @@ export function rebalancePanel(ctx: Context): Panel {
     );
   }
 
-  // One account's product list. The same for an account tab and for each account on "All".
-  function productList(view: PortfolioView, account: Account): HTMLElement {
-    const mode = listModes.get(account.id) ?? "all";
+  // The product list of the tab: one account's, or on "All" every account's in one table with an
+  // account column. Only products an account holds are candidates for it.
+  function productList(view: PortfolioView, accounts: Account[]): HTMLElement {
+    const multi = selected === "all";
+    const mode = listModes.get(selected) ?? "all";
     const showAll = mode === "all";
-    const groups = productGroups(view, account, balances.get(account.id) ?? null, showAll);
-    const shown = groups.flatMap((g) => g.rows.map((r) => r.product));
-    // A strategy account has its own ratios, so the shares of the portfolio do not apply to it.
-    const withShare = account.strategy?.type !== "products";
+    // A strategy account has its own ratios, so the shares of the portfolio do not apply to it, and
+    // it takes no part in All.
+    const single = multi ? undefined : accounts[0];
+    const withShare = single?.strategy?.type !== "products";
+    const listed = multi ? accounts.filter((a) => a.strategy?.type !== "products") : accounts;
+
+    // Category -> its rows, each with its account. A product strategy has the category `null`.
+    const merged = new Map<number | null, { total: string | null; rows: { account: Account; row: ProductRow }[] }>();
+    for (const account of listed) {
+      for (const group of productGroups(view, account, balances.get(account.id) ?? null, showAll)) {
+        const entry = merged.get(group.category) ?? { total: multi ? null : group.total, rows: [] };
+        entry.rows.push(...group.rows.map((row) => ({ account, row })));
+        merged.set(group.category, entry);
+      }
+    }
+    const order = [null, ...view.portfolio.categories.map((c) => c.id)].filter((c) => merged.has(c));
+    const productOrder = new Map(view.portfolio.products.map((p, i) => [p.id, i]));
+    const accountOrder = new Map(view.portfolio.accounts.map((a, i) => [a.id, i]));
+    const shown = new Map<number, number[]>();
+    for (const group of merged.values()) {
+      group.rows.sort(
+        (x, y) =>
+          (productOrder.get(x.row.product) ?? 0) - (productOrder.get(y.row.product) ?? 0) ||
+          (accountOrder.get(x.account.id) ?? 0) - (accountOrder.get(y.account.id) ?? 0),
+      );
+      for (const { account, row } of group.rows) {
+        shown.set(account.id, [...(shown.get(account.id) ?? []), row.product]);
+      }
+    }
 
     const toggleButton = h(
       "button",
@@ -227,33 +261,38 @@ export function rebalancePanel(ctx: Context): Panel {
       showAll ? t("Tradable only") : t("Show all"),
     );
     toggleButton.addEventListener("click", () => {
-      listModes.set(account.id, showAll ? "tradable" : "all");
+      listModes.set(selected, showAll ? "tradable" : "all");
       if (current) {
         renderLists(current);
       }
     });
     const controls = h("div", { class: "button-row" }, toggleButton);
     if (showAll) {
+      const changeAll = (edit: (excluded: number[], shownIds: number[]) => number[]): void =>
+        save(
+          [...shown].map(([id, products]) => [id, edit(accountOf(current ?? view, id)?.excluded ?? [], products)]),
+        );
       const selectAllButton = h("button", { type: "button", class: "link-button" }, t("Select all"));
-      selectAllButton.addEventListener("click", () =>
-        save(account.id, selectAll(accountOf(current ?? view, account.id)?.excluded ?? [], shown)),
-      );
+      selectAllButton.addEventListener("click", () => changeAll(selectAll));
       const clearButton = h("button", { type: "button", class: "link-button" }, t("Clear"));
-      clearButton.addEventListener("click", () =>
-        save(account.id, clearAll(accountOf(current ?? view, account.id)?.excluded ?? [], shown)),
-      );
+      clearButton.addEventListener("click", () => changeAll(clearAll));
       controls.append(selectAllButton, clearButton);
     }
 
     const rows: HTMLElement[] = [];
-    for (const group of groups) {
-      if (group.category !== null) {
+    for (const category of order) {
+      const group = merged.get(category);
+      if (!group) {
+        continue;
+      }
+      if (category !== null) {
         rows.push(
           h(
             "tr",
             { class: "group" },
             showAll ? h("td", {}) : "",
-            h("th", { scope: "rowgroup" }, categoryName(view, group.category)),
+            multi ? h("td", {}) : "",
+            h("th", { scope: "rowgroup" }, categoryName(view, category)),
             withShare ? h("td", {}) : "",
             h("td", { class: "num" }, group.total === null ? "" : yen(group.total)),
             h("td", {}),
@@ -261,25 +300,23 @@ export function rebalancePanel(ctx: Context): Panel {
           ),
         );
       }
-      for (const row of group.rows) {
-        rows.push(productRow(view, account, row, showAll, withShare));
+      for (const { account, row } of group.rows) {
+        rows.push(productRow(view, account, row, showAll, withShare, multi));
       }
     }
 
     const strategyNote =
-      account.strategy?.type === "products"
+      single?.strategy?.type === "products"
         ? h(
             "p",
             { class: "note" },
-            selected === "all"
-              ? t("This account has its own strategy (specified products with ratios). It takes no part in All; use its own tab.")
-              : t("This account follows its own list of products and ratios. Category targets are not used, and products outside the list are neither bought nor sold."),
+            t("This account follows its own list of products and ratios. Category targets are not used, and products outside the list are neither bought nor sold."),
           )
         : "";
     const table =
       rows.length === 0
-        ? h("p", { class: "note" }, showAll ? t("There are no products yet. Add one in Settings.") : t("No product takes part in trading in this account."))
-        : h("div", { class: "table-wrap" }, h("table", {}, head(showAll, withShare), h("tbody", {}, ...rows)));
+        ? h("p", { class: "note" }, showAll ? t("No products are held yet.") : t("No product takes part in trading."))
+        : h("div", { class: "table-wrap" }, h("table", {}, head(showAll, withShare, multi), h("tbody", {}, ...rows)));
     return h(
       "div",
       { class: "product-list" },
@@ -298,7 +335,7 @@ export function rebalancePanel(ctx: Context): Panel {
       h(
         "p",
         { class: "note" },
-        t("Ticked products take part in trading in this account. Products you leave out are never bought or sold, but still count toward their category. A product the account does not hold is not bought. Tradable only lists just the ticked products."),
+        t("Only products the account holds are listed. Ticked products take part in trading in their account. Products you leave out are never bought or sold, but still count toward their category. Tradable only lists just the ticked products."),
       ),
     );
   }
@@ -308,13 +345,13 @@ export function rebalancePanel(ctx: Context): Panel {
     settingsSlot.replaceChildren();
     if (selected === "all") {
       lists.replaceChildren(
-        ...accounts.map((account) =>
-          h(
-            "fieldset",
-            { class: "participation-account" },
-            h("legend", {}, account.name),
-            settingsRows.get(account.id) ?? "",
-            productList(view, account),
+        productList(view, accounts),
+        h(
+          "details",
+          { class: "account-settings-all" },
+          h("summary", {}, t("Account settings")),
+          ...accounts.map((account) =>
+            h("fieldset", { class: "participation-account" }, h("legend", {}, account.name), settingsRows.get(account.id) ?? ""),
           ),
         ),
       );
@@ -324,7 +361,7 @@ export function rebalancePanel(ctx: Context): Panel {
       if (row) {
         settingsSlot.replaceChildren(row);
       }
-      lists.replaceChildren(...accounts.map((account) => productList(view, account)));
+      lists.replaceChildren(productList(view, accounts));
     }
     holdControls();
   }

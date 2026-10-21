@@ -15,6 +15,11 @@ export interface ProductRow {
   takesPart: boolean;
 }
 
+/** Whether the figures show a holding: any non-zero digit in the yen amount. */
+export function isHeld(current: string): boolean {
+  return /[1-9]/.test(current);
+}
+
 export interface ProductGroup {
   /** `null` for a product strategy, which has no categories. */
   category: number | null;
@@ -23,8 +28,9 @@ export interface ProductGroup {
 }
 
 /**
- * The groups to show. "Show all" lists every product; otherwise only those that take part. Products
- * the account does not hold have no figures. A product strategy lists the products it names.
+ * The groups to show. "Show all" lists every product the account holds; otherwise only those that
+ * also take part. Products the account does not hold are never candidates (not every account can
+ * trade every product). A product strategy lists the products it names, held or not.
  */
 export function productGroups(
   view: PortfolioView,
@@ -56,7 +62,7 @@ export function productGroups(
     const rows = view.portfolio.products
       .filter((p) => p.category === category.id)
       .map((p) => row(p.id, figures.get(p.id)))
-      .filter(wanted);
+      .filter((r) => isHeld(r.current) && wanted(r));
     if (rows.length > 0) {
       groups.push({ category: category.id, total: known?.total ?? null, rows });
     }
