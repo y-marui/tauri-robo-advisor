@@ -107,6 +107,7 @@ Frontend (TypeScript) → Tauri command (thin) → Domain logic (Rust) → Stora
 | `thiserror` | `rebalance`・`bitflyer`・`coincheck`・`gmocoin`・`binance` のエラー型 |
 | `reqwest`（`rustls`、default features なし） | bitFlyer・Coincheck・GMO コイン・Binance への HTTPS 通信（`bitflyer`・`coincheck`・`gmocoin`・`binance`）。Tauri 経由で依存ツリーにも既にある |
 | `hmac` / `sha2` | bitFlyer・Coincheck・GMO コイン・Binance の API リクエスト署名（HMAC-SHA256） |
+| `tauri-plugin-window-state`（Tauri 公式プラグイン、Apache-2.0 OR MIT） | 終了時のウィンドウの大きさ・位置・最大化を保存し、次回起動時に戻す。保存先はアプリのデータ用フォルダ内の `.window-state.json`（ポートフォリオのデータは含まない）。保存した位置がどの画面にも重ならないときは位置を戻さず、既定の位置で開く。JavaScript 側からは呼ばないため、capability の追加も CSP の変更も不要 |
 | `keyring` | OS のキーチェーンへの保存（macOS Keychain、Windows Credential Manager、Secret Service） |
 | `serde_json`（`raw_value`） | bitFlyer・Coincheck・GMO コイン・Binance の数値を丸めずに十進数へ読む |
 | `vite` / `typescript` | フロントエンドのビルド |

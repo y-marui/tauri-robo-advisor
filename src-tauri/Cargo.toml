@@ -34,5 +34,6 @@ tabular = { path = "../crates/tabular" }
 browser = { path = "../crates/browser" }
 keyring = "4"
 rust_decimal = "1"
+tauri-plugin-window-state = "2"
 
 [dev-dependencies]
