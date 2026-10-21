@@ -1,7 +1,6 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::CustomType;
 use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
     Holding, ImportMapping, KindRead, KindRule, MAX_PRODUCT_WEIGHT, Portfolio, Product, ProductId,
     ProductShareEntry, Recipe, Strategy, SuggestionMode, TypeRule,
 };
+use crate::{BUILTIN_ACCOUNT_TYPES, CustomType};
 
 /// Which record stays when a merge finds a record of both products in one account.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -188,6 +188,12 @@ pub enum Edit {
         name: Option<String>,
         sellable: Option<bool>,
     },
+    /// Sets whether suggestions may sell the records of a type: a built-in or a custom one. For a
+    /// built-in type only a setting that differs from its default is stored.
+    SetTypeSellable {
+        id: String,
+        sellable: bool,
+    },
     /// Removes a custom type; the records that had it are left without a type (merged into the
     /// untyped record of the same product in the same account, when there is one).
     RemoveAccountType {
@@ -218,10 +224,12 @@ pub enum Edit {
         account_type: Option<String>,
     },
     /// Sets the weight of a product for one suggestion mode (the default weight 1 clears the
-    /// setting). Global: it applies to every account.
+    /// setting). The weight belongs to the tab of an account, or to the All tab without one.
     SetProductShare {
         mode: SuggestionMode,
         product: ProductId,
+        #[serde(default)]
+        account: Option<AccountId>,
         weight: Decimal,
     },
     /// Makes the account hold exactly these products, as an import does. The
@@ -1213,6 +1221,7 @@ impl Portfolio {
                 self.accounts.retain(|a| a.id != id);
                 self.holdings.retain(|h| h.account != id);
                 self.recipes.retain(|r| r.account != id);
+                self.product_shares.retain(|e| e.account != Some(id));
             }
             Edit::AddAccountType {
                 name: new_name,
@@ -1247,6 +1256,19 @@ impl Portfolio {
                     if let Some(s) = sellable {
                         t.sellable = s;
                     }
+                }
+            }
+            Edit::SetTypeSellable { id, sellable } => {
+                if let Some((_, default)) = BUILTIN_ACCOUNT_TYPES.iter().find(|(b, _)| *b == id) {
+                    if *default == sellable {
+                        self.type_sellable_overrides.remove(&id);
+                    } else {
+                        self.type_sellable_overrides.insert(id, sellable);
+                    }
+                } else if let Some(t) = self.custom_types.iter_mut().find(|t| t.id == id) {
+                    t.sellable = sellable;
+                } else {
+                    return Err(Error::NotFound("account type"));
                 }
             }
             Edit::RemoveAccountType { id } => {
@@ -1337,23 +1359,29 @@ impl Portfolio {
             Edit::SetProductShare {
                 mode,
                 product,
+                account,
                 weight,
             } => {
                 self.product(product)?;
+                if let Some(account) = account {
+                    self.account(account)?;
+                }
                 let weight = positive(weight, "weight")?;
                 if weight > MAX_PRODUCT_WEIGHT {
                     return Err(Error::Invalid("the weight is too large".to_owned()));
                 }
                 self.product_shares
-                    .retain(|e| !(e.mode == mode && e.product == product));
+                    .retain(|e| !(e.mode == mode && e.product == product && e.account == account));
                 if weight != Decimal::ONE {
                     self.check_capacity(self.product_shares.len())?;
                     self.product_shares.push(ProductShareEntry {
                         mode,
                         product,
+                        account,
                         weight,
                     });
-                    self.product_shares.sort_by_key(|e| (e.mode, e.product));
+                    self.product_shares
+                        .sort_by_key(|e| (e.mode, e.product, e.account));
                 }
             }
             Edit::RemoveHolding {

@@ -4,7 +4,8 @@ use rust_decimal::Decimal;
 
 use crate::presets::Preset;
 use crate::{
-    Error, Issue, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio, SCHEMA_VERSION, Strategy,
+    BUILTIN_ACCOUNT_TYPES, Error, Issue, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio,
+    SCHEMA_VERSION, Strategy,
 };
 
 /// The most recipes a data file may hold.
@@ -189,6 +190,16 @@ impl Portfolio {
             }
         }
 
+        for (id, sellable) in &self.type_sellable_overrides {
+            // Only a built-in type has an override, and only one that differs from its default.
+            let builtin = BUILTIN_ACCOUNT_TYPES
+                .iter()
+                .find(|(b, _)| *b == id.as_str());
+            if builtin.is_none_or(|(_, default)| default == sellable) {
+                return corrupt("a selling rule refers to a missing or unchanged account type");
+            }
+        }
+
         let mut seen = HashSet::new();
         for holding in &self.holdings {
             if holding
@@ -227,8 +238,14 @@ impl Portfolio {
             if !self.products.iter().any(|p| p.id == entry.product) {
                 return corrupt("a product setting refers to a missing product");
             }
-            if !shared.insert((entry.mode, entry.product)) {
-                return corrupt("a product has two settings for the same mode");
+            if entry
+                .account
+                .is_some_and(|id| !self.accounts.iter().any(|a| a.id == id))
+            {
+                return corrupt("a product setting refers to a missing account");
+            }
+            if !shared.insert((entry.mode, entry.product, entry.account)) {
+                return corrupt("a product has two settings for the same mode and tab");
             }
             positive(entry.weight, "weight").map_err(into_corrupt)?;
             if entry.weight > MAX_PRODUCT_WEIGHT {

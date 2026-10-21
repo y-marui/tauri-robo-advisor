@@ -10,6 +10,7 @@ use crate::engine::{MAX_AMOUNT, to_jpy};
 /// The product settings the balance table follows: the fixed-add mode's.
 const BALANCE_MODE: SuggestionMode = SuggestionMode::FixedAdd;
 use crate::round::round_to_units;
+use crate::split::{TypeValue, type_values};
 use crate::strategy::{StrategyBalance, balance};
 
 /// One product's value in the account against the share of the account's
@@ -20,6 +21,10 @@ pub struct ProductBalance {
     /// What the account holds of the product, in JPY.
     #[serde(serialize_with = "crate::display::yen")]
     pub current: Decimal,
+    /// `current` split by the type of the records, in the order a sale takes them (records
+    /// without a type first, the NISA family last). Empty when the account does not hold it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<TypeValue>,
     /// What the weights ask for, in whole yen: the category's holdings of the account split by
     /// the product weights. `None` only when the weights are unusable (all zero).
     #[serde(serialize_with = "crate::display::yen_option")]
@@ -90,6 +95,7 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
         return Err(Error::TooLarge);
     }
 
+    let mut types = type_values(portfolio);
     let categories = portfolio
         .categories
         .iter()
@@ -108,7 +114,7 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .sum();
             let weights: Vec<Decimal> = members
                 .iter()
-                .map(|p| portfolio.product_weight(BALANCE_MODE, p.id))
+                .map(|p| portfolio.product_weight(BALANCE_MODE, p.id, Some(account.id)))
                 .collect();
             let weight_sum: Decimal = weights.iter().copied().sum();
             // Whole yen that add up to the total, so the shortfalls never suggest money is missing
@@ -131,6 +137,7 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                     ProductBalance {
                         product: product.id,
                         current,
+                        types: types.remove(&(account.id, product.id)).unwrap_or_default(),
                         target: *target,
                         shortfall: target.map(|t| (t - current).round_dp(0)),
                     }

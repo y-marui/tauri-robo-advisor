@@ -1658,7 +1658,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 22);
+    assert_eq!(SCHEMA_VERSION, 24);
 }
 
 #[test]
@@ -2148,6 +2148,21 @@ fn share_edit(mode: SuggestionMode, product: ProductId, weight: rust_decimal::De
     Edit::SetProductShare {
         mode,
         product,
+        account: None,
+        weight,
+    }
+}
+
+fn share_edit_for(
+    mode: SuggestionMode,
+    product: ProductId,
+    account: AccountId,
+    weight: rust_decimal::Decimal,
+) -> Edit {
+    Edit::SetProductShare {
+        mode,
+        product,
+        account: Some(account),
         weight,
     }
 }
@@ -2158,7 +2173,7 @@ fn a_product_has_its_own_weight_for_each_mode() {
 
     // Nothing set: the weight 1 in every mode.
     for mode in SuggestionMode::ALL {
-        assert_eq!(p.product_weight(mode, prod), dec!(1));
+        assert_eq!(p.product_weight(mode, prod, None), dec!(1));
     }
     apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, dec!(3)));
     apply(
@@ -2166,10 +2181,16 @@ fn a_product_has_its_own_weight_for_each_mode() {
         share_edit(SuggestionMode::FixedSell, prod, dec!(0.5)),
     );
 
-    assert_eq!(p.product_weight(SuggestionMode::FixedAdd, prod), dec!(3));
-    assert_eq!(p.product_weight(SuggestionMode::FixedSell, prod), dec!(0.5));
     assert_eq!(
-        p.product_weight(SuggestionMode::FullRebalance, prod),
+        p.product_weight(SuggestionMode::FixedAdd, prod, None),
+        dec!(3)
+    );
+    assert_eq!(
+        p.product_weight(SuggestionMode::FixedSell, prod, None),
+        dec!(0.5)
+    );
+    assert_eq!(
+        p.product_weight(SuggestionMode::FullRebalance, prod, None),
         dec!(1)
     );
     p.validate_integrity().unwrap();
@@ -2237,6 +2258,7 @@ fn a_file_with_a_bad_product_setting_is_refused() {
     let entry = |weight| ProductShareEntry {
         mode: SuggestionMode::FixedAdd,
         product: prod,
+        account: None,
         weight,
     };
     for entries in [
@@ -2296,12 +2318,21 @@ fn the_targeting_of_an_older_file_becomes_a_weight_per_mode() {
     for mode in SuggestionMode::ALL {
         // The weights of the records add up; every other product has the default weight 1,
         // keep-current ones included.
-        assert_eq!(p.product_weight(mode, ProductId(1)), dec!(3));
+        assert_eq!(p.product_weight(mode, ProductId(1), None), dec!(3));
         for other in [2, 3, 4, 9] {
-            assert_eq!(p.product_weight(mode, ProductId(other)), dec!(1));
+            assert_eq!(p.product_weight(mode, ProductId(other), None), dec!(1));
         }
     }
-    assert_eq!(p.product_shares.len(), 4);
+    // Each entry is also copied for the two accounts (version 24).
+    assert_eq!(p.product_shares.len(), 4 * 3);
+    for account in [10, 11] {
+        for mode in SuggestionMode::ALL {
+            assert_eq!(
+                p.product_weight(mode, ProductId(1), Some(AccountId(account))),
+                dec!(3)
+            );
+        }
+    }
     // Both old fields are gone, and the result round-trips as a current file.
     let json = serde_json::to_value(&p).unwrap();
     assert!(json["categories"][0].get("targeting").is_none());
@@ -2333,23 +2364,23 @@ fn the_product_shapes_of_version_20_and_21_become_weights() {
 
         p.validate_integrity().unwrap();
         assert_eq!(
-            p.product_weight(SuggestionMode::FixedAdd, ProductId(1)),
+            p.product_weight(SuggestionMode::FixedAdd, ProductId(1), None),
             dec!(2.5)
         );
         assert_eq!(
-            p.product_weight(SuggestionMode::FixedAdd, ProductId(2)),
+            p.product_weight(SuggestionMode::FixedAdd, ProductId(2), None),
             dec!(1)
         );
         assert_eq!(
-            p.product_weight(SuggestionMode::FixedSell, ProductId(2)),
+            p.product_weight(SuggestionMode::FixedSell, ProductId(2), None),
             dec!(1)
         );
         assert_eq!(
-            p.product_weight(SuggestionMode::FixedSell, ProductId(3)),
+            p.product_weight(SuggestionMode::FixedSell, ProductId(3), None),
             dec!(1)
         );
         assert_eq!(
-            p.product_weight(SuggestionMode::FullRebalance, ProductId(3)),
+            p.product_weight(SuggestionMode::FullRebalance, ProductId(3), None),
             dec!(4)
         );
         assert_eq!(p.product_shares.len(), 2);
@@ -3341,11 +3372,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 23, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 25, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 23 })
+        Err(Error::UnsupportedVersion { found: 25 })
     ));
 }
 
@@ -3856,4 +3887,206 @@ fn an_older_file_starts_with_the_same_list_for_all() {
     assert_eq!(p.accounts[0].excluded_all, vec![ProductId(2)]);
     assert_eq!(p.accounts[0].excluded, vec![ProductId(2)]);
     assert!(p.accounts[1].excluded_all.is_empty());
+}
+
+#[test]
+fn the_selling_rule_of_a_builtin_type_can_be_changed_and_is_stored_as_an_override() {
+    let mut p = Portfolio::default();
+    assert!(!p.type_sellable(Some("nisa")));
+    p.apply(Edit::SetTypeSellable {
+        id: "nisa".to_owned(),
+        sellable: true,
+    })
+    .unwrap();
+    p.apply(Edit::SetTypeSellable {
+        id: "general".to_owned(),
+        sellable: false,
+    })
+    .unwrap();
+    assert!(p.type_sellable(Some("nisa")));
+    assert!(!p.type_sellable(Some("general")));
+    assert!(p.type_sellable(None));
+    assert_eq!(p.type_sellable_overrides.len(), 2);
+    // It survives a round trip and is a valid file.
+    let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+    assert_eq!(back, p);
+    back.validate_integrity().unwrap();
+    // Back to the default: nothing is stored.
+    p.apply(Edit::SetTypeSellable {
+        id: "nisa".to_owned(),
+        sellable: false,
+    })
+    .unwrap();
+    assert!(!p.type_sellable_overrides.contains_key("nisa"));
+    let json = serde_json::to_string(&Portfolio::default()).unwrap();
+    assert!(!json.contains("type_sellable_overrides"));
+}
+
+#[test]
+fn the_selling_rule_of_a_custom_type_is_set_on_the_type() {
+    let mut p = Portfolio::default();
+    p.apply(Edit::AddAccountType {
+        name: "Mine".to_owned(),
+        sellable: true,
+    })
+    .unwrap();
+    let id = p.custom_types[0].id.clone();
+    p.apply(Edit::SetTypeSellable {
+        id: id.clone(),
+        sellable: false,
+    })
+    .unwrap();
+    assert!(!p.type_sellable(Some(&id)));
+    assert!(p.type_sellable_overrides.is_empty());
+}
+
+#[test]
+fn an_unknown_type_id_is_refused_by_the_edit_and_the_integrity_check() {
+    let mut p = Portfolio::default();
+    let r = p.apply(Edit::SetTypeSellable {
+        id: "nope".to_owned(),
+        sellable: true,
+    });
+    assert!(matches!(r, Err(Error::NotFound(_))));
+    assert!(p.type_sellable_overrides.is_empty());
+    p.type_sellable_overrides.insert("nope".to_owned(), true);
+    assert!(p.validate_integrity().is_err());
+    p.type_sellable_overrides.clear();
+    p.type_sellable_overrides.insert("general".to_owned(), true);
+    assert!(p.validate_integrity().is_err(), "equal to the default");
+}
+
+#[test]
+fn an_older_file_loads_without_overrides_and_keeps_the_defaults() {
+    let old = r#"{"schema_version": 22, "next_id": 1}"#;
+    let p = parse(old.as_bytes()).unwrap();
+    assert!(p.type_sellable_overrides.is_empty());
+    assert!(!p.type_sellable(Some("nisa_tsumitate")));
+    assert!(p.type_sellable(Some("crypto")));
+}
+
+#[test]
+fn sales_take_from_non_nisa_types_first() {
+    let p = Portfolio::default();
+    let mut order = [
+        "nisa", "deposit", "old_nisa", "general", "custom-3", "crypto",
+    ]
+    .map(|id| (p.sell_rank(Some(id)), id));
+    order.sort();
+    let ids: Vec<_> = order.iter().map(|x| x.1).collect();
+    assert_eq!(
+        ids,
+        [
+            "general", "deposit", "crypto", "custom-3", "nisa", "old_nisa"
+        ]
+    );
+    assert!(p.sell_rank(None) < p.sell_rank(Some("general")));
+}
+
+#[test]
+fn a_tab_has_its_own_weight_independent_of_all_and_other_tabs() {
+    let (mut p, _, prod, acc1) = sample();
+    let acc2 = account(&mut p, "Account 2");
+    let mode = SuggestionMode::FixedAdd;
+    apply(&mut p, share_edit_for(mode, prod, acc1, dec!(3)));
+    assert_eq!(p.product_weight(mode, prod, Some(acc1)), dec!(3));
+    assert_eq!(p.product_weight(mode, prod, Some(acc2)), dec!(1));
+    assert_eq!(p.product_weight(mode, prod, None), dec!(1));
+
+    apply(&mut p, share_edit(mode, prod, dec!(2)));
+    assert_eq!(p.product_weight(mode, prod, None), dec!(2));
+    assert_eq!(p.product_weight(mode, prod, Some(acc1)), dec!(3));
+    assert_eq!(p.product_shares.len(), 2);
+    p.validate_integrity().unwrap();
+
+    // Back to the default clears only that tab's entry.
+    apply(&mut p, share_edit_for(mode, prod, acc1, dec!(1)));
+    assert_eq!(p.product_shares.len(), 1);
+    assert_eq!(p.product_shares[0].account, None);
+
+    // The weights of a tab survive a save and a load.
+    apply(&mut p, share_edit_for(mode, prod, acc2, dec!(5)));
+    let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+    assert_eq!(back, p);
+}
+
+#[test]
+fn a_weight_for_a_missing_account_is_refused_and_removing_an_account_drops_its_weights() {
+    let (mut p, _, prod, acc1) = sample();
+    let acc2 = account(&mut p, "Account 2");
+    let before = p.clone();
+    assert!(
+        p.apply(share_edit_for(
+            SuggestionMode::FixedAdd,
+            prod,
+            AccountId(9999),
+            dec!(2)
+        ))
+        .is_err()
+    );
+    assert_eq!(p, before);
+
+    for id in [acc1, acc2] {
+        apply(
+            &mut p,
+            share_edit_for(SuggestionMode::FixedSell, prod, id, dec!(2)),
+        );
+    }
+    apply(&mut p, share_edit(SuggestionMode::FixedSell, prod, dec!(4)));
+    apply(&mut p, Edit::RemoveAccount { id: acc1 });
+    assert_eq!(p.product_shares.len(), 2);
+    assert!(p.product_shares.iter().all(|e| e.account != Some(acc1)));
+    p.validate_integrity().unwrap();
+
+    // Removing a product drops its weights on every tab.
+    apply(&mut p, Edit::RemoveProduct { id: prod });
+    assert!(p.product_shares.is_empty());
+}
+
+#[test]
+fn a_file_with_a_dangling_or_duplicated_tab_weight_is_refused() {
+    let (mut p, _, prod, acc) = sample();
+    let entry = |account| ProductShareEntry {
+        mode: SuggestionMode::FixedAdd,
+        product: prod,
+        account,
+        weight: dec!(2),
+    };
+    for entries in [
+        vec![entry(Some(AccountId(9999)))],
+        vec![entry(Some(acc)), entry(Some(acc))],
+    ] {
+        p.product_shares = entries;
+        assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+    }
+    // The same weight for All and for one tab is two different settings.
+    p.product_shares = vec![entry(None), entry(Some(acc))];
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn the_weights_of_an_older_file_are_copied_for_each_account() {
+    let old = r#"{"schema_version": 23, "next_id": 40,
+      "categories": [{"id": 5, "name": "W", "target_weight": "1"}],
+      "products": [{"id": 1, "name": "A", "category": 5, "currency": "JPY"}],
+      "accounts": [
+        {"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"},
+        {"id": 11, "name": "N", "sellable": true, "rounding_unit": "1"}],
+      "product_shares": [{"mode": "fixed_add", "product": 1, "weight": "3"}]}"#;
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+    p.validate_integrity().unwrap();
+    let mode = SuggestionMode::FixedAdd;
+    for account in [None, Some(AccountId(10)), Some(AccountId(11))] {
+        assert_eq!(p.product_weight(mode, ProductId(1), account), dec!(3));
+    }
+    assert_eq!(
+        p.product_weight(SuggestionMode::FixedSell, ProductId(1), Some(AccountId(10))),
+        dec!(1)
+    );
+    assert_eq!(p.product_shares.len(), 3);
+
+    // A file of the current version is not copied again.
+    let again = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+    assert_eq!(again.product_shares.len(), 3);
 }

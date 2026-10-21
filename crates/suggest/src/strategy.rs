@@ -193,6 +193,8 @@ impl<'a> Plan<'a> {
             .map(|(&i, amount)| ProductLine {
                 account: self.account.id,
                 product: self.rows[i].product,
+                account_type: None,
+                by_type: false,
                 delta: amount * sign,
                 after: self.rows[i].held + amount * sign,
             })
@@ -209,6 +211,7 @@ impl<'a> Plan<'a> {
         notes: Vec<Note>,
     ) -> Suggestion {
         lines.retain(|line| !line.delta.is_zero());
+        let mut lines = crate::split::split_sales(self.portfolio, lines);
         lines.sort_by_key(|line| line.product);
         let total_after = self.portfolio_total + lines.iter().map(|l| l.delta).sum::<Decimal>();
         Suggestion {
@@ -427,6 +430,7 @@ pub(crate) fn balance(portfolio: &Portfolio, account: &Account) -> Result<Strate
             Some(whole) => whole.into_iter().map(Some).collect(),
             None => vec![None; exact.len()],
         };
+    let mut types = crate::split::type_values(portfolio);
     let products = plan
         .rows
         .iter()
@@ -434,6 +438,7 @@ pub(crate) fn balance(portfolio: &Portfolio, account: &Account) -> Result<Strate
         .map(|(row, target)| ProductBalance {
             product: row.product,
             current: row.held,
+            types: types.remove(&(account.id, row.product)).unwrap_or_default(),
             target,
             shortfall: target.map(|t| (t - row.held).round_dp(0)),
         })

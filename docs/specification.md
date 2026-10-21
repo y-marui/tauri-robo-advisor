@@ -50,3 +50,4 @@
 | [specification-suggestions.md](specification-suggestions.md) | リバランスの計算（Rebalance Calculation）、提案モード（Suggestion Modes）、計算の詳細（Calculation Details） |
 | [specification-suggestions-accounts.md](specification-suggestions-accounts.md) | 「すべて」のタブ（All Tab）、口座の戦略（Account Strategy）、口座タブ（Account Tabs） |
 | [specification-data.md](specification-data.md) | ポートフォリオのモデル、口座、保存（Storage）、エクスポート（Export） |
+| [specification-data-versions.md](specification-data-versions.md) | スキーマのバージョン 22 以下の経緯 |

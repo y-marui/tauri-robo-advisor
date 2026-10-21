@@ -174,8 +174,8 @@ export const MESSAGES = {
   "Weight": { ja: "比率" },
   "{product}: weight ({mode})": { ja: "{product}: 比率（{mode}）" },
   "Enter a positive weight.": { ja: "比率には、0 より大きい数を入力してください。" },
-  "The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and it is the same in every account. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.": {
-    ja: "比率は、上で選んだ提案の種類（{mode}）のものです。種類ごとに商品の比率を別々に持ち、どの口座でも同じです。「ポートフォリオに従う」ではカテゴリに配った額を商品の間で、「商品の比率で配る」では全体の額をすべての商品の間で、この比率で分けます。",
+  "The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and every account tab and All keep their own. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.": {
+    ja: "比率は、上で選んだ提案の種類（{mode}）のものです。種類ごとに、また口座のタブと「すべて」のタブごとに、商品の比率を別々に持ちます。「ポートフォリオに従う」ではカテゴリに配った額を商品の間で、「商品の比率で配る」では全体の額をすべての商品の間で、この比率で分けます。",
   },
   "General account": { ja: "一般" },
   "Specific account": { ja: "特定" },
@@ -189,12 +189,14 @@ export const MESSAGES = {
   "Add a type": { ja: "種類を追加" },
   "Type name": { ja: "種類の名前" },
   "Delete type": { ja: "種類を削除" },
-  "Each record has a type (general, specific, NISA, NISA growth, NISA tsumitate, old NISA, cash, crypto assets, or one added here). NISA types, old NISA included, are never sold by a suggestion. “NISA” means a NISA whose frame is not decided yet. The type is read automatically only where the page shows it; otherwise set it by hand in the Records card.": {
-    ja: "レコードごとに種類（一般・特定・NISA（区分未定）・NISA成長投資枠・NISAつみたて投資枠・旧NISA・現金・暗号資産、またはここで追加したもの）を持ちます。NISA 系（旧NISA を含む）は提案で売りません。「NISA」は、成長投資枠かつみたて投資枠かをまだ決めていない NISA の意味です。種類を自動で読み取れるのは、ページに種類が表示されている場合だけです。それ以外は、レコードのカードで手で設定してください。",
+  "Each record has a type (general, specific, NISA, NISA growth, NISA tsumitate, old NISA, cash, crypto assets, or one added here). “NISA” means a NISA whose frame is not decided yet. The type is read automatically only where the page shows it; otherwise set it by hand in the Records card.": {
+    ja: "レコードごとに種類（一般・特定・NISA（区分未定）・NISA成長投資枠・NISAつみたて投資枠・旧NISA・現金・暗号資産、またはここで追加したもの）を持ちます。「NISA」は、成長投資枠かつみたて投資枠かをまだ決めていない NISA の意味です。種類を自動で読み取れるのは、ページに種類が表示されている場合だけです。それ以外は、レコードのカードで手で設定してください。",
   },
-  "Types you add: the sellable box says whether a suggestion may sell records of the type.": {
-    ja: "追加した種類です。「売却可」で、この種類のレコードを提案で売ってよいかを決めます。",
+  "The sellable box says whether a suggestion may sell records of the type. NISA types are off by default, because selling gives up tax-free room. When a product is held in several types of one account, a sale takes from the other types first and from the NISA types last.": {
+    ja: "「売却可」で、この種類のレコードを提案で売ってよいかを決めます。NISA 系は、売ると非課税枠を失うため、初期値では売りません。同じ口座の1つの商品が複数の種類にまたがる場合は、NISA 系以外の種類から先に売り、NISA 系は最後にします。",
   },
+  "Built-in types": { ja: "標準の種類" },
+  "Types you added": { ja: "追加した種類" },
   "Cash": { ja: "現金" },
   "USD/JPY rate": { ja: "USD/JPY レート" },
   "Category tolerance (%)": { ja: "カテゴリの許容乖離 (%)" },

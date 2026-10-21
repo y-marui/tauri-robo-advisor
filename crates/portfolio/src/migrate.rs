@@ -42,6 +42,9 @@ fn to_current(value: &mut Value) -> Result<(), Error> {
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..22).contains(&v)) {
         shares_into_weights(value);
     }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..24).contains(&v)) {
+        copy_weights_for_accounts(value);
+    }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
@@ -251,6 +254,39 @@ fn targeting_into_product_shares(value: &mut Value) -> Result<(), Error> {
     }
     value["product_shares"] = Value::Array(shares);
     Ok(())
+}
+
+/// Version 24: each account's tab has its own product weights, and the entries without an account
+/// are those of the All tab. Every existing entry stays as the All entry and is copied for each
+/// account, so no tab changes.
+fn copy_weights_for_accounts(value: &mut Value) {
+    let accounts: Vec<Value> = value
+        .get("accounts")
+        .and_then(Value::as_array)
+        .map(|accounts| {
+            accounts
+                .iter()
+                .filter_map(|a| a.get("id"))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    let Some(entries) = value
+        .get_mut("product_shares")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let old = entries.clone();
+    for account in accounts {
+        for entry in &old {
+            let mut copy = entry.clone();
+            if let Some(object) = copy.as_object_mut() {
+                object.insert("account".to_owned(), account.clone());
+                entries.push(copy);
+            }
+        }
+    }
 }
 
 /// Version 22: a product setting is a plain weight. An entry of the old shape (`share` with a

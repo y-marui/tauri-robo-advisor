@@ -958,3 +958,13 @@ details.product-tools summary {
 .share-cell .number {
   width: 5rem;
 }
+
+/* One record type's share of a sale, under the product's row in the Rebalance table. */
+tr.type-part td,
+tr.type-part th {
+  color: var(--muted);
+}
+
+td.type-label {
+  padding-left: 1.5rem;
+}

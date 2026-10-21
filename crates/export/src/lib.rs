@@ -294,6 +294,7 @@ fn aliases(portfolio: &Portfolio) -> Table {
 fn product_targets(portfolio: &Portfolio) -> Table {
     let mut table = Table::new(&[
         "mode",
+        "account_id",
         "product_id",
         "product",
         "category_id",
@@ -306,6 +307,7 @@ fn product_targets(portfolio: &Portfolio) -> Table {
             product.and_then(|p| portfolio.categories.iter().find(|c| c.id == p.category));
         table.push(vec![
             plain_cell(&keyword(&entry.mode)),
+            plain_cell(&entry.account.map_or(String::new(), |a| a.0.to_string())),
             plain_cell(&entry.product.0.to_string()),
             text_cell(product.map_or("", |p| &p.name)),
             plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),
@@ -421,7 +423,7 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          categories.csv   Categories (with their group) with their target weight and current value.\n\
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
-         product_targets.csv  The weight of a product, per suggestion mode (only the products whose weight is not 1).\n\
+         product_targets.csv  The weight of a product, per suggestion mode and tab (account_id is empty for the All tab; only the weights that are not 1).\n\
          accounts.csv     Accounts with their rules (sellable, rounding unit, products left out of trading).\n\
          settings.csv     Exchange rate and tolerances.\n\
          portfolio.json   The complete data in the app's own format (all of the above).\n\

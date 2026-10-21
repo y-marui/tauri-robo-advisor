@@ -3,12 +3,14 @@
 // figures come from Rust (`AccountBalance`); this only arranges them and adds the products the
 // balance leaves out (an account is listed with every product, held or not).
 
-import type { Account, AccountBalance, PortfolioView, ProductBalance, ProductLine } from "./types.ts";
+import type { Account, AccountBalance, PortfolioView, ProductBalance, ProductLine, TypeValue } from "./types.ts";
 
 export interface ProductRow {
   product: number;
   /** JPY held in the account. */
   current: string;
+  /** `current` by record type, in the order a sale takes them. */
+  types: TypeValue[];
   /** False when the account leaves the product out of trading. */
   takesPart: boolean;
 }
@@ -41,6 +43,7 @@ export function productGroups(
   const row = (product: number, figures: ProductBalance | undefined): ProductRow => ({
     product,
     current: figures?.current ?? "0",
+    types: figures?.types ?? [],
     takesPart: !excluded.has(product),
   });
   const wanted = (r: ProductRow): boolean => showAll || r.takesPart;
@@ -71,11 +74,45 @@ export function productGroups(
 export const slotKey = (account: number, product: number): string => `${account}:${product}`;
 
 /**
- * The suggestion's lines by (account, product). Rust gives one line per pair (trades in the same
- * pair are added up there, with `after`), so nothing is added here.
+ * The suggestion's lines by (account, product). A purchase is one line; a sale is one line per
+ * record type it takes from. Nothing is added up here: the figures come from Rust.
  */
-export function tradesBySlot(lines: readonly ProductLine[]): Map<string, ProductLine> {
-  return new Map(lines.map((line) => [slotKey(line.account, line.product), line]));
+export function tradesBySlot(lines: readonly ProductLine[]): Map<string, ProductLine[]> {
+  const out = new Map<string, ProductLine[]>();
+  for (const line of lines) {
+    const key = slotKey(line.account, line.product);
+    out.set(key, [...(out.get(key) ?? []), line]);
+  }
+  return out;
+}
+
+/** How the trades of one row are shown. */
+export interface SlotTrade {
+  /** The one line shown on the product's own row, or `null` when there is none or the sale is split. */
+  inline: ProductLine | null;
+  /** One sub-row per record type when a sale is shown by type, with the value that type holds now. */
+  parts: { line: ProductLine; current: string }[];
+}
+
+/**
+ * Decides how the trades of a row are shown: a sale of a product held in more than one record type
+ * is shown per type (the row's own figures would not say which records give); anything else is a
+ * single line on the row itself.
+ */
+export function slotTrade(lines: readonly ProductLine[] | undefined, types: readonly TypeValue[]): SlotTrade {
+  if (!lines || lines.length === 0) {
+    return { inline: null, parts: [] };
+  }
+  if (types.length > 1 && lines.every((line) => line.by_type)) {
+    return {
+      inline: null,
+      parts: lines.map((line) => ({
+        line,
+        current: types.find((t) => (t.account_type ?? null) === (line.account_type ?? null))?.current ?? "0",
+      })),
+    };
+  }
+  return { inline: lines[0] ?? null, parts: [] };
 }
 
 /**

@@ -43,6 +43,9 @@ pub struct PortfolioView {
     /// Each holding's value rounded to the smallest unit of its currency, for display only
     /// (`portfolio` keeps the exact values, which the edit fields show).
     pub shown_values: Vec<ShownValue>,
+    /// Whether a suggestion may sell the records of each built-in account type (the default or
+    /// the user's setting), by type id. Custom types carry their own flag.
+    pub builtin_type_sellable: std::collections::BTreeMap<String, bool>,
     /// The recipes as they are run: a recipe made from a preset with the definition of the preset
     /// the app has now (the stored one only refers to it).
     pub recipes: Vec<RecipeView>,
@@ -80,6 +83,10 @@ impl PortfolioView {
         Self {
             portfolio: portfolio.clone(),
             shown_values: portfolio.shown_values(),
+            builtin_type_sellable: portfolio::BUILTIN_ACCOUNT_TYPES
+                .iter()
+                .map(|(id, _)| ((*id).to_owned(), portfolio.type_sellable(Some(id))))
+                .collect(),
             recipes: portfolio.recipes.iter().map(RecipeView::new).collect(),
             issues: portfolio.issues(),
             data,
