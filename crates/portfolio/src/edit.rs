@@ -7,7 +7,7 @@ use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, Alias, CardSource, Category, CategoryId, Error, FetchLink, Group, GroupId,
     Holding, ImportMapping, KindRead, KindRule, MAX_PRODUCT_WEIGHT, Portfolio, Product, ProductId,
-    ProductShare, ProductShareEntry, Recipe, Strategy, SuggestionMode, TypeRule,
+    ProductShareEntry, Recipe, Strategy, SuggestionMode, TypeRule,
 };
 
 /// Which record stays when a merge finds a record of both products in one account.
@@ -217,12 +217,12 @@ pub enum Edit {
         #[serde(default)]
         account_type: Option<String>,
     },
-    /// Sets how a product is targeted inside its category for one suggestion mode (`Equal`
-    /// clears the setting). Global: it applies to every account.
+    /// Sets the weight of a product for one suggestion mode (the default weight 1 clears the
+    /// setting). Global: it applies to every account.
     SetProductShare {
         mode: SuggestionMode,
         product: ProductId,
-        share: ProductShare,
+        weight: Decimal,
     },
     /// Makes the account hold exactly these products, as an import does. The
     /// values are in each product's own currency.
@@ -1337,23 +1337,21 @@ impl Portfolio {
             Edit::SetProductShare {
                 mode,
                 product,
-                share,
+                weight,
             } => {
                 self.product(product)?;
-                if let ProductShare::Weighted { weight } = share {
-                    let weight = positive(weight, "weight")?;
-                    if weight > MAX_PRODUCT_WEIGHT {
-                        return Err(Error::Invalid("the weight is too large".to_owned()));
-                    }
+                let weight = positive(weight, "weight")?;
+                if weight > MAX_PRODUCT_WEIGHT {
+                    return Err(Error::Invalid("the weight is too large".to_owned()));
                 }
                 self.product_shares
                     .retain(|e| !(e.mode == mode && e.product == product));
-                if share != ProductShare::Equal {
+                if weight != Decimal::ONE {
                     self.check_capacity(self.product_shares.len())?;
                     self.product_shares.push(ProductShareEntry {
                         mode,
                         product,
-                        share,
+                        weight,
                     });
                     self.product_shares.sort_by_key(|e| (e.mode, e.product));
                 }

@@ -1,6 +1,6 @@
 // Every name and amount in these tests is made up.
 
-use portfolio::{Edit, Portfolio, ProductShare, SuggestionMode};
+use portfolio::{Edit, Portfolio, SuggestionMode};
 use rust_decimal::{Decimal, dec};
 
 use crate::*;
@@ -256,7 +256,7 @@ fn product_targets_are_exported_per_mode() {
         Edit::SetProductShare {
             mode: SuggestionMode::FixedAdd,
             product: s1,
-            share: ProductShare::Weighted { weight: dec!(2.50) },
+            weight: dec!(2.50),
         },
     );
     apply(
@@ -264,7 +264,7 @@ fn product_targets_are_exported_per_mode() {
         Edit::SetProductShare {
             mode: SuggestionMode::FixedSell,
             product: s2,
-            share: ProductShare::KeepCurrent,
+            weight: dec!(0.5),
         },
     );
     let f = files(&p);
@@ -272,11 +272,11 @@ fn product_targets_are_exported_per_mode() {
     let rows = lines(&f["product_targets.csv"]);
     assert_eq!(
         rows[0],
-        "mode,product_id,product,category_id,category,targeting,relative_weight"
+        "mode,product_id,product,category_id,category,relative_weight"
     );
     assert_eq!(rows.len(), 3);
-    assert!(rows[1].starts_with("fixed_add,") && rows[1].ends_with(",weighted,2.5"));
-    assert!(rows[2].starts_with("fixed_sell,") && rows[2].ends_with(",keep_current,"));
+    assert!(rows[1].starts_with("fixed_add,") && rows[1].ends_with(",2.5"));
+    assert!(rows[2].starts_with("fixed_sell,") && rows[2].ends_with(",0.5"));
 }
 
 #[test]

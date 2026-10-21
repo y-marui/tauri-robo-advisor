@@ -98,6 +98,7 @@ fn run(p: &Portfolio, account: AccountId, mode: Mode) -> Result<Suggestion, Erro
             account: Some(account),
             mode,
             held_only: true,
+            method: Default::default(),
         },
     )
 }
@@ -324,6 +325,7 @@ fn the_all_tab_leaves_a_strategy_account_alone() {
                 amount: dec!(10000),
             },
             held_only: true,
+            method: Default::default(),
         },
     )
     .unwrap();

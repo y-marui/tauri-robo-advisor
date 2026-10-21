@@ -1,15 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use portfolio::{
-    Account, AccountId, Category, CategoryId, Portfolio, Product, ProductId, ProductShare,
-    SuggestionMode,
+    Account, AccountId, Category, CategoryId, Portfolio, Product, ProductId, SuggestionMode,
 };
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
 use crate::fill::{Item, fill_up};
 use crate::round::{ceil_to_unit, floor_to_unit, round_to_units};
-use crate::{CategoryLine, Error, Mode, ModeName, Note, ProductLine, Request, Suggestion};
+use crate::{CategoryLine, Error, Method, Mode, ModeName, Note, ProductLine, Request, Suggestion};
 
 /// Amounts above this (one quadrillion yen) are refused, so none of the
 /// arithmetic below can overflow a `Decimal`.
@@ -31,11 +30,18 @@ pub fn suggest(portfolio: &Portfolio, request: &Request) -> Result<Suggestion, E
     {
         return crate::strategy::suggest(portfolio, account, &request.mode);
     }
-    let issues = portfolio.issues();
-    if !issues.is_empty() {
-        return Err(Error::Blocked(issues));
+    // The category targets are not used when allocating by product weights, so problems with them
+    // (weights that do not add up) do not block it.
+    if request.method == Method::FollowPortfolio {
+        let issues = portfolio.issues();
+        if !issues.is_empty() {
+            return Err(Error::Blocked(issues));
+        }
     }
     let book = Book::new(portfolio, request)?;
+    if request.method == Method::ByProductWeights {
+        return book.by_product_weights(&request.mode);
+    }
     match &request.mode {
         Mode::FixedAdd { amount } => {
             check_amount(*amount)?;
@@ -69,6 +75,8 @@ struct Book<'a> {
     /// The accounts the suggestion trades in: the requested one, or all of them.
     scope: Vec<&'a Account>,
     request_account: Option<AccountId>,
+    /// Whether the money is allocated across all products by their weights (no categories).
+    by_product: bool,
     /// The mode being run: the product settings of this mode apply.
     mode: SuggestionMode,
     /// The step amounts are a multiple of: the rounding unit of the accounts in scope (the least
@@ -151,6 +159,7 @@ impl<'a> Book<'a> {
             portfolio,
             scope,
             request_account: request.account,
+            by_product: request.method == Method::ByProductWeights,
             mode: match request.mode {
                 Mode::FixedAdd { .. } => SuggestionMode::FixedAdd,
                 Mode::BuyOnlyToTarget => SuggestionMode::BuyOnlyToTarget,
@@ -265,13 +274,13 @@ impl<'a> Book<'a> {
     /// only gives multiples of its account's unit, and an account's total only a multiple of the
     /// common step, so the remainders below them cannot be sold.
     fn sellable_total(&self, category: CategoryId) -> Decimal {
+        self.sellable_total_of(|p| p.category == category)
+    }
+
+    /// The same for the products the filter picks.
+    fn sellable_total_of(&self, pick: impl Fn(&Product) -> bool) -> Decimal {
         let mut per_account: BTreeMap<AccountId, Decimal> = BTreeMap::new();
-        for product in self
-            .portfolio
-            .products
-            .iter()
-            .filter(|p| p.category == category)
-        {
+        for product in self.portfolio.products.iter().filter(|p| pick(p)) {
             for (account, value) in self.sellers(product.id) {
                 *per_account.entry(account.id).or_default() +=
                     floor_to_unit(value, account.rounding_unit);
@@ -397,37 +406,22 @@ impl<'a> Book<'a> {
         category: &Category,
         amount: Decimal,
     ) -> Result<Vec<(ProductId, Decimal)>, Error> {
-        let candidates = self.candidates(category.id);
-        let all_zero = candidates
-            .iter()
-            .all(|p| self.global_value(p) <= Decimal::ZERO);
+        self.spread_buy(self.candidates(category.id), amount)
+    }
+
+    /// Spreads a purchase over the products by their weights, counting what is held across all
+    /// accounts: the product furthest below its share is raised first.
+    fn spread_buy(
+        &self,
+        candidates: Vec<&'a Product>,
+        amount: Decimal,
+    ) -> Result<Vec<(ProductId, Decimal)>, Error> {
         let items: Vec<Item> = candidates
             .iter()
-            .map(|p| {
-                let value = self.global_value(p);
-                match self.portfolio.product_share(self.mode, p.id) {
-                    // Aim at equal weights, counting what is held.
-                    ProductShare::Equal => Item {
-                        weight: Decimal::ONE,
-                        current: value,
-                        cap: None,
-                    },
-                    ProductShare::Weighted { weight } => Item {
-                        weight,
-                        current: value,
-                        cap: None,
-                    },
-                    ProductShare::KeepCurrent if all_zero => Item {
-                        weight: Decimal::ONE,
-                        current: Decimal::ZERO,
-                        cap: None,
-                    },
-                    ProductShare::KeepCurrent => Item {
-                        weight: value,
-                        current: value,
-                        cap: None,
-                    },
-                }
+            .map(|p| Item {
+                weight: self.portfolio.product_weight(self.mode, p.id),
+                current: self.global_value(p),
+                cap: None,
             })
             .collect();
         let shares = fill_up(&items, amount).map_err(|_| Error::NothingToBuy)?;
@@ -435,21 +429,22 @@ impl<'a> Book<'a> {
     }
 
     fn split_sell(&self, category: &Category, amount: Decimal) -> Vec<(ProductId, Decimal)> {
-        let held = self.held(category.id);
+        self.spread_sell(self.held(category.id), amount)
+    }
+
+    /// Spreads a sale over the products the accounts can sell, the one furthest above its share
+    /// first.
+    fn spread_sell(
+        &self,
+        held: Vec<(&'a Product, Decimal)>,
+        amount: Decimal,
+    ) -> Vec<(ProductId, Decimal)> {
         let items: Vec<Item> = held
             .iter()
-            .map(|(p, here)| {
-                let value = self.global_value(p);
-                let (weight, current) = match self.portfolio.product_share(self.mode, p.id) {
-                    ProductShare::Equal => (Decimal::ONE, -value),
-                    ProductShare::Weighted { weight } => (weight, -value),
-                    ProductShare::KeepCurrent => (value, -value),
-                };
-                Item {
-                    weight,
-                    current,
-                    cap: Some(*here),
-                }
+            .map(|(p, here)| Item {
+                weight: self.portfolio.product_weight(self.mode, p.id),
+                current: -self.global_value(p),
+                cap: Some(*here),
             })
             .collect();
         let shares = fill_up(&items, amount).unwrap_or_else(|_| {
@@ -561,11 +556,15 @@ impl<'a> Book<'a> {
             return Err(Error::AmountBelowUnit);
         }
         let mut flat = Vec::new();
-        for (id, share) in self.fill_categories_buy(spend)? {
-            if share > Decimal::ZERO
-                && let Some(category) = self.category(id)
-            {
-                flat.extend(self.split_buy(category, share)?);
+        if self.by_product {
+            flat = self.spread_buy(self.all_candidates(), spend)?;
+        } else {
+            for (id, share) in self.fill_categories_buy(spend)? {
+                if share > Decimal::ZERO
+                    && let Some(category) = self.category(id)
+                {
+                    flat.extend(self.split_buy(category, share)?);
+                }
             }
         }
         let lines = self.buy_lines(flat, spend)?;
@@ -778,6 +777,16 @@ impl<'a> Book<'a> {
                 flat.extend(self.split_sell(category, *share));
             }
         }
+        self.sell_lines_flat(flat, total)
+    }
+
+    /// Turns per-product sale amounts into sales of the accounts (negative lines), rounded to the
+    /// units.
+    fn sell_lines_flat(
+        &self,
+        flat: Vec<(ProductId, Decimal)>,
+        total: Decimal,
+    ) -> Result<Vec<ProductLine>, Error> {
         let placed = self.place_sell(flat);
         let rounded = self
             .round_slots(&placed, total, true)
@@ -791,6 +800,231 @@ impl<'a> Book<'a> {
                 delta: -amount,
             })
             .collect())
+    }
+
+    // ---- allocating by product weights ---------------------------------------
+
+    /// Every product some account in scope is allowed to buy.
+    fn all_candidates(&self) -> Vec<&'a Product> {
+        self.portfolio
+            .products
+            .iter()
+            .filter(|p| !self.buyers(p.id).is_empty())
+            .collect()
+    }
+
+    /// Every product the accounts in scope can sell, with the value they hold.
+    fn all_held(&self) -> Vec<(&'a Product, Decimal)> {
+        self.portfolio
+            .products
+            .iter()
+            .filter_map(|p| {
+                let value: Decimal = self.sellers(p.id).iter().map(|(_, v)| *v).sum();
+                (value > Decimal::ZERO).then_some((p, value))
+            })
+            .collect()
+    }
+
+    fn by_product_weights(&self, mode: &Mode) -> Result<Suggestion, Error> {
+        match mode {
+            Mode::FixedAdd { amount } => {
+                check_amount(*amount)?;
+                self.fixed_add(*amount, ModeName::FixedAdd, Some(*amount), None)
+            }
+            Mode::BuyOnlyToTarget => self.product_buy_only_to_target(),
+            Mode::FullRebalance => self.product_full_rebalance(),
+            Mode::FixedSell { amount } => {
+                check_amount(*amount)?;
+                self.product_fixed_sell(*amount)
+            }
+        }
+    }
+
+    /// The products that take part, with the share of their total each aims at (the shares add up
+    /// to 1) and what is held of them in all accounts.
+    fn product_shares(&self) -> Vec<(&'a Product, Decimal, Decimal)> {
+        let candidates = self.all_candidates();
+        let weights: Vec<Decimal> = candidates
+            .iter()
+            .map(|p| self.portfolio.product_weight(self.mode, p.id))
+            .collect();
+        let sum: Decimal = weights.iter().copied().sum();
+        candidates
+            .into_iter()
+            .zip(weights)
+            .map(|(p, w)| (p, w / sum, self.global_value(p)))
+            .collect()
+    }
+
+    fn product_buy_only_to_target(&self) -> Result<Suggestion, Error> {
+        let rows = self.product_shares();
+        let pool: Decimal = rows.iter().map(|(_, _, held)| *held).sum();
+        let level = rows
+            .iter()
+            .map(|(_, share, held)| *held / *share)
+            .fold(pool, Decimal::max);
+        let required = level - pool;
+        if required <= NOISE {
+            return Ok(self.finish(
+                ModeName::BuyOnlyToTarget,
+                None,
+                Decimal::ZERO,
+                Some(Decimal::ZERO),
+                Vec::new(),
+                vec![Note::AlreadyBalanced],
+            ));
+        }
+        if required > MAX_AMOUNT {
+            return Err(Error::TooLarge);
+        }
+        let spend = ceil_to_unit(required, self.unit());
+        let mut suggestion =
+            self.fixed_add(spend, ModeName::BuyOnlyToTarget, None, Some(required))?;
+        for (product, share, held) in &rows {
+            let need = *share * level - *held;
+            let bought: Decimal = suggestion
+                .products
+                .iter()
+                .filter(|l| l.product == product.id)
+                .map(|l| l.delta)
+                .sum();
+            if need - bought >= self.unit() {
+                suggestion.notes.push(Note::ProductNotFilled {
+                    product: product.id,
+                    shortfall: need - bought,
+                });
+            }
+        }
+        Ok(suggestion)
+    }
+
+    fn product_fixed_sell(&self, amount: Decimal) -> Result<Suggestion, Error> {
+        if !self.any_sellable() {
+            return Err(Error::NotSellable);
+        }
+        let sell = floor_to_unit(amount, self.unit());
+        if sell <= Decimal::ZERO {
+            return Err(Error::AmountBelowUnit);
+        }
+        if sell > self.sellable_total_of(|_| true) {
+            return Err(Error::NotEnoughToSell);
+        }
+        let flat = self.spread_sell(self.all_held(), sell);
+        let lines = self.sell_lines_flat(flat, sell)?;
+        let mut notes = Vec::new();
+        if sell != amount {
+            notes.push(Note::AmountRounded {
+                requested: amount,
+                applied: sell,
+            });
+        }
+        Ok(self.finish(ModeName::FixedSell, Some(amount), sell, None, lines, notes))
+    }
+
+    fn product_full_rebalance(&self) -> Result<Suggestion, Error> {
+        let tolerance = self.portfolio.settings.product_tolerance;
+        let rows = self.product_shares();
+        let pool: Decimal = rows.iter().map(|(_, _, held)| *held).sum();
+        // How far each product is from its share of the pool, ignoring small deviations.
+        let wanted: Vec<Decimal> = rows
+            .iter()
+            .map(|(_, share, held)| {
+                if pool <= Decimal::ZERO || (*held / pool - *share).abs() <= tolerance {
+                    Decimal::ZERO
+                } else {
+                    *share * pool - *held
+                }
+            })
+            .collect();
+        let buy_capacity: Decimal = wanted.iter().filter(|w| **w > Decimal::ZERO).sum();
+        let sell_wanted: Decimal = rows
+            .iter()
+            .zip(&wanted)
+            .filter(|(_, w)| **w < Decimal::ZERO)
+            .map(|((p, _, _), w)| (-*w).min(self.sellable_total_of(|q| q.id == p.id)))
+            .sum();
+        let sell_capacity = if self.any_sellable() {
+            let picked: BTreeSet<ProductId> = rows
+                .iter()
+                .zip(&wanted)
+                .filter(|(_, w)| **w < Decimal::ZERO)
+                .map(|((p, _, _), _)| p.id)
+                .collect();
+            sell_wanted.min(self.sellable_total_of(|p| picked.contains(&p.id)))
+        } else {
+            Decimal::ZERO
+        };
+        let trade = floor_to_unit(buy_capacity.min(sell_capacity), self.unit());
+
+        let mut lines = Vec::new();
+        if trade > Decimal::ZERO {
+            let buying: Vec<&Product> = rows
+                .iter()
+                .zip(&wanted)
+                .filter(|(_, w)| **w > Decimal::ZERO)
+                .map(|((p, _, _), _)| *p)
+                .collect();
+            let items: Vec<Item> = rows
+                .iter()
+                .zip(&wanted)
+                .filter(|(_, w)| **w > Decimal::ZERO)
+                .map(|((p, _, held), w)| Item {
+                    weight: self.portfolio.product_weight(self.mode, p.id),
+                    current: *held,
+                    cap: Some(*w),
+                })
+                .collect();
+            let shares = fill_up(&items, trade).map_err(|_| Error::NothingToBuy)?;
+            let flat: Vec<(ProductId, Decimal)> = buying.iter().map(|p| p.id).zip(shares).collect();
+            lines.extend(self.buy_lines(flat, trade)?);
+
+            let selling: Vec<(&Product, Decimal)> = rows
+                .iter()
+                .zip(&wanted)
+                .filter(|(_, w)| **w < Decimal::ZERO)
+                .filter_map(|((p, _, _), w)| {
+                    let here: Decimal = self.sellers(p.id).iter().map(|(_, v)| *v).sum();
+                    let cap = (-*w).min(here);
+                    (cap > Decimal::ZERO).then_some((*p, cap))
+                })
+                .collect();
+            let items: Vec<Item> = selling
+                .iter()
+                .map(|(p, cap)| Item {
+                    weight: self.portfolio.product_weight(self.mode, p.id),
+                    current: -self.global_value(p),
+                    cap: Some(*cap),
+                })
+                .collect();
+            let shares = fill_up(&items, trade).map_err(|_| Error::NotEnoughToSell)?;
+            let flat: Vec<(ProductId, Decimal)> =
+                selling.iter().map(|(p, _)| p.id).zip(shares).collect();
+            lines.extend(self.sell_lines_flat(flat, trade)?);
+        }
+
+        let mut notes = Vec::new();
+        for ((product, _, _), wanted) in rows.iter().zip(&wanted) {
+            let done: Decimal = lines
+                .iter()
+                .filter(|l| l.product == product.id)
+                .map(|l| l.delta)
+                .sum();
+            if (*wanted - done).abs() >= self.unit() {
+                notes.push(Note::ProductNotFilled {
+                    product: product.id,
+                    shortfall: *wanted - done,
+                });
+            }
+        }
+        if lines.is_empty() && notes.is_empty() {
+            notes.push(Note::AlreadyBalanced);
+        }
+        let applied = lines
+            .iter()
+            .filter(|l| l.delta > Decimal::ZERO)
+            .map(|l| l.delta)
+            .sum();
+        Ok(self.finish(ModeName::FullRebalance, None, applied, None, lines, notes))
     }
 
     // ---- assembling the result ---------------------------------------------
@@ -823,10 +1057,12 @@ impl<'a> Book<'a> {
         lines.sort_by_key(|line| (line.account, line.product));
         let deltas = self.category_deltas(&lines);
         let total_after = self.total + lines.iter().map(|l| l.delta).sum::<Decimal>();
+        // Allocating by product weights has no category targets to report against.
         let categories = self
             .portfolio
             .categories
             .iter()
+            .filter(|_| !self.by_product)
             .map(|category| {
                 let current = self.value_of(category);
                 let delta = deltas.get(&category.id).copied().unwrap_or_default();

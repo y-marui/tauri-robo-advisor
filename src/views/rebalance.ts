@@ -6,9 +6,8 @@ import { amountField, checkboxField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import type { Bind, Context, Panel } from "../panel.ts";
 import { clearAll, selectAll, toggle } from "../rebalance-selection.ts";
-import { SHARE_KINDS, shareOf, switchKind, type ShareKind } from "../product-shares.ts";
+import { weightOf } from "../product-shares.ts";
 import type { Account, AccountBalance, PortfolioView } from "../types.ts";
-import { shareLabel } from "./labels.ts";
 import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from "./suggestion.ts";
 
 // The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
@@ -140,50 +139,36 @@ export function rebalancePanel(ctx: Context): Panel {
         withBox ? h("th", {}, t("Takes part")) : "",
         withAccount ? h("th", {}, t("Account")) : "",
         h("th", {}, t("Product")),
-        withShare ? h("th", {}, t("Share in the category")) : "",
+        withShare ? h("th", {}, t("Weight")) : "",
         h("th", {}, t("Current")),
         h("th", {}, t("Target")),
         h("th", {}, t("Short (+) / over (-)")),
       ),
     );
 
-  // The share of a product in its category for the mode chosen in the suggestion form: one
-  // setting per mode and product, the same in every account.
+  // The weight of a product for the mode chosen in the suggestion form: one setting per mode and
+  // product, the same in every account.
   function shareCell(view: PortfolioView, product: number): HTMLElement {
     const mode = box.mode();
-    const share = shareOf(view, mode, product);
-    const name = productName(view, product);
-    const kind = h(
-      "select",
-      { "aria-label": t("{product}: share in the category ({mode})", { product: name, mode: modeLabel(mode) }) },
-      ...SHARE_KINDS.map((k) => h("option", { value: k }, shareLabel(k))),
-    );
-    kind.value = share.kind;
-    kind.addEventListener("change", () => {
-      void ctx.apply(switchKind(current ?? view, mode, product, kind.value as ShareKind));
+    const saved = weightOf(view, mode, product);
+    const weight = h("input", {
+      type: "text",
+      inputmode: "decimal",
+      class: "number",
+      autocomplete: "off",
+      "aria-label": t("{product}: weight ({mode})", { product: productName(view, product), mode: modeLabel(mode) }),
+      value: saved,
     });
-    const cell = h("td", { class: "share-cell" }, kind);
-    if (share.kind === "weighted") {
-      const weight = h("input", {
-        type: "text",
-        inputmode: "decimal",
-        class: "number",
-        autocomplete: "off",
-        "aria-label": t("{product}: weight ({mode})", { product: name, mode: modeLabel(mode) }),
-        value: share.weight,
-      });
-      weight.addEventListener("change", () => {
-        const value = cleanDecimal(weight.value);
-        if (value === null || value.startsWith("-") || Number(value) === 0) {
-          ctx.fail(t("Enter a positive weight."));
-          weight.value = share.weight;
-          return;
-        }
-        void ctx.apply({ type: "set_product_share", mode, product, share: { kind: "weighted", weight: value } });
-      });
-      cell.append(" ", weight);
-    }
-    return cell;
+    weight.addEventListener("change", () => {
+      const value = cleanDecimal(weight.value);
+      if (value === null || value.startsWith("-") || Number(value) === 0) {
+        ctx.fail(t("Enter a positive weight."));
+        weight.value = saved;
+        return;
+      }
+      void ctx.apply({ type: "set_product_share", mode, product, weight: value });
+    });
+    return h("td", { class: "share-cell" }, weight);
   }
 
   function productRow(
@@ -330,7 +315,7 @@ export function rebalancePanel(ctx: Context): Panel {
         ? h(
             "p",
             { class: "note" },
-            t("Share in the category is set for the mode chosen above ({mode}); each mode keeps its own setting for a product, and it is the same in every account.", {
+            t("The weight is set for the mode chosen above ({mode}); each mode keeps its own weight for a product, and it is the same in every account. It splits a category's amount among its products, or the whole amount among all products when allocating by product weights.", {
               mode: modeLabel(box.mode()),
             }),
           )

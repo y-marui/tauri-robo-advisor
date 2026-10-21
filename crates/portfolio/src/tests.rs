@@ -1658,7 +1658,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 21);
+    assert_eq!(SCHEMA_VERSION, 22);
 }
 
 #[test]
@@ -2144,45 +2144,38 @@ fn rows_move_to_a_given_position() {
     p.validate_integrity().unwrap();
 }
 
-fn share_edit(mode: SuggestionMode, product: ProductId, share: ProductShare) -> Edit {
+fn share_edit(mode: SuggestionMode, product: ProductId, weight: rust_decimal::Decimal) -> Edit {
     Edit::SetProductShare {
         mode,
         product,
-        share,
+        weight,
     }
 }
 
 #[test]
-fn a_product_has_its_own_setting_for_each_mode() {
+fn a_product_has_its_own_weight_for_each_mode() {
     let (mut p, _, prod, _) = sample();
-    let weighted = ProductShare::Weighted { weight: dec!(3) };
 
-    // Nothing set: an equal share in every mode.
+    // Nothing set: the weight 1 in every mode.
     for mode in SuggestionMode::ALL {
-        assert_eq!(p.product_share(mode, prod), ProductShare::Equal);
+        assert_eq!(p.product_weight(mode, prod), dec!(1));
     }
-    apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, weighted));
+    apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, dec!(3)));
     apply(
         &mut p,
-        share_edit(SuggestionMode::FixedSell, prod, ProductShare::KeepCurrent),
+        share_edit(SuggestionMode::FixedSell, prod, dec!(0.5)),
     );
 
-    assert_eq!(p.product_share(SuggestionMode::FixedAdd, prod), weighted);
+    assert_eq!(p.product_weight(SuggestionMode::FixedAdd, prod), dec!(3));
+    assert_eq!(p.product_weight(SuggestionMode::FixedSell, prod), dec!(0.5));
     assert_eq!(
-        p.product_share(SuggestionMode::FixedSell, prod),
-        ProductShare::KeepCurrent
-    );
-    assert_eq!(
-        p.product_share(SuggestionMode::FullRebalance, prod),
-        ProductShare::Equal
+        p.product_weight(SuggestionMode::FullRebalance, prod),
+        dec!(1)
     );
     p.validate_integrity().unwrap();
 
-    // Setting a mode again replaces it; an equal share is not stored.
-    apply(
-        &mut p,
-        share_edit(SuggestionMode::FixedAdd, prod, ProductShare::Equal),
-    );
+    // Setting a mode again replaces it; the default weight is not stored.
+    apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, dec!(1)));
     assert_eq!(p.product_shares.len(), 1);
     p.validate_integrity().unwrap();
 }
@@ -2193,32 +2186,22 @@ fn a_product_weight_must_be_positive_and_not_huge() {
     let before = p.clone();
     for weight in [dec!(0), dec!(-1), MAX_PRODUCT_WEIGHT + dec!(1)] {
         assert!(
-            p.apply(share_edit(
-                SuggestionMode::FixedAdd,
-                prod,
-                ProductShare::Weighted { weight }
-            ))
-            .is_err()
+            p.apply(share_edit(SuggestionMode::FixedAdd, prod, weight))
+                .is_err()
         );
     }
     assert!(
         p.apply(share_edit(
             SuggestionMode::FixedAdd,
             ProductId(9999),
-            ProductShare::KeepCurrent
+            dec!(2)
         ))
         .is_err()
     );
     assert_eq!(p, before);
     apply(
         &mut p,
-        share_edit(
-            SuggestionMode::FixedAdd,
-            prod,
-            ProductShare::Weighted {
-                weight: MAX_PRODUCT_WEIGHT,
-            },
-        ),
+        share_edit(SuggestionMode::FixedAdd, prod, MAX_PRODUCT_WEIGHT),
     );
 }
 
@@ -2229,7 +2212,7 @@ fn removing_or_merging_a_product_drops_its_settings() {
     for id in [prod, other] {
         apply(
             &mut p,
-            share_edit(SuggestionMode::FullRebalance, id, ProductShare::KeepCurrent),
+            share_edit(SuggestionMode::FullRebalance, id, dec!(2)),
         );
     }
     apply(
@@ -2251,21 +2234,18 @@ fn removing_or_merging_a_product_drops_its_settings() {
 #[test]
 fn a_file_with_a_bad_product_setting_is_refused() {
     let (mut p, _, prod, _) = sample();
-    let entry = |share| ProductShareEntry {
+    let entry = |weight| ProductShareEntry {
         mode: SuggestionMode::FixedAdd,
         product: prod,
-        share,
+        weight,
     };
     for entries in [
-        vec![entry(ProductShare::Equal)],
-        vec![entry(ProductShare::Weighted { weight: dec!(0) })],
-        vec![
-            entry(ProductShare::KeepCurrent),
-            entry(ProductShare::KeepCurrent),
-        ],
+        vec![entry(dec!(1))],
+        vec![entry(dec!(0))],
+        vec![entry(dec!(2)), entry(dec!(3))],
         vec![ProductShareEntry {
             product: ProductId(9999),
-            ..entry(ProductShare::KeepCurrent)
+            ..entry(dec!(2))
         }],
     ] {
         p.product_shares = entries;
@@ -2288,7 +2268,7 @@ fn a_malformed_legacy_weight_is_refused_by_the_migration() {
 }
 
 #[test]
-fn the_targeting_of_an_older_file_becomes_a_setting_per_mode() {
+fn the_targeting_of_an_older_file_becomes_a_weight_per_mode() {
     let old = r#"{"schema_version": 19, "next_id": 40,
       "categories": [
         {"id": 5, "name": "W", "target_weight": "0.5", "targeting": "weighted"},
@@ -2314,26 +2294,78 @@ fn the_targeting_of_an_older_file_becomes_a_setting_per_mode() {
 
     p.validate_integrity().unwrap();
     for mode in SuggestionMode::ALL {
-        // The weights of the records add up; a weighted product without one is an equal share.
-        assert_eq!(
-            p.product_share(mode, ProductId(1)),
-            ProductShare::Weighted { weight: dec!(3) }
-        );
-        assert_eq!(p.product_share(mode, ProductId(2)), ProductShare::Equal);
-        assert_eq!(
-            p.product_share(mode, ProductId(3)),
-            ProductShare::KeepCurrent
-        );
-        assert_eq!(p.product_share(mode, ProductId(4)), ProductShare::Equal);
-        assert_eq!(p.product_share(mode, ProductId(9)), ProductShare::Equal);
+        // The weights of the records add up; every other product has the default weight 1,
+        // keep-current ones included.
+        assert_eq!(p.product_weight(mode, ProductId(1)), dec!(3));
+        for other in [2, 3, 4, 9] {
+            assert_eq!(p.product_weight(mode, ProductId(other)), dec!(1));
+        }
     }
-    assert_eq!(p.product_shares.len(), 8);
+    assert_eq!(p.product_shares.len(), 4);
     // Both old fields are gone, and the result round-trips as a current file.
     let json = serde_json::to_value(&p).unwrap();
     assert!(json["categories"][0].get("targeting").is_none());
     assert!(json["holdings"][0].get("weight").is_none());
     let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
     assert_eq!(back, p);
+}
+
+#[test]
+fn the_product_shapes_of_version_20_and_21_become_weights() {
+    for version in [20, 21] {
+        let old = format!(
+            r#"{{"schema_version": {version}, "next_id": 40,
+          "products": [
+            {{"id": 1, "name": "A", "category": 5, "currency": "JPY"}},
+            {{"id": 2, "name": "B", "category": 5, "currency": "JPY"}},
+            {{"id": 3, "name": "C", "category": 5, "currency": "JPY"}}],
+          "categories": [{{"id": 5, "name": "W", "target_weight": "1"}}],
+          "product_shares": [
+            {{"mode": "fixed_add", "product": 1, "share": {{"kind": "weighted", "weight": "2.5"}}}},
+            {{"mode": "fixed_add", "product": 2, "share": {{"kind": "keep_current"}}}},
+            {{"mode": "fixed_sell", "product": 2, "share": {{"kind": "weighted", "weight": "1.0"}}}},
+            {{"mode": "fixed_sell", "product": 3, "share": {{"kind": "equal"}}}},
+            {{"mode": "full_rebalance", "product": 3, "share": {{"kind": "weighted", "weight": "4"}}}}]}}"#
+        );
+
+        let mut p = parse(old.as_bytes()).unwrap();
+        p.schema_version = SCHEMA_VERSION;
+
+        p.validate_integrity().unwrap();
+        assert_eq!(
+            p.product_weight(SuggestionMode::FixedAdd, ProductId(1)),
+            dec!(2.5)
+        );
+        assert_eq!(
+            p.product_weight(SuggestionMode::FixedAdd, ProductId(2)),
+            dec!(1)
+        );
+        assert_eq!(
+            p.product_weight(SuggestionMode::FixedSell, ProductId(2)),
+            dec!(1)
+        );
+        assert_eq!(
+            p.product_weight(SuggestionMode::FixedSell, ProductId(3)),
+            dec!(1)
+        );
+        assert_eq!(
+            p.product_weight(SuggestionMode::FullRebalance, ProductId(3)),
+            dec!(4)
+        );
+        assert_eq!(p.product_shares.len(), 2);
+        let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+        assert_eq!(back, p);
+    }
+
+    // A file of only equal and keep-current settings keeps no list at all.
+    let only_defaults = r#"{"schema_version": 21, "next_id": 40,
+      "product_shares": [{"mode": "fixed_add", "product": 1, "share": {"kind": "keep_current"}}]}"#;
+    assert!(
+        parse(only_defaults.as_bytes())
+            .unwrap()
+            .product_shares
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3309,11 +3341,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 22, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 23, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 22 })
+        Err(Error::UnsupportedVersion { found: 23 })
     ));
 }
 

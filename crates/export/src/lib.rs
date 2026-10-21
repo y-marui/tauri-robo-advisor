@@ -10,7 +10,7 @@
 
 mod csv;
 
-use portfolio::{Account, Category, Portfolio, Product, ProductId, ProductShare};
+use portfolio::{Account, Category, Portfolio, Product, ProductId};
 use rust_decimal::Decimal;
 
 use csv::{Table, number, optional_number, plain_cell, text_cell};
@@ -289,8 +289,8 @@ fn aliases(portfolio: &Portfolio) -> Table {
     table
 }
 
-/// The explicit settings of how products are targeted, one row per mode and product (a product
-/// that is not listed for a mode has an equal share).
+/// The explicit weights of the products, one row per mode and product (a product that is not
+/// listed for a mode has the weight 1).
 fn product_targets(portfolio: &Portfolio) -> Table {
     let mut table = Table::new(&[
         "mode",
@@ -298,30 +298,19 @@ fn product_targets(portfolio: &Portfolio) -> Table {
         "product",
         "category_id",
         "category",
-        "targeting",
         "relative_weight",
     ]);
     for entry in &portfolio.product_shares {
         let product = product_of(portfolio, entry.product);
         let category =
             product.and_then(|p| portfolio.categories.iter().find(|c| c.id == p.category));
-        let weight = match entry.share {
-            ProductShare::Weighted { weight } => Some(weight),
-            _ => None,
-        };
-        let targeting = match entry.share {
-            ProductShare::Equal => "equal",
-            ProductShare::Weighted { .. } => "weighted",
-            ProductShare::KeepCurrent => "keep_current",
-        };
         table.push(vec![
             plain_cell(&keyword(&entry.mode)),
             plain_cell(&entry.product.0.to_string()),
             text_cell(product.map_or("", |p| &p.name)),
             plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),
             text_cell(category.map_or("", |c| &c.name)),
-            plain_cell(targeting),
-            optional_number(weight),
+            number(entry.weight),
         ]);
     }
     table
@@ -432,7 +421,7 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          categories.csv   Categories (with their group) with their target weight and current value.\n\
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
-         product_targets.csv  How a product is targeted inside its category, per suggestion mode (only the products that do not have an equal share).\n\
+         product_targets.csv  The weight of a product, per suggestion mode (only the products whose weight is not 1).\n\
          accounts.csv     Accounts with their rules (sellable, rounding unit, products left out of trading).\n\
          settings.csv     Exchange rate and tolerances.\n\
          portfolio.json   The complete data in the app's own format (all of the above).\n\

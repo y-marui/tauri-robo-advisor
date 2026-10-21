@@ -39,6 +39,9 @@ fn to_current(value: &mut Value) -> Result<(), Error> {
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..21).contains(&v)) {
         copy_excluded_for_all(value);
     }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..22).contains(&v)) {
+        shares_into_weights(value);
+    }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
@@ -248,4 +251,49 @@ fn targeting_into_product_shares(value: &mut Value) -> Result<(), Error> {
     }
     value["product_shares"] = Value::Array(shares);
     Ok(())
+}
+
+/// Version 22: a product setting is a plain weight. An entry of the old shape (`share` with a
+/// `kind`) keeps its weight when it was a weighted one; an equal share and a keep-current setting
+/// are the default weight 1, which is not stored. An entry that already has a `weight` (made by
+/// the step of version 20 in this run) is left as it is.
+fn shares_into_weights(value: &mut Value) {
+    let Some(entries) = value
+        .get_mut("product_shares")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let old = std::mem::take(entries);
+    for mut entry in old {
+        let Some(object) = entry.as_object_mut() else {
+            entries.push(entry);
+            continue;
+        };
+        let Some(share) = object.remove("share") else {
+            entries.push(entry);
+            continue;
+        };
+        let weight = match share.get("kind").and_then(Value::as_str) {
+            Some("weighted") => share.get("weight").cloned(),
+            _ => None,
+        };
+        // A weight that is not a decimal is kept as it is, for the integrity check to refuse.
+        let is_default = weight
+            .as_ref()
+            .and_then(Value::as_str)
+            .and_then(|w| w.parse::<Decimal>().ok())
+            .is_some_and(|w| w == Decimal::ONE);
+        if let Some(weight) = weight
+            && !is_default
+        {
+            object.insert("weight".to_owned(), weight);
+            entries.push(entry);
+        }
+    }
+    if entries.is_empty()
+        && let Some(object) = value.as_object_mut()
+    {
+        object.remove("product_shares");
+    }
 }

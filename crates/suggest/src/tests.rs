@@ -1,6 +1,6 @@
 // Every name and amount in these tests is made up.
 
-use portfolio::{AccountId, CategoryId, Edit, Portfolio, ProductId, ProductShare, SuggestionMode};
+use portfolio::{AccountId, CategoryId, Edit, Portfolio, ProductId, SuggestionMode};
 use rust_decimal::{Decimal, dec};
 
 use crate::engine::{MAX_AMOUNT, MAX_WEIGHT};
@@ -26,19 +26,18 @@ fn apply(p: &mut Portfolio, edit: Edit) {
 enum Targeting {
     Free,
     Equal,
-    KeepCurrent,
     /// Needs `weigh` for the products.
     Weighted,
 }
 
 /// Sets one product's setting for one mode.
-fn share(p: &mut Portfolio, mode: SuggestionMode, product: ProductId, share: ProductShare) {
+fn share(p: &mut Portfolio, mode: SuggestionMode, product: ProductId, weight: Decimal) {
     apply(
         p,
         Edit::SetProductShare {
             mode,
             product,
-            share,
+            weight,
         },
     );
 }
@@ -54,8 +53,7 @@ fn target(p: &mut Portfolio, category: CategoryId, targeting: Targeting) {
     for id in ids {
         for mode in SuggestionMode::ALL {
             match targeting {
-                Targeting::Free | Targeting::Equal => share(p, mode, id, ProductShare::Equal),
-                Targeting::KeepCurrent => share(p, mode, id, ProductShare::KeepCurrent),
+                Targeting::Free | Targeting::Equal => share(p, mode, id, dec!(1)),
                 Targeting::Weighted => {}
             }
         }
@@ -65,7 +63,7 @@ fn target(p: &mut Portfolio, category: CategoryId, targeting: Targeting) {
 /// Gives a product a weight in every mode.
 fn weigh(p: &mut Portfolio, product: ProductId, weight: Decimal) {
     for mode in SuggestionMode::ALL {
-        share(p, mode, product, ProductShare::Weighted { weight });
+        share(p, mode, product, weight);
     }
 }
 
@@ -186,6 +184,7 @@ fn run(p: &Portfolio, account: AccountId, mode: Mode) -> Result<Suggestion, Erro
             account: Some(account),
             mode,
             held_only: false,
+            method: Default::default(),
         },
     )
 }
@@ -394,7 +393,7 @@ fn weighted_products_fill_toward_their_relative_weights() {
 }
 
 #[test]
-fn equal_and_keep_current_products_split_new_money_sensibly() {
+fn equal_and_free_products_split_new_money_sensibly() {
     let mut p = Portfolio::default();
     let c = category(&mut p, "All", dec!(1));
     let a = product(&mut p, "A", c, "JPY");
@@ -418,11 +417,6 @@ fn equal_and_keep_current_products_split_new_money_sensibly() {
 
     // Equal: the smaller product is filled first up to 300,000, then evenly.
     assert_eq!(deltas(&equal(Targeting::Equal)), vec![(b, dec!(200000))]);
-    // Keep current: new money follows the current 3:1 proportions.
-    assert_eq!(
-        deltas(&equal(Targeting::KeepCurrent)),
-        vec![(a, dec!(150000)), (b, dec!(50000))]
-    );
     // Free: no product ratios were set, so equal weights are used and what is held counts: the
     // smaller product is raised first, not an even split of the purchase.
     assert_eq!(deltas(&equal(Targeting::Free)), vec![(b, dec!(200000))]);
@@ -988,9 +982,7 @@ fn huge_holdings_and_weights_are_refused_instead_of_overflowing() {
         .push(portfolio::ProductShareEntry {
             mode: SuggestionMode::FixedAdd,
             product: f.s1,
-            share: ProductShare::Weighted {
-                weight: MAX_WEIGHT + dec!(1),
-            },
+            weight: MAX_WEIGHT + dec!(1),
         });
     // The integrity check refuses it before any calculation.
     assert_eq!(
@@ -1030,7 +1022,8 @@ fn requests_and_suggestions_use_exact_decimal_strings_in_json() {
             mode: Mode::FixedAdd {
                 amount: dec!(100000)
             },
-            held_only: false
+            held_only: false,
+            method: Default::default()
         }
     );
     assert!(
@@ -1190,7 +1183,7 @@ fn account_balance_compares_products_with_their_weights() {
 }
 
 #[test]
-fn account_balance_shows_an_equal_share_for_free_and_the_current_value_for_keep_current() {
+fn account_balance_shows_an_equal_share_for_free_categories() {
     let (mut p, acc, a, b, c) = weighted_pair();
     hold(&mut p, acc, a, dec!(300000));
     let set = |p: &mut Portfolio, targeting| target(p, c, targeting);
@@ -1205,14 +1198,6 @@ fn account_balance_shows_an_equal_share_for_free_and_the_current_value_for_keep_
     assert_eq!(of(&free, a).shortfall, Some(dec!(-100000)));
     assert_eq!(of(&free, b).target, Some(dec!(200000)));
     assert_eq!(of(&free, b).shortfall, Some(dec!(100000)));
-
-    // Keep-current asks for what is there: the target is the current value, nothing is short.
-    set(&mut p, Targeting::KeepCurrent);
-    let keep = line(&p);
-    assert_eq!(of(&keep, a).target, Some(dec!(300000)));
-    assert_eq!(of(&keep, a).shortfall, Some(dec!(0)));
-    assert_eq!(of(&keep, b).target, Some(dec!(100000)));
-    assert_eq!(of(&keep, b).shortfall, Some(dec!(0)));
 }
 
 #[test]
@@ -1231,24 +1216,6 @@ fn account_balance_leaves_out_products_the_account_does_not_hold() {
         .collect();
     // C is buyable and has a weight, but the account holds none of it: out of scope.
     assert_eq!(ids, vec![a, b]);
-}
-
-#[test]
-fn keep_current_targets_are_the_exact_holdings_even_with_fractional_yen() {
-    let mut p = Portfolio::default();
-    let c = category(&mut p, "All", dec!(1));
-    let a = product(&mut p, "A", c, "JPY");
-    let b = product(&mut p, "B", c, "JPY");
-    let acc = account(&mut p, "Main");
-    hold(&mut p, acc, a, dec!(0.5));
-    hold(&mut p, acc, b, dec!(0.5));
-    target(&mut p, c, Targeting::KeepCurrent);
-
-    let balance = account_balance(&p, acc).unwrap();
-
-    for line in &balance.categories[0].products {
-        assert_eq!(line.shortfall, Some(dec!(0)));
-    }
 }
 
 #[test]
@@ -1292,7 +1259,7 @@ fn each_mode_uses_the_product_setting_of_its_own_mode() {
             SuggestionMode::FullRebalance,
             SuggestionMode::FixedSell,
         ] {
-            share(&mut p, mode, id, ProductShare::Equal);
+            share(&mut p, mode, id, dec!(1));
         }
     }
 
@@ -1322,18 +1289,8 @@ fn each_mode_uses_the_product_setting_of_its_own_mode() {
     assert_eq!(deltas(&sell), vec![(a, dec!(-50000)), (b, dec!(-50000))]);
 
     // Setting the sell mode to the same weights changes its split.
-    share(
-        &mut p,
-        SuggestionMode::FixedSell,
-        a,
-        ProductShare::Weighted { weight: dec!(3) },
-    );
-    share(
-        &mut p,
-        SuggestionMode::FixedSell,
-        b,
-        ProductShare::Weighted { weight: dec!(1) },
-    );
+    share(&mut p, SuggestionMode::FixedSell, a, dec!(3));
+    share(&mut p, SuggestionMode::FixedSell, b, dec!(1));
     let sell = run(
         &p,
         acc,
@@ -1351,12 +1308,7 @@ fn the_account_balance_follows_the_fixed_add_setting() {
     let (mut p, acc, a, b, c) = weighted_pair();
     // The other modes disagree; the table does not look at them.
     for id in [a, b] {
-        share(
-            &mut p,
-            SuggestionMode::FullRebalance,
-            id,
-            ProductShare::Equal,
-        );
+        share(&mut p, SuggestionMode::FullRebalance, id, dec!(1));
     }
     let target = |p: &Portfolio, product| {
         let balance = account_balance(p, acc).unwrap();
@@ -1369,19 +1321,13 @@ fn the_account_balance_follows_the_fixed_add_setting() {
     };
     assert_eq!(target(&p, a), Some(dec!(150000)));
 
-    // A keep-current product keeps its value; the others split what is left.
-    share(
-        &mut p,
-        SuggestionMode::FixedAdd,
-        a,
-        ProductShare::KeepCurrent,
-    );
+    // A third product without a setting has the weight 1; A is raised to 2: 300000 is split 2:1:1.
+    share(&mut p, SuggestionMode::FixedAdd, a, dec!(2));
     let third = product(&mut p, "C", c, "JPY");
     hold(&mut p, acc, third, dec!(100000));
-    assert_eq!(target(&p, a), Some(dec!(100000)));
-    // 200000 left for B (weight 1) and C (equal share, weight 1).
-    assert_eq!(target(&p, b), Some(dec!(100000)));
-    assert_eq!(target(&p, third), Some(dec!(100000)));
+    assert_eq!(target(&p, a), Some(dec!(150000)));
+    assert_eq!(target(&p, b), Some(dec!(75000)));
+    assert_eq!(target(&p, third), Some(dec!(75000)));
 }
 
 #[test]
@@ -1559,6 +1505,7 @@ fn held_only_never_buys_a_product_the_account_does_not_hold() {
             amount: dec!(2000000),
         },
         held_only,
+        method: Default::default(),
     };
     let all = suggest(&f.portfolio, &request(false)).unwrap();
     let held = suggest(&f.portfolio, &request(true)).unwrap();
@@ -1577,6 +1524,7 @@ fn held_only_also_applies_to_a_single_account() {
         account: Some(f.main),
         mode,
         held_only,
+        method: Default::default(),
     };
     for mode in [
         Mode::FixedAdd {
@@ -1798,6 +1746,7 @@ fn run_all(p: &Portfolio, mode: Mode, held_only: bool) -> Result<Suggestion, Err
             account: None,
             mode,
             held_only,
+            method: Default::default(),
         },
     )
 }
@@ -2075,4 +2024,331 @@ fn an_account_tab_and_all_use_their_own_exclusion_lists() {
             .chain(&in_account(&s, f.main))
             .any(|(p, _)| *p == f.b1)
     );
+}
+
+// ---- allocating by product weights across categories -------------------------
+
+struct Weighted {
+    portfolio: Portfolio,
+    s1: ProductId,
+    s2: ProductId,
+    b1: ProductId,
+    main: AccountId,
+    sub: AccountId,
+}
+
+/// Stocks target 90% (S1, S2) and bonds 10% (B1), which the weights ignore. The main account
+/// holds 400,000 of S1, 100,000 of S2 and 300,000 of B1; the sub account (it cannot sell) holds
+/// another 100,000 of B1. Weights: S1 1, S2 1, B1 2, so the shares are 25%, 25% and 50%.
+fn weighted_book() -> Weighted {
+    let mut p = Portfolio::default();
+    let stocks = category(&mut p, "Stocks", dec!(0.9));
+    let bonds = category(&mut p, "Bonds", dec!(0.1));
+    let s1 = product(&mut p, "S1", stocks, "JPY");
+    let s2 = product(&mut p, "S2", stocks, "JPY");
+    let b1 = product(&mut p, "B1", bonds, "JPY");
+    let main = account(&mut p, "Main");
+    let sub = account(&mut p, "Sub");
+    apply(
+        &mut p,
+        Edit::UpdateAccount {
+            id: sub,
+            name: None,
+            sellable: Some(false),
+            rounding_unit: None,
+        },
+    );
+    hold(&mut p, main, s1, dec!(400000));
+    hold(&mut p, main, s2, dec!(100000));
+    hold(&mut p, main, b1, dec!(300000));
+    hold(&mut p, sub, b1, dec!(100000));
+    weigh(&mut p, b1, dec!(2));
+    Weighted {
+        portfolio: p,
+        s1,
+        s2,
+        b1,
+        main,
+        sub,
+    }
+}
+
+fn by_weights(
+    p: &Portfolio,
+    account: Option<AccountId>,
+    mode: Mode,
+    held_only: bool,
+) -> Suggestion {
+    try_by_weights(p, account, mode, held_only).unwrap()
+}
+
+fn try_by_weights(
+    p: &Portfolio,
+    account: Option<AccountId>,
+    mode: Mode,
+    held_only: bool,
+) -> Result<Suggestion, Error> {
+    suggest(
+        p,
+        &Request {
+            account,
+            mode,
+            held_only,
+            method: Method::ByProductWeights,
+        },
+    )
+}
+
+fn per_product(s: &Suggestion, product: ProductId) -> Decimal {
+    s.products
+        .iter()
+        .filter(|l| l.product == product)
+        .map(|l| l.delta)
+        .sum()
+}
+
+#[test]
+fn by_weights_a_fixed_add_in_all_crosses_the_categories_and_ignores_their_targets() {
+    let w = weighted_book();
+    let mode = || Mode::FixedAdd {
+        amount: dec!(400000),
+    };
+
+    let s = by_weights(&w.portfolio, None, mode(), false);
+
+    // 1,300,000 afterwards: S1 325,000 (it holds 400,000), S2 and B1 are raised to the level;
+    // the stock category's 90% target plays no part. B1 goes to the account holding the least.
+    assert_eq!(per_product(&s, w.s1), dec!(0));
+    assert_eq!(per_product(&s, w.s2), dec!(200000));
+    assert_eq!(per_product(&s, w.b1), dec!(200000));
+    assert!(in_account(&s, w.sub).contains(&(w.b1, dec!(200000))));
+    assert!(s.categories.is_empty());
+    assert_eq!(s.applied, dec!(400000));
+    assert_eq!(s.total_after, dec!(1300000));
+
+    // Following the portfolio puts all of it into the stocks.
+    let followed = run_all(&w.portfolio, mode(), false).unwrap();
+    assert_eq!(per_product(&followed, w.b1), dec!(0));
+}
+
+#[test]
+fn by_weights_a_single_account_allocates_across_categories_too() {
+    let w = weighted_book();
+
+    let s = by_weights(
+        &w.portfolio,
+        Some(w.main),
+        Mode::FixedAdd {
+            amount: dec!(400000),
+        },
+        false,
+    );
+
+    assert_eq!(s.account, Some(w.main));
+    assert_eq!(deltas(&s), vec![(w.s2, dec!(200000)), (w.b1, dec!(200000))]);
+}
+
+#[test]
+fn by_weights_buy_only_to_target_reaches_every_products_share() {
+    let w = weighted_book();
+
+    let s = by_weights(&w.portfolio, None, Mode::BuyOnlyToTarget, false);
+
+    // S1 holds 400,000 for a 25% share, so the whole must be 1,600,000: 700,000 more.
+    assert_eq!(s.required_total, Some(dec!(700000)));
+    assert_eq!(per_product(&s, w.s1), dec!(0));
+    assert_eq!(per_product(&s, w.s2), dec!(300000));
+    assert_eq!(per_product(&s, w.b1), dec!(400000));
+    assert!(s.products.iter().all(|l| l.delta > Decimal::ZERO));
+    assert!(s.notes.is_empty());
+}
+
+#[test]
+fn by_weights_a_fixed_sell_takes_from_the_product_furthest_above_its_share() {
+    let w = weighted_book();
+    let mode = || Mode::FixedSell {
+        amount: dec!(100000),
+    };
+
+    let s = by_weights(&w.portfolio, None, mode(), false);
+
+    assert_eq!(deltas(&s), vec![(w.s1, dec!(-100000))]);
+    assert!(s.categories.is_empty());
+    // The sub account cannot sell: only the main account's 800,000 can be raised.
+    assert_eq!(
+        try_by_weights(
+            &w.portfolio,
+            None,
+            Mode::FixedSell {
+                amount: dec!(900000)
+            },
+            false
+        ),
+        Err(Error::NotEnoughToSell)
+    );
+}
+
+#[test]
+fn by_weights_a_full_rebalance_sells_what_is_above_and_buys_what_is_below() {
+    let w = weighted_book();
+
+    let s = by_weights(&w.portfolio, None, Mode::FullRebalance, false);
+
+    // 900,000 in all: S1 225,000 (sell 175,000), S2 225,000 (buy 125,000), B1 450,000 (buy 50,000).
+    assert_eq!(per_product(&s, w.s1), dec!(-175000));
+    assert_eq!(per_product(&s, w.s2), dec!(125000));
+    assert_eq!(per_product(&s, w.b1), dec!(50000));
+    assert_eq!(s.applied, dec!(175000));
+    assert!(s.notes.is_empty());
+    assert!(s.categories.is_empty());
+}
+
+#[test]
+fn by_weights_ignores_a_category_target_that_blocks_the_other_method() {
+    let mut w = weighted_book();
+    category(&mut w.portfolio, "Extra", dec!(0.5));
+    let mode = || Mode::FixedAdd {
+        amount: dec!(100000),
+    };
+
+    assert!(matches!(
+        run_all(&w.portfolio, mode(), false),
+        Err(Error::Blocked(_))
+    ));
+    assert!(try_by_weights(&w.portfolio, None, mode(), false).is_ok());
+}
+
+#[test]
+fn by_weights_leaves_out_excluded_products() {
+    let mut w = weighted_book();
+    // S2 is left out of the main account's own tab, and of All for the sub account too.
+    apply(
+        &mut w.portfolio,
+        Edit::SetExcluded {
+            id: w.main,
+            products: vec![w.s2],
+            all: false,
+        },
+    );
+    let s = by_weights(
+        &w.portfolio,
+        Some(w.main),
+        Mode::FixedAdd {
+            amount: dec!(400000),
+        },
+        false,
+    );
+    // Shares among S1 and B1 only: 1/3 and 2/3 of 1,200,000 -> S1 holds 400,000, B1 gets 400,000.
+    assert_eq!(deltas(&s), vec![(w.b1, dec!(400000))]);
+
+    // The list for All is separate: the account's own tab list does not apply there.
+    let all = by_weights(
+        &w.portfolio,
+        None,
+        Mode::FixedAdd {
+            amount: dec!(400000),
+        },
+        false,
+    );
+    assert_eq!(per_product(&all, w.s2), dec!(200000));
+
+    for id in [w.main, w.sub] {
+        apply(
+            &mut w.portfolio,
+            Edit::SetExcluded {
+                id,
+                products: vec![w.s2],
+                all: true,
+            },
+        );
+    }
+    let all = by_weights(
+        &w.portfolio,
+        None,
+        Mode::FixedAdd {
+            amount: dec!(400000),
+        },
+        false,
+    );
+    assert_eq!(per_product(&all, w.s2), dec!(0));
+    assert_eq!(per_product(&all, w.b1), dec!(400000));
+    // An excluded product is not sold either.
+    let sold = by_weights(&w.portfolio, None, Mode::FullRebalance, false);
+    assert_eq!(per_product(&sold, w.s2), dec!(0));
+}
+
+#[test]
+fn by_weights_buys_only_products_held_when_asked() {
+    let mut w = weighted_book();
+    let stocks = w.portfolio.categories[0].id;
+    let fresh = product(&mut w.portfolio, "Fresh", stocks, "JPY");
+    weigh(&mut w.portfolio, fresh, dec!(4));
+    let mode = || Mode::FixedAdd {
+        amount: dec!(400000),
+    };
+
+    let open = by_weights(&w.portfolio, None, mode(), false);
+    assert!(per_product(&open, fresh) > Decimal::ZERO);
+
+    for account in [None, Some(w.main)] {
+        let held = by_weights(&w.portfolio, account, mode(), true);
+        assert_eq!(per_product(&held, fresh), dec!(0));
+        assert_eq!(held.applied, dec!(400000));
+    }
+}
+
+#[test]
+fn by_weights_uses_the_weights_of_the_mode_that_runs() {
+    let mut w = weighted_book();
+    // Only the fixed add gets S2 a heavy weight; the other modes keep the 1:1:2 shares.
+    share(&mut w.portfolio, SuggestionMode::FixedAdd, w.s2, dec!(6));
+    let s = by_weights(
+        &w.portfolio,
+        None,
+        Mode::FixedAdd {
+            amount: dec!(400000),
+        },
+        false,
+    );
+    assert_eq!(per_product(&s, w.s2), dec!(400000));
+
+    let rebalance = by_weights(&w.portfolio, None, Mode::FullRebalance, false);
+    assert_eq!(per_product(&rebalance, w.s2), dec!(125000));
+}
+
+#[test]
+fn an_account_with_a_strategy_keeps_its_own_allocation_whatever_the_method() {
+    let mut w = weighted_book();
+    apply(
+        &mut w.portfolio,
+        Edit::SetStrategy {
+            id: w.main,
+            strategy: portfolio::Strategy::Products {
+                items: vec![portfolio::StrategyItem {
+                    product: w.s1,
+                    ratio: Some(dec!(1)),
+                }],
+            },
+        },
+    );
+    let mode = || Mode::FixedAdd {
+        amount: dec!(100000),
+    };
+
+    assert_eq!(
+        by_weights(&w.portfolio, Some(w.main), mode(), false),
+        run(&w.portfolio, w.main, mode()).unwrap()
+    );
+}
+
+#[test]
+fn the_method_defaults_to_following_the_portfolio_in_json() {
+    let request: Request =
+        serde_json::from_str(r#"{"account":null,"mode":{"type":"buy_only_to_target"}}"#).unwrap();
+    assert_eq!(request.method, Method::FollowPortfolio);
+    let request: Request = serde_json::from_str(
+        r#"{"mode":{"type":"buy_only_to_target"},"method":"by_product_weights"}"#,
+    )
+    .unwrap();
+    assert_eq!(request.method, Method::ByProductWeights);
 }

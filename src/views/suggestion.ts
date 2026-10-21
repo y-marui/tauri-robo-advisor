@@ -2,7 +2,7 @@ import { suggestRebalance } from "../api.ts";
 import { cleanDecimal, formatAmount } from "../decimal.ts";
 import { h } from "../dom.ts";
 import { getLanguage, t } from "../i18n.ts";
-import type { Note, PortfolioView, SuggestMode, Suggestion } from "../types.ts";
+import type { Note, PortfolioView, SuggestMethod, SuggestMode, Suggestion } from "../types.ts";
 
 // The suggestion box shared by the overall balance panel and the account tabs:
 // a mode, an amount when the mode needs one, and the result of
@@ -162,6 +162,11 @@ export function modeLabel(type: ModeType): string {
   return MODES.find((m) => m.value === type)?.label() ?? type;
 }
 
+const METHODS: { value: SuggestMethod; label: () => string }[] = [
+  { value: "follow_portfolio", label: () => t("Follow the portfolio") },
+  { value: "by_product_weights", label: () => t("By product weights across categories") },
+];
+
 export interface SuggestionBox {
   el: HTMLElement;
   /** Gives the box the current state and drops a result that may be out of date. */
@@ -190,6 +195,11 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     "select",
     { "aria-label": t("Suggestion mode") },
     ...available.map((m) => h("option", { value: m.value }, m.label())),
+  );
+  const methodSelect = h(
+    "select",
+    { "aria-label": t("Allocation method") },
+    ...METHODS.map((m) => h("option", { value: m.value }, m.label())),
   );
   const amount = h("input", {
     type: "text",
@@ -251,7 +261,12 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     updateRunButton();
     message.classList.remove("error");
     message.textContent = t("Calculating…");
-    suggestRebalance({ account, mode, held_only: options.heldOnly === true })
+    suggestRebalance({
+      account,
+      mode,
+      method: methodSelect.value as SuggestMethod,
+      held_only: options.heldOnly === true,
+    })
       .then((suggestion) => {
         if (mine === sequence) {
           message.textContent = "";
@@ -273,6 +288,7 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     "div",
     { class: "suggest-controls" },
     h("label", { class: "field" }, h("span", {}, t("Suggestion mode")), modeSelect),
+    h("label", { class: "field" }, h("span", {}, t("Allocation method")), methodSelect),
     h("div", { class: "add-row" }, amount, run),
     message,
     result,
