@@ -143,6 +143,12 @@ export interface SuggestionBox {
   mode(): ModeType;
   /** Calls `listener` when another mode is chosen. */
   onModeChange(listener: () => void): void;
+  /** The allocation method chosen now. */
+  method(): SuggestMethod;
+  /** Chooses an allocation method without calling the listeners. */
+  setMethod(method: SuggestMethod): void;
+  /** Calls `listener` when the user chooses another allocation method. */
+  onMethodChange(listener: (method: SuggestMethod) => void): void;
   /** The suggestion shown now, or `null` when the box shows none. */
   result(): Suggestion | null;
   /** Calls `listener` whenever the suggestion shown changes (a new one, or cleared). */
@@ -295,6 +301,13 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
       updateRunButton();
     },
     mode: () => modeSelect.value as ModeType,
+    method: () => methodSelect.value as SuggestMethod,
+    setMethod(method) {
+      methodSelect.value = method;
+    },
+    onMethodChange(listener) {
+      methodSelect.addEventListener("change", () => listener(methodSelect.value as SuggestMethod));
+    },
     onModeChange(listener) {
       modeListeners.push(listener);
     },
