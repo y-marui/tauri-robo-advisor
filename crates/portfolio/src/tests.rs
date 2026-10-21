@@ -2272,6 +2272,20 @@ fn a_file_with_a_bad_product_setting_is_refused() {
 }
 
 #[test]
+fn a_malformed_legacy_weight_is_refused_by_the_migration() {
+    for weight in [r#""0""#, r#""-1""#, r#""x""#, "3"] {
+        let old = format!(
+            r#"{{"schema_version": 19, "next_id": 20,
+              "categories": [{{"id": 5, "name": "W", "target_weight": "1", "targeting": "weighted"}}],
+              "products": [{{"id": 1, "name": "A", "category": 5, "currency": "JPY"}}],
+              "accounts": [{{"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"}}],
+              "holdings": [{{"account": 10, "product": 1, "value": "100", "weight": {weight}}}]}}"#
+        );
+        assert!(parse(old.as_bytes()).is_err(), "{weight}");
+    }
+}
+
+#[test]
 fn the_targeting_of_an_older_file_becomes_a_setting_per_mode() {
     let old = r#"{"schema_version": 19, "next_id": 40,
       "categories": [

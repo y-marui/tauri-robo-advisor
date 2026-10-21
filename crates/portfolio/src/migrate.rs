@@ -15,11 +15,11 @@ use crate::{Error, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio};
 pub fn parse(bytes: &[u8]) -> Result<Portfolio, Error> {
     let mut value: Value = serde_json::from_slice(bytes)
         .map_err(|_| Error::Corrupt("the file is not valid".to_owned()))?;
-    to_current(&mut value);
+    to_current(&mut value)?;
     serde_json::from_value(value).map_err(|_| Error::Corrupt("the file is not valid".to_owned()))
 }
 
-fn to_current(value: &mut Value) {
+fn to_current(value: &mut Value) -> Result<(), Error> {
     let version = value.get("schema_version").and_then(Value::as_u64);
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..14).contains(&v)) {
         account_kind_to_record_type(value);
@@ -34,11 +34,12 @@ fn to_current(value: &mut Value) {
         tradable_into_excluded(value);
     }
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..20).contains(&v)) {
-        targeting_into_product_shares(value);
+        targeting_into_product_shares(value)?;
     }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
+    Ok(())
 }
 
 /// Version 14: the type moves from the account (`kind`) to its records. The type of a record is
@@ -147,7 +148,7 @@ fn tradable_into_excluded(value: &mut Value) {
 /// gets an equal share, which is what a missing weight asked for once it was refused as a problem),
 /// a keep-current category keeps the current values, and a free or equal category stores nothing
 /// (an equal share is the default). Then both old fields are dropped.
-fn targeting_into_product_shares(value: &mut Value) {
+fn targeting_into_product_shares(value: &mut Value) -> Result<(), Error> {
     let mut weights: BTreeMap<u64, Decimal> = BTreeMap::new();
     if let Some(holdings) = value.get_mut("holdings").and_then(Value::as_array_mut) {
         for holding in holdings {
@@ -155,12 +156,17 @@ fn targeting_into_product_shares(value: &mut Value) {
                 continue;
             };
             let product = object.get("product").and_then(Value::as_u64);
+            // A malformed weight is refused, as it was before: dropping it would silently turn the
+            // product into an equal share.
             let weight = match object.remove("weight") {
-                Some(Value::String(text)) => text.parse::<Decimal>().ok(),
-                _ => None,
+                None | Some(Value::Null) => None,
+                Some(Value::String(text)) => match text.parse::<Decimal>() {
+                    Ok(w) if w > Decimal::ZERO => Some(w),
+                    _ => return Err(Error::Corrupt("the file is not valid".to_owned())),
+                },
+                Some(_) => return Err(Error::Corrupt("the file is not valid".to_owned())),
             };
-            if let (Some(product), Some(weight)) = (product, weight.filter(|w| *w > Decimal::ZERO))
-            {
+            if let (Some(product), Some(weight)) = (product, weight) {
                 let sum = weights.entry(product).or_default();
                 *sum = sum.checked_add(weight).unwrap_or(Decimal::MAX);
             }
@@ -207,7 +213,7 @@ fn targeting_into_product_shares(value: &mut Value) {
         }
     }
     if entries.is_empty() {
-        return;
+        return Ok(());
     }
     entries.sort_by_key(|(id, _)| *id);
     let mut shares = Vec::new();
@@ -222,4 +228,5 @@ fn targeting_into_product_shares(value: &mut Value) {
         }
     }
     value["product_shares"] = Value::Array(shares);
+    Ok(())
 }
