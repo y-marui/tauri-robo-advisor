@@ -91,10 +91,31 @@ test("trades are found by account and product, and unlisted ones are reported", 
     { account: 2, product: 11, delta: "500", after: "500" },
   ];
   const trades = tradesBySlot(lines);
-  assert.equal(trades.get(slotKey(2, 10))?.after, "100");
+  assert.equal(trades.get(slotKey(2, 10))?.[0]?.after, "100");
   assert.equal(trades.get(slotKey(1, 11)), undefined);
   const shown = new Set([slotKey(1, 10), slotKey(2, 10)]);
   assert.deepEqual(unlistedTrades(lines, shown, [1, 2]), [lines[2]]);
   // Accounts the table does not cover are not its concern.
   assert.deepEqual(unlistedTrades(lines, shown, [1]), []);
+});
+
+test("a sale of a product held in several types is shown per type, anything else on the row", async () => {
+  const { slotTrade } = await import("./account-products.ts");
+  const types = [
+    { account_type: "general", current: "300" },
+    { account_type: "nisa", current: "500" },
+  ];
+  const sells = [
+    { account: 1, product: 10, delta: "-300", after: "0", account_type: "general", by_type: true },
+    { account: 1, product: 10, delta: "-100", after: "400", account_type: "nisa", by_type: true },
+  ];
+  const split = slotTrade(sells, types);
+  assert.equal(split.inline, null);
+  assert.deepEqual(split.parts.map((p) => [p.line.account_type, p.current]), [["general", "300"], ["nisa", "500"]]);
+  // One type: the group's figures are the product's, so they stay on the row.
+  assert.equal(slotTrade(sells.slice(0, 1), types.slice(0, 1)).inline, sells[0]);
+  // A purchase is one line for the whole product.
+  const buy = [{ account: 1, product: 10, delta: "100", after: "900" }];
+  assert.equal(slotTrade(buy, types).inline, buy[0]);
+  assert.deepEqual(slotTrade(undefined, types), { inline: null, parts: [] });
 });

@@ -198,6 +198,8 @@ export interface Portfolio {
   recipes: Recipe[];
   /** Absent when there is none. */
   custom_types?: CustomType[];
+  /** Built-in type id -> may be sold, only where it differs from the default. Absent when none. */
+  type_sellable_overrides?: Record<string, boolean>;
   /** Absent when every product has the weight 1 in every mode. */
   product_shares?: ProductShareEntry[];
 }
@@ -227,6 +229,8 @@ export interface PortfolioView {
    * Each holding's value rounded to the smallest unit of its currency, for display only. The
    * holding's own `value` stays exact (edit fields show it as it is).
    */
+  /** Whether a suggestion may sell the records of each built-in type (default or the user's setting). */
+  builtin_type_sellable: Record<string, boolean>;
   shown_values: { account: number; product: number; account_type: AccountTypeId | null; value: string }[];
   /** The recipes as they are run (`portfolio.recipes` holds what is stored). */
   recipes: RecipeView[];
@@ -258,6 +262,7 @@ export type Edit =
   | { type: "set_product_share"; mode: SuggestionMode; product: number; weight: string }
   | { type: "add_account_type"; name: string; sellable: boolean }
   | { type: "update_account_type"; id: string; name?: string; sellable?: boolean }
+  | { type: "set_type_sellable"; id: string; sellable: boolean }
   | { type: "remove_account_type"; id: string }
   | {
       type: "set_record_type";
@@ -413,8 +418,22 @@ export interface ProductLine {
   account: number;
   product: number;
   delta: string;
-  /** What the account holds of the product after the trade (current + delta, from Rust). */
+  /**
+   * What is held after the trade (from Rust). For a purchase: what the account holds of the
+   * product plus the change. For a sale (`by_type`): what the records of `account_type` hold
+   * minus the sale.
+   */
   after: string;
+  /** Set on a sale line: the record type it takes from; absent means records without a type. */
+  account_type?: AccountTypeId | null;
+  /** True on a sale line, which is one record type's share of a sale. */
+  by_type?: boolean;
+}
+
+/** What an account holds of a product in the records of one type. Mirrors `suggest::TypeValue`. */
+export interface TypeValue {
+  account_type: AccountTypeId | null;
+  current: string;
 }
 
 export type Note =
@@ -445,6 +464,8 @@ export interface ProductBalance {
   target: string | null;
   /** `target` minus `current`: positive when short, negative when over. */
   shortfall: string | null;
+  /** `current` by record type, in the order a sale takes them. Absent when nothing is held. */
+  types?: TypeValue[];
 }
 
 export interface CategoryBalance {

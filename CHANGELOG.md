@@ -4,6 +4,7 @@
 
 ### Added
 
+- Account types can be sold or not per type, built-in types included (`Portfolio::type_sellable_overrides`, edit `SetTypeSellable`, "Account types" card in Settings); the NISA family stays off by default. Sales of a product held in several types of one account now take from the other types first and from the NISA types last, and the Rebalance table shows such a sale per type (`ProductLine::account_type` / `by_type`, `ProductBalance::types`). Schema version 23; an older app refuses the file.
 - Allocation method in the suggestion form: "Follow the portfolio" (category targets, then product weights inside a category) or "By product weights across categories" (category targets ignored; all candidate products share the money by weight, across categories). `suggest::Request.method`.
 - The Rebalance product table shows a suggestion's "Change" and "After" (current + change) per product; `ProductLine` carries `after`. The per-account trade tables of the result are gone.
 - Rebalance: "Takes part in trading" is kept apart for All (`Account::excluded_all`) and for each account tab (`Account::excluded`). All is one table with an Account column. Only products an account holds are candidates.

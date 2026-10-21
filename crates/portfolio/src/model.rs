@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -52,9 +54,13 @@ use serde::{Deserialize, Serialize};
 /// app would read the entries as the old kinds, so it refuses. An older file is converted on load
 /// (see `migrate`): a weight stays, an equal share and a keep-current setting become the default
 /// weight 1.
+/// Version 23 made the selling rule of the built-in account types switchable
+/// (`Portfolio::type_sellable_overrides`: only the types whose setting differs from the built-in
+/// default are stored; an older app would ignore them and refuse to sell what the user allowed, or
+/// sell what the user forbade, so it refuses). An older file has no overrides.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 22;
+pub const SCHEMA_VERSION: u32 = 23;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -560,6 +566,11 @@ pub struct Portfolio {
     /// other than 1 are stored, sorted by mode then product.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub product_shares: Vec<ProductShareEntry>,
+    /// The built-in account types whose selling rule the user changed from the default in
+    /// `BUILTIN_ACCOUNT_TYPES` (id -> may be sold). Only differing entries are stored. A custom
+    /// type keeps its own flag in `custom_types`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub type_sellable_overrides: BTreeMap<String, bool>,
 }
 
 impl Default for Portfolio {
@@ -578,6 +589,7 @@ impl Default for Portfolio {
             recipes: Vec::new(),
             custom_types: Vec::new(),
             product_shares: Vec::new(),
+            type_sellable_overrides: BTreeMap::new(),
         }
     }
 }
@@ -589,20 +601,40 @@ impl Portfolio {
             || self.custom_types.iter().any(|t| t.id == id)
     }
 
-    /// Whether a record of this type may be sold (not set: yes).
+    /// Whether a record of this type may be sold (not set: yes): the user's setting, or the
+    /// default of the built-in type.
     pub fn type_sellable(&self, id: Option<&str>) -> bool {
         let Some(id) = id else { return true };
-        BUILTIN_ACCOUNT_TYPES
+        if let Some(builtin) = BUILTIN_ACCOUNT_TYPES.iter().find(|(b, _)| *b == id) {
+            return self
+                .type_sellable_overrides
+                .get(id)
+                .copied()
+                .unwrap_or(builtin.1);
+        }
+        self.custom_types
             .iter()
-            .find(|(b, _)| *b == id)
-            .map(|(_, sellable)| *sellable)
-            .or_else(|| {
-                self.custom_types
-                    .iter()
-                    .find(|t| t.id == id)
-                    .map(|t| t.sellable)
-            })
-            .unwrap_or(true)
+            .find(|t| t.id == id)
+            .is_none_or(|t| t.sellable)
+    }
+
+    /// Where a record type stands in the order a sale takes from the types of one product in one
+    /// account (smaller first): records without a type, then the other built-in types in their
+    /// listed order, then the user's types by id; the NISA family always last, so tax-free room is
+    /// used up only when nothing else can give.
+    pub fn sell_rank(&self, id: Option<&str>) -> (bool, u8, u64) {
+        let Some(id) = id else { return (false, 0, 0) };
+        let nisa = matches!(id, "nisa" | "nisa_growth" | "nisa_tsumitate" | "old_nisa");
+        match BUILTIN_ACCOUNT_TYPES.iter().position(|(b, _)| *b == id) {
+            Some(i) => (nisa, 1, i as u64),
+            None => {
+                let n = id
+                    .strip_prefix("custom-")
+                    .and_then(|n| n.parse().ok())
+                    .unwrap_or(u64::MAX);
+                (false, 2, n)
+            }
+        }
     }
 
     /// The weight of a product when the given mode runs: its stored setting, or 1.

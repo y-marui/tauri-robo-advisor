@@ -1658,7 +1658,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 22);
+    assert_eq!(SCHEMA_VERSION, 23);
 }
 
 #[test]
@@ -3341,11 +3341,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 23, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 24, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 23 })
+        Err(Error::UnsupportedVersion { found: 24 })
     ));
 }
 
@@ -3856,4 +3856,98 @@ fn an_older_file_starts_with_the_same_list_for_all() {
     assert_eq!(p.accounts[0].excluded_all, vec![ProductId(2)]);
     assert_eq!(p.accounts[0].excluded, vec![ProductId(2)]);
     assert!(p.accounts[1].excluded_all.is_empty());
+}
+
+#[test]
+fn the_selling_rule_of_a_builtin_type_can_be_changed_and_is_stored_as_an_override() {
+    let mut p = Portfolio::default();
+    assert!(!p.type_sellable(Some("nisa")));
+    p.apply(Edit::SetTypeSellable {
+        id: "nisa".to_owned(),
+        sellable: true,
+    })
+    .unwrap();
+    p.apply(Edit::SetTypeSellable {
+        id: "general".to_owned(),
+        sellable: false,
+    })
+    .unwrap();
+    assert!(p.type_sellable(Some("nisa")));
+    assert!(!p.type_sellable(Some("general")));
+    assert!(p.type_sellable(None));
+    assert_eq!(p.type_sellable_overrides.len(), 2);
+    // It survives a round trip and is a valid file.
+    let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+    assert_eq!(back, p);
+    back.validate_integrity().unwrap();
+    // Back to the default: nothing is stored.
+    p.apply(Edit::SetTypeSellable {
+        id: "nisa".to_owned(),
+        sellable: false,
+    })
+    .unwrap();
+    assert!(!p.type_sellable_overrides.contains_key("nisa"));
+    let json = serde_json::to_string(&Portfolio::default()).unwrap();
+    assert!(!json.contains("type_sellable_overrides"));
+}
+
+#[test]
+fn the_selling_rule_of_a_custom_type_is_set_on_the_type() {
+    let mut p = Portfolio::default();
+    p.apply(Edit::AddAccountType {
+        name: "Mine".to_owned(),
+        sellable: true,
+    })
+    .unwrap();
+    let id = p.custom_types[0].id.clone();
+    p.apply(Edit::SetTypeSellable {
+        id: id.clone(),
+        sellable: false,
+    })
+    .unwrap();
+    assert!(!p.type_sellable(Some(&id)));
+    assert!(p.type_sellable_overrides.is_empty());
+}
+
+#[test]
+fn an_unknown_type_id_is_refused_by_the_edit_and_the_integrity_check() {
+    let mut p = Portfolio::default();
+    let r = p.apply(Edit::SetTypeSellable {
+        id: "nope".to_owned(),
+        sellable: true,
+    });
+    assert!(matches!(r, Err(Error::NotFound(_))));
+    assert!(p.type_sellable_overrides.is_empty());
+    p.type_sellable_overrides.insert("nope".to_owned(), true);
+    assert!(p.validate_integrity().is_err());
+    p.type_sellable_overrides.clear();
+    p.type_sellable_overrides.insert("general".to_owned(), true);
+    assert!(p.validate_integrity().is_err(), "equal to the default");
+}
+
+#[test]
+fn an_older_file_loads_without_overrides_and_keeps_the_defaults() {
+    let old = r#"{"schema_version": 22, "next_id": 1}"#;
+    let p = parse(old.as_bytes()).unwrap();
+    assert!(p.type_sellable_overrides.is_empty());
+    assert!(!p.type_sellable(Some("nisa_tsumitate")));
+    assert!(p.type_sellable(Some("crypto")));
+}
+
+#[test]
+fn sales_take_from_non_nisa_types_first() {
+    let p = Portfolio::default();
+    let mut order = [
+        "nisa", "deposit", "old_nisa", "general", "custom-3", "crypto",
+    ]
+    .map(|id| (p.sell_rank(Some(id)), id));
+    order.sort();
+    let ids: Vec<_> = order.iter().map(|x| x.1).collect();
+    assert_eq!(
+        ids,
+        [
+            "general", "deposit", "crypto", "custom-3", "nisa", "old_nisa"
+        ]
+    );
+    assert!(p.sell_rank(None) < p.sell_rank(Some("general")));
 }

@@ -75,10 +75,19 @@ pub struct CategoryLine {
 pub struct ProductLine {
     pub account: AccountId,
     pub product: ProductId,
+    /// For a sale (`by_type`): the account type of the records it takes from; `None` means the
+    /// records without a type. Not set on a purchase.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_type: Option<String>,
+    /// Whether the line is one record type's share of a sale. A sale of a product held in several
+    /// types has one such line per type (see `split`); a purchase is one line for the whole product.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub by_type: bool,
     #[serde(serialize_with = "crate::display::yen")]
     pub delta: Decimal,
-    /// What the account holds of the product once the trade is made: its current value (in every
-    /// record, as the account balance counts it) plus `delta`.
+    /// What is held once the trade is made. For a purchase: the account's current value of the
+    /// product (in every record, as the account balance counts it) plus `delta`. For a sale
+    /// (`by_type`): the current value of that type's records minus the sale.
     #[serde(serialize_with = "crate::display::yen")]
     pub after: Decimal,
 }

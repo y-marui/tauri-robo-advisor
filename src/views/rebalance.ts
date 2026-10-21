@@ -1,4 +1,4 @@
-import { productGroups, slotKey, tradesBySlot, unlistedTrades, type ProductRow } from "../account-products.ts";
+import { productGroups, slotKey, slotTrade, tradesBySlot, unlistedTrades, type ProductRow } from "../account-products.ts";
 import { getAccountBalance } from "../api.ts";
 import { h } from "../dom.ts";
 import { cleanDecimal } from "../decimal.ts";
@@ -8,6 +8,7 @@ import type { Bind, Context, Panel } from "../panel.ts";
 import { clearAll, selectAll, toggle } from "../rebalance-selection.ts";
 import { weightOf } from "../product-shares.ts";
 import type { Account, AccountBalance, PortfolioView, ProductLine } from "../types.ts";
+import { typeLabel } from "./labels.ts";
 import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from "./suggestion.ts";
 
 // The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
@@ -185,8 +186,8 @@ export function rebalancePanel(ctx: Context): Panel {
     withBox: boolean,
     withShare: boolean,
     withAccount: boolean,
-    trades: Map<string, ProductLine> | null,
-  ): HTMLElement {
+    trades: Map<string, ProductLine[]> | null,
+  ): HTMLElement[] {
     let cell: HTMLElement | string = "";
     if (withBox) {
       const check = h("input", {
@@ -199,7 +200,8 @@ export function rebalancePanel(ctx: Context): Panel {
       );
       cell = h("td", { class: "center" }, check);
     }
-    return h(
+    const trade = trades === null ? null : slotTrade(trades.get(slotKey(account.id, row.product)), row.types);
+    const first = h(
       "tr",
       {},
       cell,
@@ -207,17 +209,39 @@ export function rebalancePanel(ctx: Context): Panel {
       h("th", { scope: "row" }, productName(view, row.product)),
       withShare ? shareCell(view, row.product) : "",
       h("td", { class: "num" }, yen(row.current)),
-      ...tradeCells(trades, account.id, row),
+      ...tradeCells(trade?.inline ?? null, trades !== null, (trade?.parts.length ?? 0) > 0, row),
     );
+    // A sale taken from several record types: one sub-row per type, with that type's own figures.
+    const parts = (trade?.parts ?? []).map(({ line, current }) =>
+      h(
+        "tr",
+        { class: "type-part" },
+        withBox ? h("td", {}) : "",
+        withAccount ? h("td", {}) : "",
+        h(
+          "td",
+          { class: "type-label" },
+          line.account_type ? typeLabel(line.account_type, view.portfolio.custom_types) : "",
+        ),
+        withShare ? h("td", {}) : "",
+        h("td", { class: "num" }, yen(current)),
+        h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
+        h("td", { class: "num" }, yen(line.after)),
+      ),
+    );
+    return [first, ...parts];
   }
 
   // The "Change" and "After" cells of a row, when a suggestion is shown. A row without a trade stays
-  // as it is: no change, and the same value after.
-  function tradeCells(trades: Map<string, ProductLine> | null, account: number, row: ProductRow): HTMLElement[] {
-    if (trades === null) {
+  // as it is: no change, and the same value after. A row whose sale is shown per type leaves them
+  // empty: its sub-rows carry the figures.
+  function tradeCells(line: ProductLine | null, shown: boolean, split: boolean, row: ProductRow): HTMLElement[] {
+    if (!shown) {
       return [];
     }
-    const line = trades.get(slotKey(account, row.product));
+    if (split) {
+      return [h("td", {}), h("td", {})];
+    }
     return [
       h("td", { class: `num ${line ? deltaClass(line.delta) : ""}` }, line ? signed(line.delta) : ""),
       h("td", { class: "num" }, line ? yen(line.after) : yen(row.current)),
@@ -308,7 +332,7 @@ export function rebalancePanel(ctx: Context): Panel {
         );
       }
       for (const { account, row } of group.rows) {
-        rows.push(productRow(view, account, row, showAll, withShare, multi, trades));
+        rows.push(...productRow(view, account, row, showAll, withShare, multi, trades));
       }
     }
 
@@ -358,7 +382,13 @@ export function rebalancePanel(ctx: Context): Panel {
                     "tr",
                     {},
                     h("td", {}, accountOf(view, line.account)?.name ?? "?"),
-                    h("th", { scope: "row" }, productName(view, line.product)),
+                    h(
+                      "th",
+                      { scope: "row" },
+                      line.account_type
+                        ? `${productName(view, line.product)} (${typeLabel(line.account_type, view.portfolio.custom_types)})`
+                        : productName(view, line.product),
+                    ),
                     h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
                     h("td", { class: "num" }, yen(line.after)),
                   ),

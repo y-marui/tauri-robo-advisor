@@ -1,17 +1,37 @@
 import { h } from "../dom.ts";
 import { checkboxField, deleteButton, textField } from "../fields.ts";
 import { t } from "../i18n.ts";
+import { BUILTIN_TYPES, typeLabel } from "./labels.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
 
 /**
- * The account types the user added. The built-in types (general, specific, NISA, old NISA,
- * deposit, crypto assets) are fixed; a type belongs to a record, set in the Records card.
+ * The account types: the built-in ones (their names are fixed; only whether a suggestion may sell
+ * them can be changed) and the ones the user added. A type belongs to a record, set in the
+ * Records card.
  */
 export function accountTypesPanel(ctx: Context): Panel {
   return panel(
     "Account types",
     (view) => (view.portfolio.custom_types ?? []).map((c) => c.id).join(","),
     (view, bind) => {
+      const builtinRows = BUILTIN_TYPES.map((id) =>
+        h(
+          "tr",
+          {},
+          h("td", {}, typeLabel(id, undefined)),
+          h(
+            "td",
+            { class: "center" },
+            checkboxField({
+              ctx,
+              bind,
+              label: `${typeLabel(id, undefined)}: ${t("Sellable")}`,
+              get: (v) => v.builtin_type_sellable[id] ?? true,
+              edit: (checked) => ({ type: "set_type_sellable", id, sellable: checked }),
+            }),
+          ),
+        ),
+      );
       const rows = (view.portfolio.custom_types ?? []).map((type) => {
         const id = type.id;
         const find = (v: typeof view) => (v.portfolio.custom_types ?? []).find((c) => c.id === id);
@@ -37,7 +57,7 @@ export function accountTypesPanel(ctx: Context): Panel {
               bind,
               label: t("Sellable"),
               get: (v) => find(v)?.sellable ?? false,
-              edit: (checked) => ({ type: "update_account_type", id, sellable: checked }),
+              edit: (checked) => ({ type: "set_type_sellable", id, sellable: checked }),
             }),
           ),
           h("td", {}, deleteButton(() => void ctx.apply({ type: "remove_account_type", id }), t("Delete type"))),
@@ -68,11 +88,25 @@ export function accountTypesPanel(ctx: Context): Panel {
           "p",
           { class: "muted" },
           t(
-            "Each record has a type (general, specific, NISA, NISA growth, NISA tsumitate, old NISA, cash, crypto assets, or one added here). NISA types, old NISA included, are never sold by a suggestion. “NISA” means a NISA whose frame is not decided yet. The type is read automatically only where the page shows it; otherwise set it by hand in the Records card.",
+            "Each record has a type (general, specific, NISA, NISA growth, NISA tsumitate, old NISA, cash, crypto assets, or one added here). “NISA” means a NISA whose frame is not decided yet. The type is read automatically only where the page shows it; otherwise set it by hand in the Records card.",
           ),
           " ",
-          t("Types you add: the sellable box says whether a suggestion may sell records of the type."),
+          t(
+            "The sellable box says whether a suggestion may sell records of the type. NISA types are off by default, because selling gives up tax-free room. When a product is held in several types of one account, a sale takes from the other types first and from the NISA types last.",
+          ),
         ),
+        h("h3", {}, t("Built-in types")),
+        h(
+          "div",
+          { class: "table-wrap" },
+          h(
+            "table",
+            {},
+            h("thead", {}, h("tr", {}, h("th", {}, t("Name")), h("th", {}, t("Sellable")))),
+            h("tbody", {}, ...builtinRows),
+          ),
+        ),
+        h("h3", {}, t("Types you added")),
         ...(rows.length > 0
           ? [
               h(
