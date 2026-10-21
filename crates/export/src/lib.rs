@@ -10,7 +10,7 @@
 
 mod csv;
 
-use portfolio::{Account, Category, Portfolio, Product};
+use portfolio::{Account, Category, Portfolio, Product, ProductShare};
 use rust_decimal::Decimal;
 
 use csv::{Table, number, optional_number, plain_cell, text_cell};
@@ -48,6 +48,7 @@ pub fn build(portfolio: &Portfolio, info: &Info) -> Result<Vec<ExportFile>, Erro
         file("categories.csv", categories(portfolio, &values)),
         file("products.csv", products(portfolio, &values)),
         file("aliases.csv", aliases(portfolio)),
+        file("product_targets.csv", product_targets(portfolio)),
         file("accounts.csv", accounts(portfolio, &values)),
         file("settings.csv", settings(portfolio)),
         ExportFile {
@@ -143,7 +144,6 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
         "quantity",
         "price",
         "price_unit",
-        "relative_weight",
         "value_jpy",
         "share_of_total",
     ]);
@@ -167,7 +167,6 @@ fn holdings(portfolio: &Portfolio, values: &Values) -> Table {
             optional_number(holding.quantity),
             optional_number(holding.price),
             plain_cell(&holding.price_unit.to_string()),
-            optional_number(holding.weight),
             optional_number(*jpy),
             optional_number(values.share(*jpy)),
         ]);
@@ -228,7 +227,6 @@ fn categories(portfolio: &Portfolio, values: &Values) -> Table {
         "group_id",
         "group",
         "target_weight",
-        "product_targeting",
         "value_jpy",
         "current_share",
     ]);
@@ -242,7 +240,6 @@ fn categories(portfolio: &Portfolio, values: &Values) -> Table {
             plain_cell(&group_id(category)),
             text_cell(group_name(portfolio, Some(category))),
             number(category.target_weight),
-            plain_cell(&keyword(&category.targeting)),
             optional_number(value),
             optional_number(values.share(value)),
         ]);
@@ -288,6 +285,44 @@ fn aliases(portfolio: &Portfolio) -> Table {
                 text_cell(&alias.name),
             ]);
         }
+    }
+    table
+}
+
+/// The explicit settings of how products are targeted, one row per mode and product (a product
+/// that is not listed for a mode has an equal share).
+fn product_targets(portfolio: &Portfolio) -> Table {
+    let mut table = Table::new(&[
+        "mode",
+        "product_id",
+        "product",
+        "category_id",
+        "category",
+        "targeting",
+        "relative_weight",
+    ]);
+    for entry in &portfolio.product_shares {
+        let product = product_of(portfolio, entry.product);
+        let category =
+            product.and_then(|p| portfolio.categories.iter().find(|c| c.id == p.category));
+        let weight = match entry.share {
+            ProductShare::Weighted { weight } => Some(weight),
+            _ => None,
+        };
+        let targeting = match entry.share {
+            ProductShare::Equal => "equal",
+            ProductShare::Weighted { .. } => "weighted",
+            ProductShare::KeepCurrent => "keep_current",
+        };
+        table.push(vec![
+            plain_cell(&keyword(&entry.mode)),
+            plain_cell(&entry.product.0.to_string()),
+            text_cell(product.map_or("", |p| &p.name)),
+            plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),
+            text_cell(category.map_or("", |c| &c.name)),
+            plain_cell(targeting),
+            optional_number(weight),
+        ]);
     }
     table
 }
@@ -392,11 +427,12 @@ fn readme(portfolio: &Portfolio, info: &Info) -> String {
          \n\
          Files\n\
          -----\n\
-         holdings.csv     One row per record of a product in an account (the amounts and relative weight you entered).\n\
+         holdings.csv     One row per record of a product in an account (the amounts you entered).\n\
          groups.csv       Groups of categories with the sum of their targets and their current value.\n\
          categories.csv   Categories (with their group) with their target weight and current value.\n\
          products.csv     Products with category and currency.\n\
          aliases.csv      Names that data sources use for a product.\n\
+         product_targets.csv  How a product is targeted inside its category, per suggestion mode (only the products that do not have an equal share).\n\
          accounts.csv     Accounts with their rules (sellable, rounding unit, products left out of trading).\n\
          settings.csv     Exchange rate and tolerances.\n\
          portfolio.json   The complete data in the app's own format (all of the above).\n\

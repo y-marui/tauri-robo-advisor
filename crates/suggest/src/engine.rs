@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use portfolio::{
-    Account, AccountId, Category, CategoryId, Portfolio, Product, ProductId, ProductTargeting,
+    Account, AccountId, Category, CategoryId, Portfolio, Product, ProductId, ProductShare,
+    SuggestionMode,
 };
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
@@ -68,6 +69,8 @@ struct Book<'a> {
     /// The accounts the suggestion trades in: the requested one, or all of them.
     scope: Vec<&'a Account>,
     request_account: Option<AccountId>,
+    /// The mode being run: the product settings of this mode apply.
+    mode: SuggestionMode,
     /// The step amounts are a multiple of: the rounding unit of the accounts in scope (the least
     /// common multiple when they differ, so every account's own unit divides it).
     unit: Decimal,
@@ -102,13 +105,6 @@ impl<'a> Book<'a> {
                 .filter(|a| a.strategy.is_portfolio())
                 .collect(),
         };
-        if portfolio
-            .holdings
-            .iter()
-            .any(|h| h.weight.is_some_and(|w| w > MAX_WEIGHT))
-        {
-            return Err(Error::TooLarge);
-        }
 
         let mut account_value = BTreeMap::new();
         let mut held_here: BTreeMap<Slot, Decimal> = BTreeMap::new();
@@ -155,6 +151,12 @@ impl<'a> Book<'a> {
             portfolio,
             scope,
             request_account: request.account,
+            mode: match request.mode {
+                Mode::FixedAdd { .. } => SuggestionMode::FixedAdd,
+                Mode::BuyOnlyToTarget => SuggestionMode::BuyOnlyToTarget,
+                Mode::FullRebalance => SuggestionMode::FullRebalance,
+                Mode::FixedSell { .. } => SuggestionMode::FixedSell,
+            },
             unit,
             account_value,
             held_here,
@@ -393,24 +395,24 @@ impl<'a> Book<'a> {
             .iter()
             .map(|p| {
                 let value = self.global_value(p);
-                match category.targeting {
-                    // No product ratios were set: aim at equal weights, counting what is held.
-                    ProductTargeting::Free | ProductTargeting::Equal => Item {
+                match self.portfolio.product_share(self.mode, p.id) {
+                    // Aim at equal weights, counting what is held.
+                    ProductShare::Equal => Item {
                         weight: Decimal::ONE,
                         current: value,
                         cap: None,
                     },
-                    ProductTargeting::Weighted => Item {
-                        weight: self.portfolio.product_weight(p.id).unwrap_or_default(),
+                    ProductShare::Weighted { weight } => Item {
+                        weight,
                         current: value,
                         cap: None,
                     },
-                    ProductTargeting::KeepCurrent if all_zero => Item {
+                    ProductShare::KeepCurrent if all_zero => Item {
                         weight: Decimal::ONE,
                         current: Decimal::ZERO,
                         cap: None,
                     },
-                    ProductTargeting::KeepCurrent => Item {
+                    ProductShare::KeepCurrent => Item {
                         weight: value,
                         current: value,
                         cap: None,
@@ -428,13 +430,10 @@ impl<'a> Book<'a> {
             .iter()
             .map(|(p, here)| {
                 let value = self.global_value(p);
-                let (weight, current) = match category.targeting {
-                    ProductTargeting::Free | ProductTargeting::Equal => (Decimal::ONE, -value),
-                    ProductTargeting::Weighted => (
-                        self.portfolio.product_weight(p.id).unwrap_or_default(),
-                        -value,
-                    ),
-                    ProductTargeting::KeepCurrent => (value, -value),
+                let (weight, current) = match self.portfolio.product_share(self.mode, p.id) {
+                    ProductShare::Equal => (Decimal::ONE, -value),
+                    ProductShare::Weighted { weight } => (weight, -value),
+                    ProductShare::KeepCurrent => (value, -value),
                 };
                 Item {
                     weight,

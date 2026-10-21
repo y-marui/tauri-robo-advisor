@@ -157,12 +157,21 @@ const MODES: { value: ModeType; label: () => string; needsAmount: boolean }[] = 
   { value: "fixed_sell", label: () => t("Sell a fixed amount"), needsAmount: true },
 ];
 
+/** The name of a mode, as the mode list shows it. */
+export function modeLabel(type: ModeType): string {
+  return MODES.find((m) => m.value === type)?.label() ?? type;
+}
+
 export interface SuggestionBox {
   el: HTMLElement;
   /** Gives the box the current state and drops a result that may be out of date. */
   update(view: PortfolioView): void;
   /** Holds the Suggest button while something it depends on is being saved. */
   setBusy(busy: boolean): void;
+  /** The mode chosen now. */
+  mode(): ModeType;
+  /** Calls `listener` when another mode is chosen. */
+  onModeChange(listener: () => void): void;
 }
 
 interface SuggestionBoxOptions {
@@ -201,7 +210,13 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
   const syncAmount = (): void => {
     amount.hidden = !(available.find((m) => m.value === modeSelect.value)?.needsAmount ?? false);
   };
-  modeSelect.addEventListener("change", syncAmount);
+  const modeListeners: (() => void)[] = [];
+  modeSelect.addEventListener("change", () => {
+    syncAmount();
+    for (const listener of modeListeners) {
+      listener();
+    }
+  });
   syncAmount();
 
   let current: PortfolioView | null = null;
@@ -276,6 +291,10 @@ export function suggestionBox(options: SuggestionBoxOptions): SuggestionBox {
     setBusy(value) {
       busy = value;
       updateRunButton();
+    },
+    mode: () => modeSelect.value as ModeType,
+    onModeChange(listener) {
+      modeListeners.push(listener);
     },
   };
 }

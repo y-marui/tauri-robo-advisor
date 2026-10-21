@@ -88,7 +88,6 @@ fn a_rejected_edit_leaves_the_portfolio_unchanged() {
             id: c,
             name: Some("Renamed".to_owned()),
             target_weight: Some(dec!(-1)),
-            targeting: None,
         }),
         p.apply(Edit::AddProduct {
             name: "P".to_owned(),
@@ -428,44 +427,6 @@ fn issues_accept_weights_with_small_rounding_error() {
     category(&mut p, "C", dec!(0.3334));
 
     assert!(p.issues().is_empty());
-}
-
-#[test]
-fn issues_report_weighted_categories_with_missing_weights_or_no_products() {
-    let mut p = Portfolio::default();
-    let c = category(&mut p, "A", dec!(0.5));
-    let empty = category(&mut p, "B", dec!(0.5));
-    let prod = product(&mut p, "Fund X", c);
-    let acc = account(&mut p, "Main");
-    for id in [c, empty] {
-        apply(
-            &mut p,
-            Edit::UpdateCategory {
-                id,
-                name: None,
-                target_weight: None,
-                targeting: Some(ProductTargeting::Weighted),
-            },
-        );
-    }
-
-    let issues = p.issues();
-    assert!(issues.contains(&Issue::WeightedProductMissingWeight { category: c }));
-    assert!(issues.contains(&Issue::CategoryHasNoProducts { category: empty }));
-
-    apply(
-        &mut p,
-        Edit::SetHoldingWeight {
-            account_type: None,
-            account: acc,
-            product: prod,
-            weight: Some(dec!(10)),
-        },
-    );
-    assert!(
-        !p.issues()
-            .contains(&Issue::WeightedProductMissingWeight { category: c })
-    );
 }
 
 #[test]
@@ -1695,7 +1656,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 19);
+    assert_eq!(SCHEMA_VERSION, 20);
 }
 
 #[test]
@@ -2181,130 +2142,196 @@ fn rows_move_to_a_given_position() {
     p.validate_integrity().unwrap();
 }
 
-fn weight_edit(
-    account: AccountId,
-    product: ProductId,
-    weight: Option<rust_decimal::Decimal>,
-) -> Edit {
-    Edit::SetHoldingWeight {
-        account_type: None,
-        account,
+fn share_edit(mode: SuggestionMode, product: ProductId, share: ProductShare) -> Edit {
+    Edit::SetProductShare {
+        mode,
         product,
-        weight,
+        share,
     }
 }
 
 #[test]
-fn a_weight_belongs_to_the_record_of_a_product_in_an_account() {
-    let (mut p, _, prod, acc) = sample();
-    let other = account(&mut p, "Account 2");
+fn a_product_has_its_own_setting_for_each_mode() {
+    let (mut p, _, prod, _) = sample();
+    let weighted = ProductShare::Weighted { weight: dec!(3) };
 
-    apply(&mut p, weight_edit(acc, prod, Some(dec!(3))));
-    // The same product in another account has its own weight; none of it is held yet.
-    apply(&mut p, weight_edit(other, prod, Some(dec!(1))));
+    // Nothing set: an equal share in every mode.
+    for mode in SuggestionMode::ALL {
+        assert_eq!(p.product_share(mode, prod), ProductShare::Equal);
+    }
+    apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, weighted));
+    apply(
+        &mut p,
+        share_edit(SuggestionMode::FixedSell, prod, ProductShare::KeepCurrent),
+    );
 
-    assert_eq!(p.record_weight(acc, prod), Some(dec!(3)));
-    assert_eq!(p.record_weight(other, prod), Some(dec!(1)));
-    assert_eq!(p.product_weight(prod), Some(dec!(4)));
-    let made = p
-        .holdings
-        .iter()
-        .find(|h| h.account == other && h.product == prod)
-        .unwrap();
-    assert_eq!(made.value, dec!(0));
+    assert_eq!(p.product_share(SuggestionMode::FixedAdd, prod), weighted);
+    assert_eq!(
+        p.product_share(SuggestionMode::FixedSell, prod),
+        ProductShare::KeepCurrent
+    );
+    assert_eq!(
+        p.product_share(SuggestionMode::FullRebalance, prod),
+        ProductShare::Equal
+    );
     p.validate_integrity().unwrap();
 
-    // Clearing a weight keeps the record; a weight that is not positive is refused.
-    apply(&mut p, weight_edit(acc, prod, None));
-    assert_eq!(p.product_weight(prod), Some(dec!(1)));
+    // Setting a mode again replaces it; an equal share is not stored.
+    apply(
+        &mut p,
+        share_edit(SuggestionMode::FixedAdd, prod, ProductShare::Equal),
+    );
+    assert_eq!(p.product_shares.len(), 1);
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn a_product_weight_must_be_positive_and_not_huge() {
+    let (mut p, _, prod, _) = sample();
     let before = p.clone();
-    assert!(p.apply(weight_edit(acc, prod, Some(dec!(0)))).is_err());
-    assert!(
-        p.apply(weight_edit(AccountId(9999), prod, Some(dec!(1))))
+    for weight in [dec!(0), dec!(-1), MAX_PRODUCT_WEIGHT + dec!(1)] {
+        assert!(
+            p.apply(share_edit(
+                SuggestionMode::FixedAdd,
+                prod,
+                ProductShare::Weighted { weight }
+            ))
             .is_err()
+        );
+    }
+    assert!(
+        p.apply(share_edit(
+            SuggestionMode::FixedAdd,
+            ProductId(9999),
+            ProductShare::KeepCurrent
+        ))
+        .is_err()
     );
     assert_eq!(p, before);
-
-    // Clearing the weight of a record that does not exist makes nothing.
-    let third = account(&mut p, "Account 3");
-    let count = p.holdings.len();
-    apply(&mut p, weight_edit(third, prod, None));
-    assert_eq!(p.holdings.len(), count);
-    assert_eq!(p.product_weight(prod), Some(dec!(1)));
+    apply(
+        &mut p,
+        share_edit(
+            SuggestionMode::FixedAdd,
+            prod,
+            ProductShare::Weighted {
+                weight: MAX_PRODUCT_WEIGHT,
+            },
+        ),
+    );
 }
 
 #[test]
-fn an_import_keeps_the_weights_of_the_records_it_replaces() {
-    let (mut p, c, prod, acc) = sample();
-    let sold = product(&mut p, "Fund Y", c);
-    let gone = product(&mut p, "Fund Z", c);
-    apply(&mut p, weight_edit(acc, prod, Some(dec!(2))));
-    apply(&mut p, weight_edit(acc, sold, Some(dec!(5))));
+fn removing_or_merging_a_product_drops_its_settings() {
+    let (mut p, c, prod, _) = sample();
+    let other = product(&mut p, "Fund Y", c);
+    for id in [prod, other] {
+        apply(
+            &mut p,
+            share_edit(SuggestionMode::FullRebalance, id, ProductShare::KeepCurrent),
+        );
+    }
     apply(
         &mut p,
-        Edit::SetHolding {
-            account_type: None,
-            account: acc,
-            product: sold,
-            value: dec!(700),
-            quantity: Some(dec!(7)),
+        Edit::MergeProducts {
+            keep: prod,
+            remove: other,
+            on_conflict: MergeConflict::Keep,
         },
     );
-    apply(
-        &mut p,
-        Edit::SetHolding {
-            account_type: None,
-            account: acc,
-            product: gone,
-            value: dec!(300),
-            quantity: None,
-        },
-    );
+    assert_eq!(p.product_shares.len(), 1);
+    assert_eq!(p.product_shares[0].product, prod);
 
-    apply(
-        &mut p,
-        Edit::ReplaceHoldings {
-            types: None,
-            account: acc,
-            holdings: vec![HoldingInput {
-                account_type: None,
-                product: prod,
-                value: dec!(1500),
-                quantity: None,
-                price: None,
-                price_unit: 1,
-            }],
-        },
-    );
-
-    let record = |product| p.holdings.iter().find(|h| h.product == product);
-    // Listed again: the new value, the old weight.
-    assert_eq!(record(prod).unwrap().value, dec!(1500));
-    assert_eq!(record(prod).unwrap().weight, Some(dec!(2)));
-    // No longer listed but wanted: nothing held, the weight stays.
-    let kept = record(sold).unwrap();
-    assert_eq!(
-        (kept.value, kept.quantity, kept.weight),
-        (dec!(0), None, Some(dec!(5)))
-    );
-    // No longer listed and not wanted: gone.
-    assert!(record(gone).is_none());
+    apply(&mut p, Edit::RemoveProduct { id: prod });
+    assert!(p.product_shares.is_empty());
     p.validate_integrity().unwrap();
 }
 
 #[test]
-fn removing_a_record_removes_its_weight() {
-    let (mut p, _, prod, acc) = sample();
-    apply(&mut p, weight_edit(acc, prod, Some(dec!(2))));
-    apply(
-        &mut p,
-        Edit::RemoveHolding {
-            account_type: None,
-            account: acc,
-            product: prod,
-        },
-    );
-    assert_eq!(p.product_weight(prod), None);
+fn a_file_with_a_bad_product_setting_is_refused() {
+    let (mut p, _, prod, _) = sample();
+    let entry = |share| ProductShareEntry {
+        mode: SuggestionMode::FixedAdd,
+        product: prod,
+        share,
+    };
+    for entries in [
+        vec![entry(ProductShare::Equal)],
+        vec![entry(ProductShare::Weighted { weight: dec!(0) })],
+        vec![
+            entry(ProductShare::KeepCurrent),
+            entry(ProductShare::KeepCurrent),
+        ],
+        vec![ProductShareEntry {
+            product: ProductId(9999),
+            ..entry(ProductShare::KeepCurrent)
+        }],
+    ] {
+        p.product_shares = entries;
+        assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
+    }
+}
+
+#[test]
+fn a_malformed_legacy_weight_is_refused_by_the_migration() {
+    for weight in [r#""0""#, r#""-1""#, r#""x""#, "3"] {
+        let old = format!(
+            r#"{{"schema_version": 19, "next_id": 20,
+              "categories": [{{"id": 5, "name": "W", "target_weight": "1", "targeting": "weighted"}}],
+              "products": [{{"id": 1, "name": "A", "category": 5, "currency": "JPY"}}],
+              "accounts": [{{"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"}}],
+              "holdings": [{{"account": 10, "product": 1, "value": "100", "weight": {weight}}}]}}"#
+        );
+        assert!(parse(old.as_bytes()).is_err(), "{weight}");
+    }
+}
+
+#[test]
+fn the_targeting_of_an_older_file_becomes_a_setting_per_mode() {
+    let old = r#"{"schema_version": 19, "next_id": 40,
+      "categories": [
+        {"id": 5, "name": "W", "target_weight": "0.5", "targeting": "weighted"},
+        {"id": 6, "name": "K", "target_weight": "0.3", "targeting": "keep_current"},
+        {"id": 7, "name": "E", "target_weight": "0.1", "targeting": "equal"},
+        {"id": 8, "name": "F", "target_weight": "0.1"}],
+      "products": [
+        {"id": 1, "name": "A", "category": 5, "currency": "JPY"},
+        {"id": 2, "name": "B", "category": 5, "currency": "JPY"},
+        {"id": 3, "name": "C", "category": 6, "currency": "JPY"},
+        {"id": 4, "name": "D", "category": 7, "currency": "JPY"},
+        {"id": 9, "name": "E", "category": 8, "currency": "JPY"}],
+      "accounts": [
+        {"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"},
+        {"id": 11, "name": "N", "sellable": true, "rounding_unit": "1"}],
+      "holdings": [
+        {"account": 10, "product": 1, "value": "100", "weight": "2"},
+        {"account": 11, "product": 1, "value": "0", "weight": "1"},
+        {"account": 10, "product": 3, "value": "50", "weight": "7"}]}"#;
+
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+
+    p.validate_integrity().unwrap();
+    for mode in SuggestionMode::ALL {
+        // The weights of the records add up; a weighted product without one is an equal share.
+        assert_eq!(
+            p.product_share(mode, ProductId(1)),
+            ProductShare::Weighted { weight: dec!(3) }
+        );
+        assert_eq!(p.product_share(mode, ProductId(2)), ProductShare::Equal);
+        assert_eq!(
+            p.product_share(mode, ProductId(3)),
+            ProductShare::KeepCurrent
+        );
+        assert_eq!(p.product_share(mode, ProductId(4)), ProductShare::Equal);
+        assert_eq!(p.product_share(mode, ProductId(9)), ProductShare::Equal);
+    }
+    assert_eq!(p.product_shares.len(), 8);
+    // Both old fields are gone, and the result round-trips as a current file.
+    let json = serde_json::to_value(&p).unwrap();
+    assert!(json["categories"][0].get("targeting").is_none());
+    assert!(json["holdings"][0].get("weight").is_none());
+    let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
+    assert_eq!(back, p);
 }
 
 #[test]
@@ -2320,24 +2347,6 @@ fn only_the_supported_schema_versions_are_opened() {
     }
     p.schema_version = 0;
     assert!(matches!(p.validate_integrity(), Err(Error::Corrupt(_))));
-}
-
-#[test]
-fn the_weight_of_a_product_does_not_overflow_when_its_records_add_up() {
-    let (mut p, _, prod, acc) = sample();
-    let other = account(&mut p, "Account 2");
-    apply(
-        &mut p,
-        weight_edit(acc, prod, Some(rust_decimal::Decimal::MAX)),
-    );
-    apply(
-        &mut p,
-        weight_edit(other, prod, Some(rust_decimal::Decimal::MAX)),
-    );
-
-    assert_eq!(p.product_weight(prod), Some(rust_decimal::Decimal::MAX));
-    // The issues are worked out on every view, so they must not panic either.
-    let _ = p.issues();
 }
 
 #[test]
@@ -3296,11 +3305,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 20, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 21, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 20 })
+        Err(Error::UnsupportedVersion { found: 21 })
     ));
 }
 

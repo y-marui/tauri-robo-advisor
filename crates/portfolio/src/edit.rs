@@ -6,8 +6,8 @@ use crate::presets::Preset;
 use crate::validate::{currency, fraction, name, non_negative, positive};
 use crate::{
     Account, AccountId, Alias, CardSource, Category, CategoryId, Error, FetchLink, Group, GroupId,
-    Holding, ImportMapping, KindRead, KindRule, Portfolio, Product, ProductId, ProductTargeting,
-    Recipe, Strategy, TypeRule,
+    Holding, ImportMapping, KindRead, KindRule, MAX_PRODUCT_WEIGHT, Portfolio, Product, ProductId,
+    ProductShare, ProductShareEntry, Recipe, Strategy, SuggestionMode, TypeRule,
 };
 
 /// Which record stays when a merge finds a record of both products in one account.
@@ -75,7 +75,6 @@ pub enum Edit {
         id: CategoryId,
         name: Option<String>,
         target_weight: Option<Decimal>,
-        targeting: Option<ProductTargeting>,
     },
     RemoveCategory {
         id: CategoryId,
@@ -215,15 +214,12 @@ pub enum Edit {
         #[serde(default)]
         account_type: Option<String>,
     },
-    /// Sets (or clears) the relative weight of the record of a product in an account. A record
-    /// that does not exist yet is made with a value of zero, so a product can be given a weight
-    /// before anything is bought.
-    SetHoldingWeight {
-        account: AccountId,
+    /// Sets how a product is targeted inside its category for one suggestion mode (`Equal`
+    /// clears the setting). Global: it applies to every account.
+    SetProductShare {
+        mode: SuggestionMode,
         product: ProductId,
-        #[serde(default)]
-        account_type: Option<String>,
-        weight: Option<Decimal>,
+        share: ProductShare,
     },
     /// Makes the account hold exactly these products, as an import does. The
     /// values are in each product's own currency.
@@ -877,14 +873,12 @@ impl Portfolio {
                     name: new_name,
                     group: None,
                     target_weight,
-                    targeting: ProductTargeting::default(),
                 });
             }
             Edit::UpdateCategory {
                 id,
                 name: new_name,
                 target_weight,
-                targeting,
             } => {
                 let new_name = new_name.map(|n| name(&n, "category")).transpose()?;
                 let target_weight = target_weight
@@ -900,9 +894,6 @@ impl Portfolio {
                 }
                 if let Some(w) = target_weight {
                     category.target_weight = w;
-                }
-                if let Some(t) = targeting {
-                    category.targeting = t;
                 }
             }
             Edit::RemoveCategory { id } => {
@@ -991,7 +982,6 @@ impl Portfolio {
                             name: new_name,
                             group: None,
                             target_weight: Decimal::ZERO,
-                            targeting: ProductTargeting::default(),
                         });
                         id
                     }
@@ -1013,6 +1003,7 @@ impl Portfolio {
                 self.product(id)?;
                 self.products.retain(|p| p.id != id);
                 self.holdings.retain(|h| h.product != id);
+                self.product_shares.retain(|e| e.product != id);
                 for account in &mut self.accounts {
                     account.excluded.retain(|p| *p != id);
                     account.drop_strategy_product(id);
@@ -1086,6 +1077,7 @@ impl Portfolio {
                     account.excluded.retain(|p| *p != remove);
                     account.merge_strategy_product(keep, remove);
                 }
+                self.product_shares.retain(|e| e.product != remove);
                 self.product_mut(keep)?.aliases.extend(from.aliases);
                 self.products.retain(|p| p.id != remove);
             }
@@ -1323,40 +1315,33 @@ impl Portfolio {
                             quantity,
                             price: None,
                             price_unit: 1,
-                            weight: None,
                             account_type,
                         });
                     }
                 }
             }
-            Edit::SetHoldingWeight {
-                account,
+            Edit::SetProductShare {
+                mode,
                 product,
-                account_type,
-                weight,
+                share,
             } => {
-                let weight = weight.map(|w| positive(w, "weight")).transpose()?;
-                self.check_type(account_type.as_deref())?;
-                self.account(account)?;
                 self.product(product)?;
-                match self.holdings.iter_mut().find(|h| {
-                    h.account == account && h.product == product && h.account_type == account_type
-                }) {
-                    Some(holding) => holding.weight = weight,
-                    None if weight.is_none() => {}
-                    None => {
-                        self.check_capacity(self.holdings.len())?;
-                        self.holdings.push(Holding {
-                            account,
-                            product,
-                            value: Decimal::ZERO,
-                            quantity: None,
-                            price: None,
-                            price_unit: 1,
-                            weight,
-                            account_type,
-                        });
+                if let ProductShare::Weighted { weight } = share {
+                    let weight = positive(weight, "weight")?;
+                    if weight > MAX_PRODUCT_WEIGHT {
+                        return Err(Error::Invalid("the weight is too large".to_owned()));
                     }
+                }
+                self.product_shares
+                    .retain(|e| !(e.mode == mode && e.product == product));
+                if share != ProductShare::Equal {
+                    self.check_capacity(self.product_shares.len())?;
+                    self.product_shares.push(ProductShareEntry {
+                        mode,
+                        product,
+                        share,
+                    });
+                    self.product_shares.sort_by_key(|e| (e.mode, e.product));
                 }
             }
             Edit::RemoveHolding {
@@ -1424,35 +1409,8 @@ impl Portfolio {
                             .transpose()?,
                         price: input.price.map(|p| non_negative(p, "price")).transpose()?,
                         price_unit: input.price_unit,
-                        // The weight is the user's wish, not part of what the page says.
-                        weight: self
-                            .holdings
-                            .iter()
-                            .find(|h| {
-                                h.account == account
-                                    && h.product == input.product
-                                    && h.account_type == account_type
-                            })
-                            .and_then(|h| h.weight),
                     });
                 }
-                // A record that has a weight stays when the page no longer lists the product
-                // (sold out), with nothing held, so its weight is not lost.
-                let kept: Vec<Holding> = self
-                    .holdings
-                    .iter()
-                    .filter(|h| h.account == account && in_scope(&h.account_type))
-                    .filter(|h| h.weight.is_some())
-                    .filter(|h| !seen.contains(&(h.product, h.account_type.clone())))
-                    .map(|h| Holding {
-                        value: Decimal::ZERO,
-                        quantity: None,
-                        price: None,
-                        price_unit: 1,
-                        ..h.clone()
-                    })
-                    .collect();
-                next.extend(kept);
                 let others = self
                     .holdings
                     .iter()

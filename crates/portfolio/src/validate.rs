@@ -4,7 +4,8 @@ use rust_decimal::Decimal;
 
 use crate::presets::Preset;
 use crate::{
-    Error, Issue, MIN_SCHEMA_VERSION, Portfolio, ProductTargeting, SCHEMA_VERSION, Strategy,
+    Error, Issue, MAX_PRODUCT_WEIGHT, MIN_SCHEMA_VERSION, Portfolio, ProductShare, SCHEMA_VERSION,
+    Strategy,
 };
 
 /// The most recipes a data file may hold.
@@ -205,9 +206,6 @@ impl Portfolio {
             if let Some(price) = holding.price {
                 non_negative(price, "price").map_err(into_corrupt)?;
             }
-            if let Some(weight) = holding.weight {
-                positive(weight, "weight").map_err(into_corrupt)?;
-            }
             if holding.price_unit == 0 {
                 return corrupt("a holding has a price unit of zero");
             }
@@ -222,6 +220,28 @@ impl Portfolio {
                 holding.account_type.as_deref(),
             )) {
                 return corrupt("a product is held twice in the same account with the same type");
+            }
+        }
+
+        let mut shared = HashSet::new();
+        for entry in &self.product_shares {
+            if !self.products.iter().any(|p| p.id == entry.product) {
+                return corrupt("a product setting refers to a missing product");
+            }
+            if !shared.insert((entry.mode, entry.product)) {
+                return corrupt("a product has two settings for the same mode");
+            }
+            match entry.share {
+                ProductShare::Equal => {
+                    return corrupt("an equal product setting is stored");
+                }
+                ProductShare::Weighted { weight } => {
+                    positive(weight, "weight").map_err(into_corrupt)?;
+                    if weight > MAX_PRODUCT_WEIGHT {
+                        return corrupt("a product weight is too large");
+                    }
+                }
+                ProductShare::KeepCurrent => {}
             }
         }
 
@@ -279,26 +299,6 @@ impl Portfolio {
                 .fold(Decimal::ZERO, |acc, c| acc.saturating_add(c.target_weight));
             if (sum - Decimal::ONE).abs() > WEIGHT_SUM_TOLERANCE {
                 issues.push(Issue::CategoryWeightsDoNotSumToOne { sum });
-            }
-        }
-
-        for category in &self.categories {
-            let products: Vec<_> = self
-                .products
-                .iter()
-                .filter(|p| p.category == category.id)
-                .collect();
-            if category.targeting != ProductTargeting::Free && products.is_empty() {
-                issues.push(Issue::CategoryHasNoProducts {
-                    category: category.id,
-                });
-            }
-            if category.targeting == ProductTargeting::Weighted
-                && products.iter().any(|p| self.product_weight(p.id).is_none())
-            {
-                issues.push(Issue::WeightedProductMissingWeight {
-                    category: category.id,
-                });
             }
         }
 

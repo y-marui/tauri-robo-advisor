@@ -102,7 +102,7 @@ function renderAll(): void {
     return;
   }
   issues.replaceChildren(
-    ...[dataNotes(view.data), issuesList(view.issues, view.portfolio)].filter((e) => e !== null),
+    ...[dataNotes(view.data), issuesList(view.issues)].filter((e) => e !== null),
   );
   for (const panel of panels) {
     panel.render(view);

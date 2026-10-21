@@ -4,8 +4,6 @@ import { deleteButton, orderButtons, percentField, selectField, textField } from
 import { t } from "../i18n.ts";
 import { grip, makeSortable } from "../sortable.ts";
 import { panel, type Context, type Panel } from "../panel.ts";
-import type { ProductTargeting } from "../types.ts";
-import { TARGETINGS, targetingLabel } from "./labels.ts";
 
 export function categoriesPanel(ctx: Context): Panel {
   return panel(
@@ -66,22 +64,6 @@ export function categoriesPanel(ctx: Context): Panel {
               label: t("Target (%)"),
               get: (v) => find(v)?.target_weight ?? "0",
               save: (fraction) => ({ type: "update_category", id, target_weight: fraction }),
-            }),
-          ),
-          h(
-            "td",
-            {},
-            selectField({
-              ctx,
-              bind,
-              label: t("Product targeting"),
-              options: TARGETINGS.map((value) => ({ value, label: targetingLabel(value) })),
-              get: (v) => find(v)?.targeting ?? "free",
-              edit: (value) => ({
-                type: "update_category",
-                id,
-                targeting: value as ProductTargeting,
-              }),
             }),
           ),
           h(
@@ -166,7 +148,6 @@ export function categoriesPanel(ctx: Context): Panel {
                 h("th", {}, t("Name")),
                 ...(view.portfolio.groups.length === 0 ? [] : [h("th", {}, t("Group"))]),
                 h("th", {}, t("Target (%)")),
-                h("th", {}, t("Product targeting")),
                 h("th", {}),
               ),
             ),

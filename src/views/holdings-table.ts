@@ -109,16 +109,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
           const price = priceText(held);
           priceCell.textContent = price === "" ? "" : `${price} ${product.currency}`;
         };
-        // A record that only carries a weight (a product to start buying) has no value yet; the
-        // label follows every refresh, since an edit or an import can change either.
-        const weightOnlyLabel = h("span", { class: "muted weight-only" }, ` (${t("No value yet")})`);
-        const showWeightOnly = (): void => {
-          const held = holdingOf(current, record);
-          weightOnlyLabel.hidden = !(held && held.weight !== null && Number(held.value) === 0);
-        };
         showQuantityAndPrice();
-        showWeightOnly();
-        refreshers.push(showQuantityAndPrice, showWeightOnly);
+        refreshers.push(showQuantityAndPrice);
         rows.push(
           h(
             "tr",
@@ -145,7 +137,6 @@ export function holdingsTablePanel(ctx: Context): Panel {
               "td",
               { class: "num" },
               `${yen(shownValue(view, record))} ${product.currency}`,
-              weightOnlyLabel,
             ),
             cells.value,
             cells.share,

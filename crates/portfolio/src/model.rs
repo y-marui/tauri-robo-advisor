@@ -39,9 +39,13 @@ use serde::{Deserialize, Serialize};
 /// part in trading unless it is excluded (an older app would read the missing `tradable` as "any
 /// product" and trade left-out products it cannot see, so it refuses). An older file is converted on
 /// load (see `migrate`).
+/// Version 20 moved the targeting of the products inside a category from the category
+/// (`Category::targeting`) and the records (`Holding::weight`) to the Rebalance tab: a setting per
+/// suggestion mode and product (`Portfolio::product_shares`). An older app would read every product
+/// as an equal share, so it refuses. An older file is converted on load (see `migrate`).
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 19;
+pub const SCHEMA_VERSION: u32 = 20;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -62,19 +66,51 @@ id_type!(CategoryId);
 id_type!(ProductId);
 id_type!(AccountId);
 
-/// How the products inside a category are targeted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// The suggestion modes, as far as they differ in how a product is targeted: each keeps its own
+/// setting per product.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ProductTargeting {
-    /// Only the category has a target; products are not constrained.
+pub enum SuggestionMode {
+    FixedAdd,
+    BuyOnlyToTarget,
+    FullRebalance,
+    FixedSell,
+}
+
+impl SuggestionMode {
+    pub const ALL: [SuggestionMode; 4] = [
+        SuggestionMode::FixedAdd,
+        SuggestionMode::BuyOnlyToTarget,
+        SuggestionMode::FullRebalance,
+        SuggestionMode::FixedSell,
+    ];
+}
+
+/// The largest relative weight of a product. Weights are relative, so a huge one is a typing
+/// mistake (and could overflow a calculation).
+pub const MAX_PRODUCT_WEIGHT: Decimal = Decimal::from_parts(1_000_000_000, 0, 0, false, 0);
+
+/// How a product's target inside its category is held, for one suggestion mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ProductShare {
+    /// The same share as the other products with this setting (the default, and what a product
+    /// without a setting gets).
     #[default]
-    Free,
-    /// Every product in the category gets the same share.
     Equal,
-    /// Products keep their current proportions.
+    /// An explicit relative weight, positive; relative to the other products of the category.
+    Weighted { weight: Decimal },
+    /// The product keeps its current value as its proportion.
     KeepCurrent,
-    /// Products have explicit relative weights (`Holding::weight`, added up over the accounts).
-    Weighted,
+}
+
+/// The setting of one product for one suggestion mode. A product without an entry is `Equal`, and
+/// an `Equal` setting is never stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductShareEntry {
+    pub mode: SuggestionMode,
+    pub product: ProductId,
+    pub share: ProductShare,
 }
 
 /// A main category above the categories. It has no target of its own: its target and its current
@@ -94,8 +130,6 @@ pub struct Category {
     pub group: Option<GroupId>,
     /// Share of the whole portfolio as a fraction of 1.
     pub target_weight: Decimal,
-    #[serde(default)]
-    pub targeting: ProductTargeting,
 }
 
 /// A name a data source uses for a product, linked by the user.
@@ -254,10 +288,6 @@ pub struct Holding {
     /// How many units the price is quoted for: 1, or 10,000 for a fund's price per 10,000 units.
     #[serde(default = "one")]
     pub price_unit: u64,
-    /// Relative weight of this record inside its category, used when the category is
-    /// `Weighted`. A record can have a weight and no value yet (a product to start buying).
-    #[serde(default)]
-    pub weight: Option<Decimal>,
     /// The custody type of the record (a built-in id such as `nisa`, or a custom type's id); `None`:
     /// not set. The record is identified by the account, the product, and this type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -525,6 +555,10 @@ pub struct Portfolio {
     pub recipes: Vec<Recipe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom_types: Vec<CustomType>,
+    /// How each product is targeted inside its category, per suggestion mode. Global (not per
+    /// account). Only non-`Equal` settings are stored, sorted by mode then product.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub product_shares: Vec<ProductShareEntry>,
 }
 
 impl Default for Portfolio {
@@ -542,6 +576,7 @@ impl Default for Portfolio {
             revision: 0,
             recipes: Vec::new(),
             custom_types: Vec::new(),
+            product_shares: Vec::new(),
         }
     }
 }
@@ -569,25 +604,13 @@ impl Portfolio {
             .unwrap_or(true)
     }
 
-    /// The relative weight of a product over the whole portfolio: the weights of its records
-    /// added up. `None` when no record of it has a weight.
-    pub fn product_weight(&self, product: ProductId) -> Option<Decimal> {
-        self.holdings
+    /// How a product is targeted inside its category when the given mode runs: its stored
+    /// setting, or an equal share.
+    pub fn product_share(&self, mode: SuggestionMode, product: ProductId) -> ProductShare {
+        self.product_shares
             .iter()
-            .filter(|h| h.product == product)
-            .filter_map(|h| h.weight)
-            // Stored weights are only checked to be positive, so the sum saturates rather than
-            // overflowing (the calculations refuse a weight above their own limit).
-            .reduce(|sum, w| sum.checked_add(w).unwrap_or(Decimal::MAX))
-    }
-
-    /// The relative weight of the record of a product in one account (the weights of its records
-    /// of the several types added up).
-    pub fn record_weight(&self, account: AccountId, product: ProductId) -> Option<Decimal> {
-        self.holdings
-            .iter()
-            .filter(|h| h.account == account && h.product == product)
-            .filter_map(|h| h.weight)
-            .reduce(|sum, w| sum.checked_add(w).unwrap_or(Decimal::MAX))
+            .find(|e| e.mode == mode && e.product == product)
+            .map(|e| e.share)
+            .unwrap_or_default()
     }
 }

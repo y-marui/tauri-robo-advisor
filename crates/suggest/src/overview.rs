@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use serde::Serialize;
 
 use crate::Error;
-use crate::engine::{MAX_AMOUNT, MAX_WEIGHT, to_jpy};
+use crate::engine::{MAX_AMOUNT, to_jpy};
 
 /// Shares are shown to four decimal places of a fraction (0.01 percentage points).
 const SHARE_PLACES: u32 = 4;
@@ -98,13 +98,6 @@ pub fn overview(portfolio: &Portfolio) -> Result<Overview, Error> {
     portfolio
         .validate_integrity()
         .map_err(|_| Error::Inconsistent)?;
-    if portfolio
-        .holdings
-        .iter()
-        .any(|h| h.weight.is_some_and(|w| w > MAX_WEIGHT))
-    {
-        return Err(Error::TooLarge);
-    }
 
     let mut values: BTreeMap<CategoryId, Decimal> = BTreeMap::new();
     let mut rows: Vec<(AccountId, ProductId, Option<String>, Decimal)> = Vec::new();

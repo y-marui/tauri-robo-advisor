@@ -1,6 +1,6 @@
 // Every name and amount in these tests is made up.
 
-use portfolio::{Edit, Portfolio, ProductTargeting};
+use portfolio::{Edit, Portfolio, ProductShare, SuggestionMode};
 use rust_decimal::{Decimal, dec};
 
 use crate::*;
@@ -141,6 +141,7 @@ fn every_expected_file_is_produced() {
             "categories.csv",
             "products.csv",
             "aliases.csv",
+            "product_targets.csv",
             "accounts.csv",
             "settings.csv",
             "portfolio.json",
@@ -171,21 +172,21 @@ fn holdings_have_one_row_per_holding_with_jpy_values_and_shares() {
 
     assert_eq!(
         rows[0],
-        "account_id,account,account_type,product_id,product,category_id,category,group_id,group,currency,value,quantity,price,price_unit,relative_weight,value_jpy,share_of_total"
+        "account_id,account,account_type,product_id,product,category_id,category,group_id,group,currency,value,quantity,price,price_unit,value_jpy,share_of_total"
     );
     assert_eq!(rows.len(), 4);
     // Total = 500,000 + 150,000 (1,000 USD at 150) + 100,000 = 750,000.
     assert_eq!(
         rows[1],
-        "6,Main,specific,3,Stock Fund,1,Stocks,,,JPY,500000,,,1,,500000,0.666667"
+        "6,Main,specific,3,Stock Fund,1,Stocks,,,JPY,500000,,,1,500000,0.666667"
     );
     assert_eq!(
         rows[2],
-        "6,Main,,4,US Fund,1,Stocks,,,USD,1000,,,1,,150000,0.2"
+        "6,Main,,4,US Fund,1,Stocks,,,USD,1000,,,1,150000,0.2"
     );
     assert_eq!(
         rows[3],
-        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,,,JPY,100000,,,1,,100000,0.133333"
+        "7,Tax-free,nisa,5,Bond Fund,2,Bonds,,,JPY,100000,,,1,100000,0.133333"
     );
 }
 
@@ -196,9 +197,9 @@ fn categories_products_and_accounts_carry_their_totals() {
     assert_eq!(
         lines(&f["categories.csv"]),
         [
-            "category_id,category,group_id,group,target_weight,product_targeting,value_jpy,current_share",
-            "1,Stocks,,,0.75,free,650000,0.866667",
-            "2,Bonds,,,0.25,free,100000,0.133333",
+            "category_id,category,group_id,group,target_weight,value_jpy,current_share",
+            "1,Stocks,,,0.75,650000,0.866667",
+            "2,Bonds,,,0.25,100000,0.133333",
         ]
     );
     assert_eq!(
@@ -245,37 +246,36 @@ fn aliases_and_settings_are_exported() {
 }
 
 #[test]
-fn a_weighted_category_exports_its_targeting_and_product_weights() {
+fn product_targets_are_exported_per_mode() {
     let mut p = sample();
-    let stocks = p.categories[0].id;
     let s1 = p.products[0].id;
-    let acc = p.accounts[0].id;
+    let s2 = p.products[1].id;
     apply(
         &mut p,
-        Edit::UpdateCategory {
-            id: stocks,
-            name: None,
-            target_weight: None,
-            targeting: Some(ProductTargeting::Weighted),
+        Edit::SetProductShare {
+            mode: SuggestionMode::FixedAdd,
+            product: s1,
+            share: ProductShare::Weighted { weight: dec!(2.50) },
         },
     );
     apply(
         &mut p,
-        Edit::SetHoldingWeight {
-            account_type: None,
-            account: acc,
-            product: s1,
-            weight: Some(dec!(2.50)),
+        Edit::SetProductShare {
+            mode: SuggestionMode::FixedSell,
+            product: s2,
+            share: ProductShare::KeepCurrent,
         },
     );
     let f = files(&p);
 
-    assert!(lines(&f["categories.csv"])[1].contains(",weighted,"));
-    assert!(
-        lines(&f["holdings.csv"])
-            .iter()
-            .any(|l| l.contains(",2.5,"))
+    let rows = lines(&f["product_targets.csv"]);
+    assert_eq!(
+        rows[0],
+        "mode,product_id,product,category_id,category,targeting,relative_weight"
     );
+    assert_eq!(rows.len(), 3);
+    assert!(rows[1].starts_with("fixed_add,") && rows[1].ends_with(",weighted,2.5"));
+    assert!(rows[2].starts_with("fixed_sell,") && rows[2].ends_with(",keep_current,"));
 }
 
 #[test]
@@ -357,7 +357,7 @@ fn a_name_with_a_comma_or_quote_stays_in_one_cell() {
 
     assert_eq!(
         lines(&f["categories.csv"])[1],
-        "1,\"Stocks, \"\"core\"\"\",,,1,free,0,"
+        "1,\"Stocks, \"\"core\"\"\",,,1,0,"
     );
 }
 
@@ -394,9 +394,9 @@ fn values_that_cannot_be_converted_are_left_empty_not_guessed() {
     assert!(
         holdings
             .iter()
-            .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,,"))
+            .any(|l| l.contains("EU Fund") && l.ends_with(",10,2,,1,,"))
     );
-    assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,free,,");
+    assert_eq!(lines(&f["categories.csv"])[1], "1,Stocks,,,0.75,,");
     assert_eq!(lines(&f["accounts.csv"])[1], "6,Main,true,1,,portfolio,,");
     // Shares need the total, which is also unknown.
     assert!(holdings[1].ends_with(",500000,"));
@@ -409,7 +409,7 @@ fn a_missing_usd_rate_leaves_usd_values_empty() {
 
     let f = files(&p);
 
-    assert!(lines(&f["holdings.csv"])[2].ends_with(",USD,1000,,,1,,,"));
+    assert!(lines(&f["holdings.csv"])[2].ends_with(",USD,1000,,,1,,"));
     assert_eq!(lines(&f["settings.csv"])[2], "usd_jpy,");
 }
 
@@ -531,11 +531,11 @@ fn groups_are_exported_with_the_sum_of_their_targets_and_ungrouped_categories_st
     );
     assert_eq!(
         lines(&f["categories.csv"])[1],
-        "1,Stocks,8,\"Risk, assets\",0.75,free,650000,0.866667"
+        "1,Stocks,8,\"Risk, assets\",0.75,650000,0.866667"
     );
     assert_eq!(
         lines(&f["categories.csv"])[2],
-        "2,Bonds,,,0.25,free,100000,0.133333"
+        "2,Bonds,,,0.25,100000,0.133333"
     );
     assert!(lines(&f["holdings.csv"])[1].contains(",1,Stocks,8,\"Risk, assets\",JPY,"));
 }

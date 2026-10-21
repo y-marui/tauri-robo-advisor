@@ -1,7 +1,6 @@
 import { t } from "../i18n.ts";
-import type { CustomType, ProductTargeting } from "../types.ts";
+import type { CustomType, ProductShare } from "../types.ts";
 
-export const TARGETINGS: ProductTargeting[] = ["free", "equal", "keep_current", "weighted"];
 /** The account types that ship with the app, in the order they are offered. */
 export const BUILTIN_TYPES = [
   "general",
@@ -14,10 +13,8 @@ export const BUILTIN_TYPES = [
   "crypto",
 ] as const;
 
-export function targetingLabel(value: ProductTargeting): string {
-  switch (value) {
-    case "free":
-      return t("Free");
+export function shareLabel(kind: ProductShare["kind"]): string {
+  switch (kind) {
     case "equal":
       return t("Equal");
     case "keep_current":

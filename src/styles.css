@@ -954,3 +954,7 @@ details.product-tools summary {
   gap: 12px;
   margin: 4px 0;
 }
+
+.share-cell .number {
+  width: 5rem;
+}

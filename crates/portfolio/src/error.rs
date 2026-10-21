@@ -28,10 +28,6 @@ pub enum Error {
 pub enum Issue {
     /// The category target weights do not add up to 1.
     CategoryWeightsDoNotSumToOne { sum: Decimal },
-    /// A category with weighted products has a product without a weight.
-    WeightedProductMissingWeight { category: crate::CategoryId },
-    /// A category set to equal, weighted, or keep-current has no products.
-    CategoryHasNoProducts { category: crate::CategoryId },
     /// A foreign-currency holding exists but the exchange rate is not set.
     MissingExchangeRate { currency: String },
 }

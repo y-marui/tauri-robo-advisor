@@ -1,7 +1,19 @@
 // Mirrors the JSON of the Rust `portfolio` crate. Amounts and weights are
 // decimal strings: they are never converted to numbers, so nothing is rounded.
 
-export type ProductTargeting = "free" | "equal" | "keep_current" | "weighted";
+/** The suggestion modes; each keeps its own product targeting (`Portfolio.product_shares`). */
+export type SuggestionMode = "fixed_add" | "buy_only_to_target" | "full_rebalance" | "fixed_sell";
+/** How a product's target inside its category is held. Mirrors `portfolio::ProductShare`. */
+export type ProductShare =
+  | { kind: "equal" }
+  | { kind: "weighted"; weight: string }
+  | { kind: "keep_current" };
+/** An explicit setting of a product for a mode; a product without one has an equal share. */
+export interface ProductShareEntry {
+  mode: SuggestionMode;
+  product: number;
+  share: ProductShare;
+}
 /** A built-in account type id, or the id of a custom type (`custom-<n>`). */
 export type AccountTypeId = string;
 
@@ -24,7 +36,6 @@ export interface Category {
   /** The group the category belongs to; absent when it is ungrouped. */
   group?: number | null;
   target_weight: string;
-  targeting: ProductTargeting;
 }
 
 export interface Product {
@@ -59,8 +70,6 @@ export interface Holding {
   /** The price the value was worked out from, per `price_unit` units; null when not known. */
   price: string | null;
   price_unit: number;
-  /** Relative weight of this record inside its category; null when none is set. */
-  weight: string | null;
   /** The type of the record; absent when not set. A record is (account, product, type). */
   account_type?: AccountTypeId | null;
 }
@@ -192,12 +201,12 @@ export interface Portfolio {
   recipes: Recipe[];
   /** Absent when there is none. */
   custom_types?: CustomType[];
+  /** Absent when every product has an equal share in every mode. */
+  product_shares?: ProductShareEntry[];
 }
 
 export type Issue =
   | { type: "category_weights_do_not_sum_to_one"; sum: string }
-  | { type: "weighted_product_missing_weight"; category: number }
-  | { type: "category_has_no_products"; category: number }
   | { type: "missing_exchange_rate"; currency: string };
 
 /** Where the data lives and what the folder shows. */
@@ -239,7 +248,6 @@ export type Edit =
       id: number;
       name?: string;
       target_weight?: string;
-      targeting?: ProductTargeting;
     }
   | { type: "remove_category"; id: number }
   | { type: "add_product"; name: string; category: number; currency: string }
@@ -250,13 +258,7 @@ export type Edit =
       category?: number;
       currency?: string;
     }
-  | {
-      type: "set_holding_weight";
-      account: number;
-      product: number;
-      account_type?: AccountTypeId | null;
-      weight: string | null;
-    }
+  | { type: "set_product_share"; mode: SuggestionMode; product: number; share: ProductShare }
   | { type: "add_account_type"; name: string; sellable: boolean }
   | { type: "update_account_type"; id: string; name?: string; sellable?: boolean }
   | { type: "remove_account_type"; id: string }

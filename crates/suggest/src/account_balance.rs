@@ -1,11 +1,14 @@
 use std::collections::BTreeMap;
 
-use portfolio::{AccountId, CategoryId, Portfolio, ProductId, ProductTargeting};
+use portfolio::{AccountId, CategoryId, Portfolio, ProductId, ProductShare, SuggestionMode};
 use rust_decimal::Decimal;
 use serde::Serialize;
 
 use crate::Error;
-use crate::engine::{MAX_AMOUNT, MAX_WEIGHT, to_jpy};
+use crate::engine::{MAX_AMOUNT, to_jpy};
+
+/// The product settings the balance table follows: the fixed-add mode's.
+const BALANCE_MODE: SuggestionMode = SuggestionMode::FixedAdd;
 use crate::round::round_to_units;
 use crate::strategy::{StrategyBalance, balance};
 
@@ -68,13 +71,6 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
             strategy: Some(balance(portfolio, account)?),
         });
     }
-    if portfolio
-        .holdings
-        .iter()
-        .any(|h| h.weight.is_some_and(|w| w > MAX_WEIGHT))
-    {
-        return Err(Error::TooLarge);
-    }
 
     let mut held: BTreeMap<ProductId, Decimal> = BTreeMap::new();
     for holding in portfolio
@@ -112,42 +108,49 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .sum();
             let weights: Vec<Option<Decimal>> = members
                 .iter()
-                .map(|p| match category.targeting {
-                    // Suggestions treat a free category as an equal split, so the table does too.
-                    ProductTargeting::Equal | ProductTargeting::Free => Some(Decimal::ONE),
-                    ProductTargeting::Weighted => Some(
-                        portfolio
-                            .record_weight(account.id, p.id)
-                            .unwrap_or_default(),
-                    ),
+                .map(|p| match portfolio.product_share(BALANCE_MODE, p.id) {
+                    ProductShare::Equal => Some(Decimal::ONE),
+                    ProductShare::Weighted { weight } => Some(weight),
                     // Keep-current is handled below: the target is the current value itself.
-                    ProductTargeting::KeepCurrent => None,
+                    ProductShare::KeepCurrent => None,
                 })
                 .collect();
+            // Keep-current products target what is there, to the sen (no rounding that could
+            // invent a gap); the rest of the category's total is split over the others by weight.
+            let current_of = |p: &portfolio::Product| held.get(&p.id).copied().unwrap_or_default();
+            let kept: Decimal = members
+                .iter()
+                .zip(&weights)
+                .filter(|(_, w)| w.is_none())
+                .map(|(p, _)| current_of(p))
+                .sum();
+            let rest = total - kept;
             let weight_sum: Decimal = weights.iter().flatten().copied().sum();
-            // Whole yen that add up to the category's total, so the shortfalls
-            // never suggest money is missing or left over.
-            let targets: Vec<Option<Decimal>> =
-                if category.targeting == ProductTargeting::KeepCurrent {
-                    // The target is what is there, to the sen: no rounding that could invent a gap.
-                    members
-                        .iter()
-                        .map(|p| Some(held.get(&p.id).copied().unwrap_or_default()))
-                        .collect()
-                } else if weight_sum > Decimal::ZERO && weights.iter().all(Option::is_some) {
-                    let exact: Vec<Decimal> = weights
-                        .iter()
-                        .flatten()
-                        .map(|w| total * *w / weight_sum)
-                        .collect();
-                    let caps = vec![None; exact.len()];
-                    match round_to_units(&exact, Decimal::ONE, total.round_dp(0), &caps) {
-                        Some(whole) => whole.into_iter().map(Some).collect(),
-                        None => vec![None; exact.len()],
-                    }
-                } else {
-                    vec![None; members.len()]
-                };
+            let others = weights.iter().flatten().count();
+            // Whole yen that add up to the rest, so the shortfalls never suggest money is missing
+            // or left over.
+            let split: Option<Vec<Decimal>> = if others == 0 {
+                Some(Vec::new())
+            } else if weight_sum > Decimal::ZERO {
+                let exact: Vec<Decimal> = weights
+                    .iter()
+                    .flatten()
+                    .map(|w| rest * *w / weight_sum)
+                    .collect();
+                let caps = vec![None; exact.len()];
+                round_to_units(&exact, Decimal::ONE, rest.round_dp(0), &caps)
+            } else {
+                None
+            };
+            let mut split = split.map(Vec::into_iter);
+            let targets: Vec<Option<Decimal>> = members
+                .iter()
+                .zip(&weights)
+                .map(|(p, w)| match w {
+                    None => Some(current_of(p)),
+                    Some(_) => split.as_mut().and_then(Iterator::next),
+                })
+                .collect();
             let products = members
                 .iter()
                 .zip(&targets)
