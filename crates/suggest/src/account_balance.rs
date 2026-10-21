@@ -120,17 +120,21 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                             .record_weight(account.id, p.id)
                             .unwrap_or_default(),
                     ),
-                    // Keep-current asks for the split it already has: the weights are the values.
-                    ProductTargeting::KeepCurrent => {
-                        Some(held.get(&p.id).copied().unwrap_or_default())
-                    }
+                    // Keep-current is handled below: the target is the current value itself.
+                    ProductTargeting::KeepCurrent => None,
                 })
                 .collect();
             let weight_sum: Decimal = weights.iter().flatten().copied().sum();
             // Whole yen that add up to the category's total, so the shortfalls
             // never suggest money is missing or left over.
             let targets: Vec<Option<Decimal>> =
-                if weight_sum > Decimal::ZERO && weights.iter().all(Option::is_some) {
+                if category.targeting == ProductTargeting::KeepCurrent {
+                    // The target is what is there, to the sen: no rounding that could invent a gap.
+                    members
+                        .iter()
+                        .map(|p| Some(held.get(&p.id).copied().unwrap_or_default()))
+                        .collect()
+                } else if weight_sum > Decimal::ZERO && weights.iter().all(Option::is_some) {
                     let exact: Vec<Decimal> = weights
                         .iter()
                         .flatten()

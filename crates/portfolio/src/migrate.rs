@@ -118,11 +118,12 @@ fn tradable_into_excluded(value: &mut Value) {
         let Some(tradable) = tradable.as_ref().and_then(Value::as_array) else {
             continue;
         };
-        let mut excluded: Vec<Value> = object
-            .get("excluded")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let mut excluded: Vec<Value> = match object.get("excluded") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(list)) => list.clone(),
+            // Malformed: leave it as it is so the file is rejected instead of changing what trades.
+            Some(_) => continue,
+        };
         for product in &products {
             if !tradable.contains(product) && !excluded.contains(product) {
                 excluded.push(product.clone());

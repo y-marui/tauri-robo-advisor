@@ -1263,6 +1263,32 @@ fn account_balance_leaves_out_products_the_account_does_not_hold() {
 }
 
 #[test]
+fn keep_current_targets_are_the_exact_holdings_even_with_fractional_yen() {
+    let mut p = Portfolio::default();
+    let c = category(&mut p, "All", dec!(1));
+    let a = product(&mut p, "A", c, "JPY");
+    let b = product(&mut p, "B", c, "JPY");
+    let acc = account(&mut p, "Main");
+    hold(&mut p, acc, a, dec!(0.5));
+    hold(&mut p, acc, b, dec!(0.5));
+    apply(
+        &mut p,
+        Edit::UpdateCategory {
+            id: c,
+            name: None,
+            target_weight: None,
+            targeting: Some(ProductTargeting::KeepCurrent),
+        },
+    );
+
+    let balance = account_balance(&p, acc).unwrap();
+
+    for line in &balance.categories[0].products {
+        assert_eq!(line.shortfall, Some(dec!(0)));
+    }
+}
+
+#[test]
 fn account_balance_rejects_an_unknown_account() {
     let (p, _, _, _, _) = weighted_pair();
 

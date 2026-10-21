@@ -194,7 +194,7 @@ export function rebalancePanel(ctx: Context): Panel {
           h(
             "tr",
             { class: "group" },
-            h("td", {}),
+            showAll ? h("td", {}) : "",
             h("th", { scope: "rowgroup" }, categoryName(view, group.category)),
             h("td", { class: "num" }, group.total === null ? "" : yen(group.total)),
             h("td", {}),

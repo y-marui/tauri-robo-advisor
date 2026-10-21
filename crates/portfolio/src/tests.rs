@@ -3762,3 +3762,13 @@ fn the_buyable_products_of_an_older_file_join_the_exclusion_list() {
     let json = serde_json::to_value(&p).unwrap();
     assert!(json["accounts"][0].get("tradable").is_none());
 }
+
+#[test]
+fn a_malformed_exclusion_list_is_not_rewritten_by_the_migration() {
+    let old = r#"{"schema_version": 18, "next_id": 20,
+      "products": [{"id": 1, "name": "A", "category": 5, "currency": "JPY"}],
+      "categories": [{"id": 5, "name": "X", "target_weight": "1"}],
+      "accounts": [{"id": 10, "name": "A", "sellable": true, "rounding_unit": "1", "tradable": [1], "excluded": "oops"}]}"#;
+
+    assert!(parse(old.as_bytes()).is_err());
+}
