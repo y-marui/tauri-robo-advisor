@@ -41,6 +41,7 @@ export function rebalancePanel(ctx: Context): Panel {
   const allBox = suggestionBox({
     modes: ["fixed_add", "buy_only_to_target", "full_rebalance", "fixed_sell"],
     account: () => current?.portfolio.settings.target_account ?? null,
+    heldOnly: true,
     noAccountMessage: () => t("Choose the rebalancing account first."),
   });
   const targetSelect = h("select", { "aria-label": t("Rebalancing account") });

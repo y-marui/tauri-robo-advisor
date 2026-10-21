@@ -145,7 +145,7 @@ interface SuggestionBoxOptions {
   modes: ModeType[];
   /** The account to calculate for, or `null` when none is chosen. */
   account: () => number | null;
-  /** Only buy what the account already holds (the by-account tabs). */
+  /** Only buy what the account already holds (every Rebalance tab). */
   heldOnly?: boolean;
   noAccountMessage: () => string;
 }

@@ -1414,6 +1414,37 @@ fn held_only_never_buys_a_product_the_account_does_not_hold() {
 }
 
 #[test]
+fn held_only_also_applies_to_the_rebalancing_account() {
+    let mut f = fixture();
+    // A second bond fund that nobody holds: bonds are under target, so it gets money.
+    let b2 = product(&mut f.portfolio, "Bond Fund 2", f.bonds, "JPY");
+    apply(
+        &mut f.portfolio,
+        Edit::SetTargetAccount {
+            account: Some(f.main),
+        },
+    );
+    let request = |mode, held_only| Request {
+        account: f.main,
+        mode,
+        held_only,
+    };
+    for mode in [
+        Mode::FixedAdd {
+            amount: dec!(300000),
+        },
+        Mode::BuyOnlyToTarget,
+        Mode::FullRebalance,
+    ] {
+        let any = suggest(&f.portfolio, &request(mode.clone(), false)).unwrap();
+        let held = suggest(&f.portfolio, &request(mode, true)).unwrap();
+        assert!(any.products.iter().any(|l| l.product == b2));
+        assert!(held.products.iter().all(|l| l.product != b2));
+        assert!(held.products.iter().any(|l| l.product == f.b1));
+    }
+}
+
+#[test]
 fn held_only_defaults_to_false_in_json() {
     let request: Request =
         serde_json::from_str(r#"{"account":5,"mode":{"type":"buy_only_to_target"}}"#).unwrap();

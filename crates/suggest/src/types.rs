@@ -20,8 +20,8 @@ pub enum Mode {
 pub struct Request {
     pub account: AccountId,
     pub mode: Mode,
-    /// Only buy products the account holds (value above zero in any record). The by-account
-    /// tabs set it; the overall suggestion does not.
+    /// Only buy products the account holds (value above zero in any record). Every
+    /// Rebalance tab sets it, including "All".
     #[serde(default)]
     pub held_only: bool,
 }
