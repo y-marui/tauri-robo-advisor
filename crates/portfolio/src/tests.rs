@@ -1658,7 +1658,7 @@ fn a_preset_recipe_stores_only_the_reference_and_the_account() {
     let back: Portfolio = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back, p);
     back.validate_integrity().unwrap();
-    assert_eq!(SCHEMA_VERSION, 24);
+    assert_eq!(SCHEMA_VERSION, 25);
 }
 
 #[test]
@@ -2144,41 +2144,66 @@ fn rows_move_to_a_given_position() {
     p.validate_integrity().unwrap();
 }
 
-fn share_edit(mode: SuggestionMode, product: ProductId, weight: rust_decimal::Decimal) -> Edit {
+fn share_edit(
+    mode: SuggestionMode,
+    account: AccountId,
+    product: ProductId,
+    weight: rust_decimal::Decimal,
+) -> Edit {
     Edit::SetProductShare {
         mode,
+        tab: None,
+        account,
         product,
-        account: None,
+        account_type: None,
         weight,
     }
 }
 
 fn share_edit_for(
     mode: SuggestionMode,
+    tab: AccountId,
     product: ProductId,
-    account: AccountId,
     weight: rust_decimal::Decimal,
 ) -> Edit {
     Edit::SetProductShare {
         mode,
+        tab: Some(tab),
+        account: tab,
         product,
-        account: Some(account),
+        account_type: None,
         weight,
     }
 }
 
+fn typed_holding(p: &mut Portfolio, account: AccountId, product: ProductId, ty: &str) {
+    apply(
+        p,
+        Edit::SetHolding {
+            account_type: Some(ty.to_owned()),
+            account,
+            product,
+            value: dec!(500),
+            quantity: None,
+        },
+    );
+}
+
 #[test]
-fn a_product_has_its_own_weight_for_each_mode() {
-    let (mut p, _, prod, _) = sample();
+fn a_record_has_its_own_weight_for_each_mode() {
+    let (mut p, _, prod, acc) = sample();
 
     // Nothing set: the weight 1 in every mode.
     for mode in SuggestionMode::ALL {
         assert_eq!(p.product_weight(mode, prod, None), dec!(1));
     }
-    apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, dec!(3)));
     apply(
         &mut p,
-        share_edit(SuggestionMode::FixedSell, prod, dec!(0.5)),
+        share_edit(SuggestionMode::FixedAdd, acc, prod, dec!(3)),
+    );
+    apply(
+        &mut p,
+        share_edit(SuggestionMode::FixedSell, acc, prod, dec!(0.5)),
     );
 
     assert_eq!(
@@ -2196,52 +2221,114 @@ fn a_product_has_its_own_weight_for_each_mode() {
     p.validate_integrity().unwrap();
 
     // Setting a mode again replaces it; the default weight is not stored.
-    apply(&mut p, share_edit(SuggestionMode::FixedAdd, prod, dec!(1)));
+    apply(
+        &mut p,
+        share_edit(SuggestionMode::FixedAdd, acc, prod, dec!(1)),
+    );
     assert_eq!(p.product_shares.len(), 1);
     p.validate_integrity().unwrap();
 }
 
 #[test]
-fn a_product_weight_must_be_positive_and_not_huge() {
-    let (mut p, _, prod, _) = sample();
-    let before = p.clone();
+fn the_weight_of_a_product_is_the_sum_of_its_records() {
+    let (mut p, _, prod, acc) = sample();
+    let acc2 = account(&mut p, "Account 2");
+    hold(&mut p, acc2, prod, dec!(10));
+    typed_holding(&mut p, acc, prod, "nisa");
+    let mode = SuggestionMode::FixedAdd;
+
+    // Three records of the default weight 1.
+    assert_eq!(p.product_weight(mode, prod, None), dec!(3));
+    assert_eq!(p.product_weight(mode, prod, Some(acc)), dec!(2));
+    assert_eq!(p.product_weight(mode, prod, Some(acc2)), dec!(1));
+
+    let nisa = Edit::SetProductShare {
+        mode,
+        tab: None,
+        account: acc,
+        product: prod,
+        account_type: Some("nisa".to_owned()),
+        weight: dec!(4),
+    };
+    apply(&mut p, nisa);
+    assert_eq!(p.product_weight(mode, prod, None), dec!(6));
+    // The tabs are independent: the account's tab has not been told.
+    assert_eq!(p.product_weight(mode, prod, Some(acc)), dec!(2));
+    assert_eq!(
+        p.account_product_weight(mode, prod, None, acc),
+        Some(dec!(5))
+    );
+    assert_eq!(
+        p.account_product_weight(mode, prod, None, AccountId(9999)),
+        None
+    );
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn a_record_weight_must_be_positive_not_huge_and_for_a_record_that_exists() {
+    let (mut p, _, prod, acc) = sample();
     for weight in [dec!(0), dec!(-1), MAX_PRODUCT_WEIGHT + dec!(1)] {
         assert!(
-            p.apply(share_edit(SuggestionMode::FixedAdd, prod, weight))
+            p.apply(share_edit(SuggestionMode::FixedAdd, acc, prod, weight))
                 .is_err()
         );
     }
     assert!(
         p.apply(share_edit(
             SuggestionMode::FixedAdd,
+            acc,
             ProductId(9999),
             dec!(2)
         ))
         .is_err()
     );
+    // A typed record the account does not hold.
+    let missing = Edit::SetProductShare {
+        mode: SuggestionMode::FixedAdd,
+        tab: None,
+        account: acc,
+        product: prod,
+        account_type: Some("nisa".to_owned()),
+        weight: dec!(2),
+    };
+    assert!(matches!(p.apply(missing), Err(Error::NotFound(_))));
+    // A tab other than the record's account.
+    let acc2 = account(&mut p, "Account 2");
+    let before = Portfolio { ..p.clone() };
+    let wrong_tab = Edit::SetProductShare {
+        mode: SuggestionMode::FixedAdd,
+        tab: Some(acc2),
+        account: acc,
+        product: prod,
+        account_type: None,
+        weight: dec!(2),
+    };
+    assert!(p.apply(wrong_tab).is_err());
     assert_eq!(p, before);
     apply(
         &mut p,
-        share_edit(SuggestionMode::FixedAdd, prod, MAX_PRODUCT_WEIGHT),
+        share_edit(SuggestionMode::FixedAdd, acc, prod, MAX_PRODUCT_WEIGHT),
     );
 }
 
 #[test]
-fn removing_or_merging_a_product_drops_its_settings() {
-    let (mut p, c, prod, _) = sample();
+fn removing_a_record_or_product_drops_its_weights() {
+    let (mut p, c, prod, acc) = sample();
     let other = product(&mut p, "Fund Y", c);
+    hold(&mut p, acc, other, dec!(10));
     for id in [prod, other] {
         apply(
             &mut p,
-            share_edit(SuggestionMode::FullRebalance, id, dec!(2)),
+            share_edit(SuggestionMode::FullRebalance, acc, id, dec!(2)),
         );
     }
     apply(
         &mut p,
-        Edit::MergeProducts {
-            keep: prod,
-            remove: other,
-            on_conflict: MergeConflict::Keep,
+        Edit::RemoveHolding {
+            account: acc,
+            product: other,
+            account_type: None,
         },
     );
     assert_eq!(p.product_shares.len(), 1);
@@ -2253,12 +2340,94 @@ fn removing_or_merging_a_product_drops_its_settings() {
 }
 
 #[test]
-fn a_file_with_a_bad_product_setting_is_refused() {
-    let (mut p, _, prod, _) = sample();
+fn merging_keeps_the_weights_of_the_kept_records_and_moves_the_others() {
+    let (mut p, c, prod, acc) = sample();
+    let acc2 = account(&mut p, "Account 2");
+    let other = product(&mut p, "Fund Y", c);
+    hold(&mut p, acc, other, dec!(10));
+    hold(&mut p, acc2, other, dec!(10));
+    let mode = SuggestionMode::FullRebalance;
+    apply(&mut p, share_edit(mode, acc, prod, dec!(2)));
+    apply(&mut p, share_edit(mode, acc, other, dec!(5)));
+    apply(&mut p, share_edit(mode, acc2, other, dec!(7)));
+    apply(
+        &mut p,
+        Edit::MergeProducts {
+            keep: prod,
+            remove: other,
+            on_conflict: MergeConflict::Keep,
+        },
+    );
+    // Account 1 is a clash (the kept weight stays); account 2 only the merged product held.
+    assert_eq!(
+        p.account_product_weight(mode, prod, None, acc),
+        Some(dec!(2))
+    );
+    assert_eq!(
+        p.account_product_weight(mode, prod, None, acc2),
+        Some(dec!(7))
+    );
+    assert_eq!(p.product_shares.len(), 2);
+    p.validate_integrity().unwrap();
+}
+
+#[test]
+fn changing_a_record_type_moves_its_weights_and_an_import_keeps_those_of_remaining_records() {
+    let (mut p, _, prod, acc) = sample();
+    let mode = SuggestionMode::FixedAdd;
+    apply(&mut p, share_edit(mode, acc, prod, dec!(3)));
+    apply(
+        &mut p,
+        Edit::SetRecordType {
+            account: acc,
+            product: prod,
+            from: None,
+            to: Some("nisa".to_owned()),
+        },
+    );
+    assert_eq!(p.product_shares.len(), 1);
+    assert_eq!(p.product_shares[0].account_type.as_deref(), Some("nisa"));
+    assert_eq!(p.product_weight(mode, prod, None), dec!(3));
+    p.validate_integrity().unwrap();
+
+    // A replacing import that still lists the record keeps its weight.
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: vec![HoldingInput {
+                product: prod,
+                value: dec!(1),
+                quantity: None,
+                price: None,
+                price_unit: 1,
+                account_type: Some("nisa".to_owned()),
+            }],
+            types: None,
+        },
+    );
+    assert_eq!(p.product_weight(mode, prod, None), dec!(3));
+    // One that no longer lists it drops the weight.
+    apply(
+        &mut p,
+        Edit::ReplaceHoldings {
+            account: acc,
+            holdings: Vec::new(),
+            types: None,
+        },
+    );
+    assert!(p.product_shares.is_empty());
+}
+
+#[test]
+fn a_file_with_a_bad_record_weight_is_refused() {
+    let (mut p, _, prod, acc) = sample();
     let entry = |weight| ProductShareEntry {
         mode: SuggestionMode::FixedAdd,
+        tab: None,
+        account: acc,
         product: prod,
-        account: None,
+        account_type: None,
         weight,
     };
     for entries in [
@@ -2267,6 +2436,10 @@ fn a_file_with_a_bad_product_setting_is_refused() {
         vec![entry(dec!(2)), entry(dec!(3))],
         vec![ProductShareEntry {
             product: ProductId(9999),
+            ..entry(dec!(2))
+        }],
+        vec![ProductShareEntry {
+            account_type: Some("nisa".to_owned()),
             ..entry(dec!(2))
         }],
     ] {
@@ -2324,7 +2497,7 @@ fn the_targeting_of_an_older_file_becomes_a_weight_per_mode() {
         }
     }
     // Each entry is also copied for the two accounts (version 24).
-    assert_eq!(p.product_shares.len(), 4 * 3);
+    assert_eq!(p.product_shares.len(), 4 * 2 + 4 + 4);
     for account in [10, 11] {
         for mode in SuggestionMode::ALL {
             assert_eq!(
@@ -2351,6 +2524,11 @@ fn the_product_shapes_of_version_20_and_21_become_weights() {
             {{"id": 2, "name": "B", "category": 5, "currency": "JPY"}},
             {{"id": 3, "name": "C", "category": 5, "currency": "JPY"}}],
           "categories": [{{"id": 5, "name": "W", "target_weight": "1"}}],
+          "accounts": [{{"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"}}],
+          "holdings": [
+            {{"account": 10, "product": 1, "value": "100"}},
+            {{"account": 10, "product": 2, "value": "100"}},
+            {{"account": 10, "product": 3, "value": "100"}}],
           "product_shares": [
             {{"mode": "fixed_add", "product": 1, "share": {{"kind": "weighted", "weight": "2.5"}}}},
             {{"mode": "fixed_add", "product": 2, "share": {{"kind": "keep_current"}}}},
@@ -2383,7 +2561,8 @@ fn the_product_shapes_of_version_20_and_21_become_weights() {
             p.product_weight(SuggestionMode::FullRebalance, ProductId(3), None),
             dec!(4)
         );
-        assert_eq!(p.product_shares.len(), 2);
+        // Each is also copied for the account's tab (version 24).
+        assert_eq!(p.product_shares.len(), 4);
         let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
         assert_eq!(back, p);
     }
@@ -3372,11 +3551,11 @@ fn a_file_without_custom_kinds_gets_no_custom_types_and_a_current_file_is_untouc
 
 #[test]
 fn a_newer_file_is_refused() {
-    let newer = r#"{"schema_version": 25, "next_id": 1}"#;
+    let newer = r#"{"schema_version": 26, "next_id": 1}"#;
     let p = parse(newer.as_bytes()).unwrap();
     assert!(matches!(
         p.validate_integrity(),
-        Err(Error::UnsupportedVersion { found: 25 })
+        Err(Error::UnsupportedVersion { found: 26 })
     ));
 }
 
@@ -3987,25 +4166,26 @@ fn sales_take_from_non_nisa_types_first() {
 fn a_tab_has_its_own_weight_independent_of_all_and_other_tabs() {
     let (mut p, _, prod, acc1) = sample();
     let acc2 = account(&mut p, "Account 2");
+    hold(&mut p, acc2, prod, dec!(10));
     let mode = SuggestionMode::FixedAdd;
-    apply(&mut p, share_edit_for(mode, prod, acc1, dec!(3)));
+    apply(&mut p, share_edit_for(mode, acc1, prod, dec!(3)));
     assert_eq!(p.product_weight(mode, prod, Some(acc1)), dec!(3));
     assert_eq!(p.product_weight(mode, prod, Some(acc2)), dec!(1));
-    assert_eq!(p.product_weight(mode, prod, None), dec!(1));
-
-    apply(&mut p, share_edit(mode, prod, dec!(2)));
     assert_eq!(p.product_weight(mode, prod, None), dec!(2));
+
+    apply(&mut p, share_edit(mode, acc1, prod, dec!(2)));
+    assert_eq!(p.product_weight(mode, prod, None), dec!(3));
     assert_eq!(p.product_weight(mode, prod, Some(acc1)), dec!(3));
     assert_eq!(p.product_shares.len(), 2);
     p.validate_integrity().unwrap();
 
     // Back to the default clears only that tab's entry.
-    apply(&mut p, share_edit_for(mode, prod, acc1, dec!(1)));
+    apply(&mut p, share_edit_for(mode, acc1, prod, dec!(1)));
     assert_eq!(p.product_shares.len(), 1);
-    assert_eq!(p.product_shares[0].account, None);
+    assert_eq!(p.product_shares[0].tab, None);
 
     // The weights of a tab survive a save and a load.
-    apply(&mut p, share_edit_for(mode, prod, acc2, dec!(5)));
+    apply(&mut p, share_edit_for(mode, acc2, prod, dec!(5)));
     let back = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
     assert_eq!(back, p);
 }
@@ -4014,12 +4194,13 @@ fn a_tab_has_its_own_weight_independent_of_all_and_other_tabs() {
 fn a_weight_for_a_missing_account_is_refused_and_removing_an_account_drops_its_weights() {
     let (mut p, _, prod, acc1) = sample();
     let acc2 = account(&mut p, "Account 2");
+    hold(&mut p, acc2, prod, dec!(10));
     let before = p.clone();
     assert!(
         p.apply(share_edit_for(
             SuggestionMode::FixedAdd,
-            prod,
             AccountId(9999),
+            prod,
             dec!(2)
         ))
         .is_err()
@@ -4029,13 +4210,16 @@ fn a_weight_for_a_missing_account_is_refused_and_removing_an_account_drops_its_w
     for id in [acc1, acc2] {
         apply(
             &mut p,
-            share_edit_for(SuggestionMode::FixedSell, prod, id, dec!(2)),
+            share_edit_for(SuggestionMode::FixedSell, id, prod, dec!(2)),
+        );
+        apply(
+            &mut p,
+            share_edit(SuggestionMode::FixedSell, id, prod, dec!(4)),
         );
     }
-    apply(&mut p, share_edit(SuggestionMode::FixedSell, prod, dec!(4)));
     apply(&mut p, Edit::RemoveAccount { id: acc1 });
     assert_eq!(p.product_shares.len(), 2);
-    assert!(p.product_shares.iter().all(|e| e.account != Some(acc1)));
+    assert!(p.product_shares.iter().all(|e| e.account != acc1));
     p.validate_integrity().unwrap();
 
     // Removing a product drops its weights on every tab.
@@ -4046,10 +4230,12 @@ fn a_weight_for_a_missing_account_is_refused_and_removing_an_account_drops_its_w
 #[test]
 fn a_file_with_a_dangling_or_duplicated_tab_weight_is_refused() {
     let (mut p, _, prod, acc) = sample();
-    let entry = |account| ProductShareEntry {
+    let entry = |tab| ProductShareEntry {
         mode: SuggestionMode::FixedAdd,
+        tab,
+        account: acc,
         product: prod,
-        account,
+        account_type: None,
         weight: dec!(2),
     };
     for entries in [
@@ -4072,6 +4258,9 @@ fn the_weights_of_an_older_file_are_copied_for_each_account() {
       "accounts": [
         {"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"},
         {"id": 11, "name": "N", "sellable": true, "rounding_unit": "1"}],
+      "holdings": [
+        {"account": 10, "product": 1, "value": "100"},
+        {"account": 11, "product": 1, "value": "100"}],
       "product_shares": [{"mode": "fixed_add", "product": 1, "weight": "3"}]}"#;
     let mut p = parse(old.as_bytes()).unwrap();
     p.schema_version = SCHEMA_VERSION;
@@ -4084,9 +4273,56 @@ fn the_weights_of_an_older_file_are_copied_for_each_account() {
         p.product_weight(SuggestionMode::FixedSell, ProductId(1), Some(AccountId(10))),
         dec!(1)
     );
-    assert_eq!(p.product_shares.len(), 3);
+    // All: 1.5 for each of the two records (4 modes cleared, 1 mode set); each account's tab: 3.
+    assert_eq!(p.product_shares.len(), 2 + 1 + 1);
 
-    // A file of the current version is not copied again.
+    // A file of the current version is not converted again.
     let again = parse(serde_json::to_string(&p).unwrap().as_bytes()).unwrap();
-    assert_eq!(again.product_shares.len(), 3);
+    assert_eq!(again, p);
+}
+
+#[test]
+fn a_product_weight_is_split_over_the_records_by_value_when_the_file_is_converted() {
+    let old = r#"{"schema_version": 24, "next_id": 40,
+      "categories": [{"id": 5, "name": "W", "target_weight": "1"}],
+      "products": [
+        {"id": 1, "name": "A", "category": 5, "currency": "JPY"},
+        {"id": 2, "name": "B", "category": 5, "currency": "JPY"},
+        {"id": 3, "name": "C", "category": 5, "currency": "JPY"}],
+      "accounts": [
+        {"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"},
+        {"id": 11, "name": "N", "sellable": true, "rounding_unit": "1"}],
+      "holdings": [
+        {"account": 10, "product": 1, "value": "300"},
+        {"account": 11, "product": 1, "value": "100", "account_type": "nisa"},
+        {"account": 10, "product": 2, "value": "0"},
+        {"account": 11, "product": 2, "value": "0"}],
+      "product_shares": [
+        {"mode": "fixed_add", "product": 1, "weight": "4"},
+        {"mode": "fixed_add", "product": 2, "weight": "3"},
+        {"mode": "fixed_add", "product": 3, "weight": "5"}]}"#;
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+    p.validate_integrity().unwrap();
+    let mode = SuggestionMode::FixedAdd;
+
+    // In proportion to the values: 3 and 1 (the weight 1 is not stored).
+    assert_eq!(p.product_weight(mode, ProductId(1), None), dec!(4));
+    assert_eq!(
+        p.account_product_weight(mode, ProductId(1), None, AccountId(10)),
+        Some(dec!(3))
+    );
+    assert_eq!(
+        p.record_weight(mode, None, AccountId(11), ProductId(1), Some("nisa")),
+        dec!(1)
+    );
+    // Equally when the values are 0.
+    assert_eq!(p.product_weight(mode, ProductId(2), None), dec!(3));
+    assert_eq!(
+        p.account_product_weight(mode, ProductId(2), None, AccountId(10)),
+        Some(dec!(1.5))
+    );
+    // A product without a record keeps nothing.
+    assert!(p.product_shares.iter().all(|e| e.product != ProductId(3)));
+    assert_eq!(p.product_weight(mode, ProductId(3), None), dec!(1));
 }

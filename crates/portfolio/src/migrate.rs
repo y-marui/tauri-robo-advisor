@@ -45,6 +45,9 @@ fn to_current(value: &mut Value) -> Result<(), Error> {
     if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..24).contains(&v)) {
         copy_weights_for_accounts(value);
     }
+    if version.is_some_and(|v| (u64::from(MIN_SCHEMA_VERSION)..25).contains(&v)) {
+        weights_into_records(value);
+    }
     // Version 15 (the evaluation column of a mapping) needs no conversion: a mapping without it
     // reads the value as before and has nothing to check, and a preset recipe follows the shipped
     // preset. The version is raised by the caller; an older app refuses the new file.
@@ -332,4 +335,114 @@ fn shares_into_weights(value: &mut Value) {
     {
         object.remove("product_shares");
     }
+}
+
+/// Version 25: the weight of a product in a tab becomes weights of its records in the tab's
+/// scope (the tab's account, or all accounts), which add up to the old weight. The old weight is
+/// shared in proportion to the values of the records, equally when a value is 0 (a weight must be
+/// positive). A product without a record in the scope keeps nothing: it is not bought there. A
+/// share that cannot be read is left as it is, for the integrity check to refuse.
+fn weights_into_records(value: &mut Value) {
+    let records: Vec<(Value, Value, Value, Decimal)> = value
+        .get("holdings")
+        .and_then(Value::as_array)
+        .map(|holdings| {
+            holdings
+                .iter()
+                .filter_map(|h| {
+                    let amount = h.get("value")?.as_str()?.parse::<Decimal>().ok()?;
+                    Some((
+                        h.get("account")?.clone(),
+                        h.get("product")?.clone(),
+                        h.get("account_type").cloned().unwrap_or(Value::Null),
+                        amount,
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let Some(entries) = value
+        .get_mut("product_shares")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let old = std::mem::take(entries);
+    for entry in old {
+        let parsed = (|| {
+            let object = entry.as_object()?;
+            let weight = object.get("weight")?.as_str()?.parse::<Decimal>().ok()?;
+            Some((
+                object.get("mode")?.clone(),
+                object.get("account").cloned().unwrap_or(Value::Null),
+                object.get("product")?.clone(),
+                weight,
+            ))
+        })();
+        let Some((mode, tab, product, weight)) = parsed else {
+            entries.push(entry);
+            continue;
+        };
+        let scope: Vec<&(Value, Value, Value, Decimal)> = records
+            .iter()
+            .filter(|r| r.1 == product && (tab.is_null() || r.0 == tab))
+            .collect();
+        for (r, w) in scope.iter().zip(split_weight(
+            weight,
+            &scope.iter().map(|r| r.3).collect::<Vec<_>>(),
+        )) {
+            if w == Decimal::ONE {
+                continue;
+            }
+            let mut object = serde_json::Map::new();
+            object.insert("mode".to_owned(), mode.clone());
+            if !tab.is_null() {
+                object.insert("tab".to_owned(), tab.clone());
+            }
+            object.insert("account".to_owned(), r.0.clone());
+            object.insert("product".to_owned(), product.clone());
+            if !r.2.is_null() {
+                object.insert("account_type".to_owned(), r.2.clone());
+            }
+            object.insert("weight".to_owned(), Value::String(w.to_string()));
+            entries.push(Value::Object(object));
+        }
+    }
+    if entries.is_empty()
+        && let Some(object) = value.as_object_mut()
+    {
+        object.remove("product_shares");
+    }
+}
+
+/// Shares `weight` over records of the given values so that the parts add up to it exactly: in
+/// proportion to the values, or equally when a value is 0 or a part would round to nothing.
+fn split_weight(weight: Decimal, values: &[Decimal]) -> Vec<Decimal> {
+    let n = values.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let total: Decimal = values.iter().copied().sum();
+    let equal = |n: usize| {
+        let part = (weight / Decimal::from(n)).round_dp(6);
+        let mut parts = vec![part; n];
+        parts[n - 1] = weight - part * Decimal::from(n - 1);
+        parts
+    };
+    if n == 1 {
+        return vec![weight];
+    }
+    if total <= Decimal::ZERO || values.iter().any(|v| *v <= Decimal::ZERO) {
+        return equal(n);
+    }
+    let mut parts: Vec<Decimal> = values[..n - 1]
+        .iter()
+        .map(|v| (weight * *v / total).round_dp(6))
+        .collect();
+    let last = weight - parts.iter().copied().sum::<Decimal>();
+    parts.push(last);
+    if parts.iter().any(|p| *p <= Decimal::ZERO) {
+        return equal(n);
+    }
+    parts
 }

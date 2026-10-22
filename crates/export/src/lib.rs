@@ -289,12 +289,14 @@ fn aliases(portfolio: &Portfolio) -> Table {
     table
 }
 
-/// The explicit weights of the products, one row per mode and product (a product that is not
-/// listed for a mode has the weight 1).
+/// The explicit weights of the records, one row per mode, tab and record (a record that is not
+/// listed has the weight 1). `tab_account_id` is empty for the All tab.
 fn product_targets(portfolio: &Portfolio) -> Table {
     let mut table = Table::new(&[
         "mode",
+        "tab_account_id",
         "account_id",
+        "account_type",
         "product_id",
         "product",
         "category_id",
@@ -307,7 +309,9 @@ fn product_targets(portfolio: &Portfolio) -> Table {
             product.and_then(|p| portfolio.categories.iter().find(|c| c.id == p.category));
         table.push(vec![
             plain_cell(&keyword(&entry.mode)),
-            plain_cell(&entry.account.map_or(String::new(), |a| a.0.to_string())),
+            plain_cell(&entry.tab.map_or(String::new(), |a| a.0.to_string())),
+            plain_cell(&entry.account.0.to_string()),
+            type_cell(portfolio, entry.account_type.as_deref()),
             plain_cell(&entry.product.0.to_string()),
             text_cell(product.map_or("", |p| &p.name)),
             plain_cell(&category.map_or(String::new(), |c| c.id.0.to_string())),

@@ -249,47 +249,45 @@ fn aliases_and_settings_are_exported() {
 #[test]
 fn product_targets_are_exported_per_mode() {
     let mut p = sample();
-    let s1 = p.products[0].id;
-    let s2 = p.products[1].id;
-    apply(
+    let first = p.holdings[0].clone();
+    let other = p.holdings[2].clone();
+    let set = |p: &mut Portfolio, mode, tab, h: &portfolio::Holding, weight| {
+        apply(
+            p,
+            Edit::SetProductShare {
+                mode,
+                tab,
+                account: h.account,
+                product: h.product,
+                account_type: h.account_type.clone(),
+                weight,
+            },
+        );
+    };
+    set(&mut p, SuggestionMode::FixedAdd, None, &first, dec!(2.50));
+    set(&mut p, SuggestionMode::FixedSell, None, &other, dec!(0.5));
+    set(
         &mut p,
-        Edit::SetProductShare {
-            mode: SuggestionMode::FixedAdd,
-            product: s1,
-            account: None,
-            weight: dec!(2.50),
-        },
-    );
-    apply(
-        &mut p,
-        Edit::SetProductShare {
-            mode: SuggestionMode::FixedSell,
-            product: s2,
-            account: None,
-            weight: dec!(0.5),
-        },
-    );
-    let account = p.accounts[0].id;
-    apply(
-        &mut p,
-        Edit::SetProductShare {
-            mode: SuggestionMode::FixedSell,
-            product: s2,
-            account: Some(account),
-            weight: dec!(4),
-        },
+        SuggestionMode::FixedSell,
+        Some(other.account),
+        &other,
+        dec!(4),
     );
     let f = files(&p);
 
     let rows = lines(&f["product_targets.csv"]);
     assert_eq!(
         rows[0],
-        "mode,account_id,product_id,product,category_id,category,relative_weight"
+        "mode,tab_account_id,account_id,account_type,product_id,product,category_id,category,relative_weight"
     );
     assert_eq!(rows.len(), 4);
-    assert!(rows[1].starts_with("fixed_add,,") && rows[1].ends_with(",2.5"));
-    assert!(rows[2].starts_with("fixed_sell,,") && rows[2].ends_with(",0.5"));
-    assert!(rows[3].starts_with(&format!("fixed_sell,{},", account.0)) && rows[3].ends_with(",4"));
+    assert!(rows[1].starts_with("fixed_add,,") && rows[1].contains(",specific,"));
+    assert!(rows[1].ends_with(",2.5"));
+    assert!(rows[2].starts_with("fixed_sell,,") && rows[2].contains(",nisa,"));
+    assert!(rows[2].ends_with(",0.5"));
+    assert!(
+        rows[3].starts_with(&format!("fixed_sell,{},", other.account.0)) && rows[3].ends_with(",4")
+    );
 }
 
 #[test]

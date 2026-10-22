@@ -223,13 +223,17 @@ pub enum Edit {
         #[serde(default)]
         account_type: Option<String>,
     },
-    /// Sets the weight of a product for one suggestion mode (the default weight 1 clears the
-    /// setting). The weight belongs to the tab of an account, or to the All tab without one.
+    /// Sets the weight of a record (account, product, type) for one suggestion mode (the default
+    /// weight 1 clears the setting). The weight belongs to the tab of an account (`tab`; then the
+    /// record is one of that account), or to the All tab without one.
     SetProductShare {
         mode: SuggestionMode,
+        #[serde(default)]
+        tab: Option<AccountId>,
+        account: AccountId,
         product: ProductId,
         #[serde(default)]
-        account: Option<AccountId>,
+        account_type: Option<String>,
         weight: Decimal,
     },
     /// Makes the account hold exactly these products, as an import does. The
@@ -1062,6 +1066,12 @@ impl Portfolio {
                     ));
                 }
                 let kept = |h: &Holding| h.product == keep;
+                let kept_records: Vec<(AccountId, Option<String>)> = self
+                    .holdings
+                    .iter()
+                    .filter(|h| kept(h))
+                    .map(|h| (h.account, h.account_type.clone()))
+                    .collect();
                 for h in std::mem::take(&mut self.holdings) {
                     let mut h = h;
                     if h.product == remove {
@@ -1091,7 +1101,17 @@ impl Portfolio {
                     }
                     account.merge_strategy_product(keep, remove);
                 }
-                self.product_shares.retain(|e| e.product != remove);
+                // The weights of the kept product stay; those of a record that only the merged
+                // product held move to the kept one.
+                self.product_shares.retain(|e| {
+                    e.product != remove
+                        || !kept_records.contains(&(e.account, e.account_type.clone()))
+                });
+                for e in &mut self.product_shares {
+                    if e.product == remove {
+                        e.product = keep;
+                    }
+                }
                 self.product_mut(keep)?.aliases.extend(from.aliases);
                 self.products.retain(|p| p.id != remove);
             }
@@ -1126,6 +1146,11 @@ impl Portfolio {
                 for h in &mut self.holdings {
                     if h.product == product && accounts.contains(&h.account) {
                         h.product = id;
+                    }
+                }
+                for e in &mut self.product_shares {
+                    if e.product == product && accounts.contains(&e.account) {
+                        e.product = id;
                     }
                 }
                 for account in &mut self.accounts {
@@ -1221,7 +1246,7 @@ impl Portfolio {
                 self.accounts.retain(|a| a.id != id);
                 self.holdings.retain(|h| h.account != id);
                 self.recipes.retain(|r| r.account != id);
-                self.product_shares.retain(|e| e.account != Some(id));
+                self.product_shares.retain(|e| e.account != id);
             }
             Edit::AddAccountType {
                 name: new_name,
@@ -1279,6 +1304,7 @@ impl Portfolio {
                 for recipe in &mut self.recipes {
                     recipe.type_rules.retain(|r| r.account_type != id);
                 }
+                let mut dropped = Vec::new();
                 for h in std::mem::take(&mut self.holdings) {
                     let mut h = h;
                     if h.account_type.as_deref() == Some(id.as_str()) {
@@ -1290,10 +1316,20 @@ impl Portfolio {
                                 && o.product == h.product
                                 && o.account_type.is_none()
                         }) {
+                            dropped.push((h.account, h.product));
                             continue;
                         }
                     }
                     self.holdings.push(h);
+                }
+                self.product_shares.retain(|e| {
+                    e.account_type.as_deref() != Some(id.as_str())
+                        || !dropped.contains(&(e.account, e.product))
+                });
+                for e in &mut self.product_shares {
+                    if e.account_type.as_deref() == Some(id.as_str()) {
+                        e.account_type = None;
+                    }
                 }
             }
             Edit::SetRecordType {
@@ -1318,7 +1354,12 @@ impl Portfolio {
                         h.account == account && h.product == product && h.account_type == from
                     })
                     .ok_or(Error::NotFound("record"))?;
-                holding.account_type = to;
+                holding.account_type = to.clone();
+                for e in &mut self.product_shares {
+                    if e.account == account && e.product == product && e.account_type == from {
+                        e.account_type = to.clone();
+                    }
+                }
             }
             Edit::SetHolding {
                 account,
@@ -1358,30 +1399,55 @@ impl Portfolio {
             }
             Edit::SetProductShare {
                 mode,
-                product,
+                tab,
                 account,
+                product,
+                account_type,
                 weight,
             } => {
                 self.product(product)?;
-                if let Some(account) = account {
-                    self.account(account)?;
+                self.account(account)?;
+                if tab.is_some_and(|t| t != account) {
+                    return Err(Error::Invalid(
+                        "the record is not in the account of the tab".to_owned(),
+                    ));
+                }
+                if !self.holdings.iter().any(|h| {
+                    h.account == account && h.product == product && h.account_type == account_type
+                }) {
+                    return Err(Error::NotFound("record"));
                 }
                 let weight = positive(weight, "weight")?;
                 if weight > MAX_PRODUCT_WEIGHT {
                     return Err(Error::Invalid("the weight is too large".to_owned()));
                 }
-                self.product_shares
-                    .retain(|e| !(e.mode == mode && e.product == product && e.account == account));
+                let same = |e: &ProductShareEntry| {
+                    e.mode == mode
+                        && e.tab == tab
+                        && e.account == account
+                        && e.product == product
+                        && e.account_type == account_type
+                };
+                self.product_shares.retain(|e| !same(e));
                 if weight != Decimal::ONE {
                     self.check_capacity(self.product_shares.len())?;
                     self.product_shares.push(ProductShareEntry {
                         mode,
-                        product,
+                        tab,
                         account,
+                        product,
+                        account_type,
                         weight,
                     });
-                    self.product_shares
-                        .sort_by_key(|e| (e.mode, e.product, e.account));
+                    self.product_shares.sort_by(|a, b| {
+                        (a.mode, a.tab, a.account, a.product, &a.account_type).cmp(&(
+                            b.mode,
+                            b.tab,
+                            b.account,
+                            b.product,
+                            &b.account_type,
+                        ))
+                    });
                 }
             }
             Edit::RemoveHolding {
@@ -1642,6 +1708,7 @@ impl Portfolio {
                 self.settings.product_tolerance = product;
             }
         }
+        self.prune_product_shares();
         self.revision = self.revision.saturating_add(1);
         Ok(())
     }
