@@ -3,12 +3,15 @@
 
 /** The suggestion modes; each keeps its own product targeting (`Portfolio.product_shares`). */
 export type SuggestionMode = "fixed_add" | "buy_only_to_target" | "full_rebalance" | "fixed_sell";
-/** An explicit weight of a product for a mode (positive); a product without one has the weight 1. */
+/** An explicit weight of a record for a mode (positive); a record without one has the weight 1. */
 export interface ProductShareEntry {
   mode: SuggestionMode;
-  product: number;
   /** The account whose tab the weight belongs to; none: the All tab's. */
-  account?: number;
+  tab?: number;
+  /** The record: its account, product and type (none: no type). */
+  account: number;
+  product: number;
+  account_type?: AccountTypeId;
   weight: string;
 }
 /** A built-in account type id, or the id of a custom type (`custom-<n>`). */
@@ -261,7 +264,15 @@ export type Edit =
       category?: number;
       currency?: string;
     }
-  | { type: "set_product_share"; mode: SuggestionMode; product: number; account?: number | null; weight: string }
+  | {
+      type: "set_product_share";
+      mode: SuggestionMode;
+      tab: number | null;
+      account: number;
+      product: number;
+      account_type: AccountTypeId | null;
+      weight: string;
+    }
   | { type: "add_account_type"; name: string; sellable: boolean }
   | { type: "update_account_type"; id: string; name?: string; sellable?: boolean }
   | { type: "set_type_sellable"; id: string; sellable: boolean }

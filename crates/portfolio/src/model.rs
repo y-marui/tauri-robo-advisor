@@ -62,9 +62,14 @@ use serde::{Deserialize, Serialize};
 /// entry without an account is the weight of the All tab). An older app would read every entry as
 /// the weight of All and ignore the tabs' own, so it refuses. An older file is converted on load
 /// (see `migrate`): each entry is copied for every account, so no tab changes.
+/// Version 25 keyed the product weights by record instead of by product (`ProductShareEntry` gains
+/// the record's `account` and `account_type`; `account` of the old shape, the tab, is now `tab`).
+/// An older app would read the entries as product weights, so it refuses. An older file is
+/// converted on load (see `migrate`): the weight of a product is spread over its records in the
+/// tab so that they add up to the old weight.
 /// Everything new has a default, so an older file loads and is saved as the current version,
 /// and an older app refuses a newer file instead of dropping its fields.
-pub const SCHEMA_VERSION: u32 = 24;
+pub const SCHEMA_VERSION: u32 = 25;
 
 /// The oldest version this app opens. Version 8 moved the weights of products into the records
 /// of the accounts, and nothing converts an older file: it is refused and left untouched.
@@ -109,17 +114,21 @@ impl SuggestionMode {
 /// mistake (and could overflow a calculation).
 pub const MAX_PRODUCT_WEIGHT: Decimal = Decimal::from_parts(1_000_000_000, 0, 0, false, 0);
 
-/// The setting of one product for one suggestion mode: its weight, positive and relative to the
-/// other products it is compared with (the products of its category, or every product when the
-/// suggestion allocates by product weights). A product without an entry has the weight 1, and a
-/// weight of 1 is never stored. The weight belongs to an account's tab (`account`), or to the All
-/// tab when there is none.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The weight of one record (an account's holding of a product in one custody type) for one
+/// suggestion mode and tab: positive and relative to the other records it is compared with. The
+/// weight of a product is the sum of the weights of its records in the tab's scope. A record
+/// without an entry has the weight 1, and a weight of 1 is never stored. The weight belongs to an
+/// account's tab (`tab`), or to the All tab when there is none; on an account's tab only that
+/// account's records are in scope (`account == tab`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductShareEntry {
     pub mode: SuggestionMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab: Option<AccountId>,
+    pub account: AccountId,
     pub product: ProductId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub account: Option<AccountId>,
+    pub account_type: Option<String>,
     pub weight: Decimal,
 }
 
@@ -644,17 +653,78 @@ impl Portfolio {
         }
     }
 
-    /// The weight of a product when the given mode runs on the tab of an account (`None`: the All
+    /// The weight of a record when the given mode runs on the tab of an account (`None`: the All
     /// tab): its stored setting for that tab, or 1.
+    pub fn record_weight(
+        &self,
+        mode: SuggestionMode,
+        tab: Option<AccountId>,
+        account: AccountId,
+        product: ProductId,
+        account_type: Option<&str>,
+    ) -> Decimal {
+        self.product_shares
+            .iter()
+            .find(|e| {
+                e.mode == mode
+                    && e.tab == tab
+                    && e.account == account
+                    && e.product == product
+                    && e.account_type.as_deref() == account_type
+            })
+            .map_or(Decimal::ONE, |e| e.weight)
+    }
+
+    /// The weight of a product on the tab: the sum of the weights of its records in the tab's
+    /// scope (the tab's account, or every account on the All tab). A product without a record
+    /// there has the weight 1.
     pub fn product_weight(
         &self,
         mode: SuggestionMode,
         product: ProductId,
-        account: Option<AccountId>,
+        tab: Option<AccountId>,
     ) -> Decimal {
-        self.product_shares
+        let mut records = self
+            .holdings
             .iter()
-            .find(|e| e.mode == mode && e.product == product && e.account == account)
-            .map_or(Decimal::ONE, |e| e.weight)
+            .filter(|h| h.product == product && tab.is_none_or(|t| h.account == t))
+            .peekable();
+        if records.peek().is_none() {
+            return Decimal::ONE;
+        }
+        records
+            .map(|h| self.record_weight(mode, tab, h.account, product, h.account_type.as_deref()))
+            .sum()
+    }
+
+    /// The weight of an account's records of a product on the tab, or `None` when it has none.
+    pub fn account_product_weight(
+        &self,
+        mode: SuggestionMode,
+        product: ProductId,
+        tab: Option<AccountId>,
+        account: AccountId,
+    ) -> Option<Decimal> {
+        let mut found = false;
+        let sum = self
+            .holdings
+            .iter()
+            .filter(|h| h.product == product && h.account == account)
+            .map(|h| {
+                found = true;
+                self.record_weight(mode, tab, account, product, h.account_type.as_deref())
+            })
+            .sum();
+        found.then_some(sum)
+    }
+
+    /// Drops the weights whose record is gone (a record removed or replaced by an import).
+    pub fn prune_product_shares(&mut self) {
+        let holdings = &self.holdings;
+        self.product_shares.retain(|e| {
+            holdings.iter().any(|h| {
+                h.account == e.account && h.product == e.product && h.account_type == e.account_type
+            })
+        });
     }
 }

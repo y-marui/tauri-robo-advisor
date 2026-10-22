@@ -48,15 +48,34 @@ pub(crate) fn share_on(
     account: Option<AccountId>,
     weight: Decimal,
 ) {
-    apply(
-        p,
-        Edit::SetProductShare {
-            mode,
-            product,
-            account,
-            weight,
-        },
-    );
+    // The product weight is spread over its records on the tab: the first one carries the
+    // weight beyond the default 1 of the others, so that they add up to `weight`.
+    let records: Vec<(AccountId, Option<String>)> = p
+        .holdings
+        .iter()
+        .filter(|h| h.product == product && account.is_none_or(|a| h.account == a))
+        .map(|h| (h.account, h.account_type.clone()))
+        .collect();
+    let n = Decimal::from(records.len());
+    let first = weight - (n - Decimal::ONE);
+    for (i, (holder, account_type)) in records.into_iter().enumerate() {
+        let w = if first > Decimal::ZERO {
+            if i == 0 { first } else { Decimal::ONE }
+        } else {
+            weight / n
+        };
+        apply(
+            p,
+            Edit::SetProductShare {
+                mode,
+                tab: account,
+                account: holder,
+                product,
+                account_type,
+                weight: w,
+            },
+        );
+    }
 }
 
 /// Sets the products that are in the category now, for every mode.
@@ -998,8 +1017,10 @@ fn huge_holdings_and_weights_are_refused_instead_of_overflowing() {
         .product_shares
         .push(portfolio::ProductShareEntry {
             mode: SuggestionMode::FixedAdd,
+            tab: None,
+            account: f.main,
             product: f.s1,
-            account: None,
+            account_type: None,
             weight: MAX_WEIGHT + dec!(1),
         });
     // The integrity check refuses it before any calculation.
@@ -2064,6 +2085,46 @@ fn per_product(s: &Suggestion, product: ProductId) -> Decimal {
 }
 
 #[test]
+fn a_products_amount_is_split_over_its_records_by_their_weights() {
+    let mut w = weighted_book();
+    // B1: Main 1, Sub 3 (product weight 4); the others stay 1 each.
+    for mode in SuggestionMode::ALL {
+        apply(
+            &mut w.portfolio,
+            Edit::SetProductShare {
+                mode,
+                tab: None,
+                account: w.sub,
+                product: w.b1,
+                account_type: None,
+                weight: dec!(3),
+            },
+        );
+    }
+    assert_eq!(
+        w.portfolio
+            .product_weight(SuggestionMode::FixedAdd, w.b1, None),
+        dec!(4)
+    );
+    let s = by_weights(
+        &w.portfolio,
+        None,
+        Mode::FixedAdd {
+            amount: dec!(400000),
+        },
+        false,
+    );
+    let b1 = per_product(&s, w.b1);
+    assert!(b1 > Decimal::ZERO);
+    let sub: Decimal = in_account(&s, w.sub)
+        .iter()
+        .filter(|(p, _)| *p == w.b1)
+        .map(|(_, d)| *d)
+        .sum();
+    assert_eq!(sub, b1 * dec!(3) / dec!(4));
+}
+
+#[test]
 fn by_weights_a_fixed_add_in_all_crosses_the_categories_and_ignores_their_targets() {
     let w = weighted_book();
     let mode = || Mode::FixedAdd {
@@ -2073,11 +2134,13 @@ fn by_weights_a_fixed_add_in_all_crosses_the_categories_and_ignores_their_target
     let s = by_weights(&w.portfolio, None, mode(), false);
 
     // 1,300,000 afterwards: S1 325,000 (it holds 400,000), S2 and B1 are raised to the level;
-    // the stock category's 90% target plays no part. B1 goes to the account holding the least.
+    // the stock category's 90% target plays no part. B1 is split over its two
+    // records by their weights (1 each).
     assert_eq!(per_product(&s, w.s1), dec!(0));
     assert_eq!(per_product(&s, w.s2), dec!(200000));
     assert_eq!(per_product(&s, w.b1), dec!(200000));
-    assert!(in_account(&s, w.sub).contains(&(w.b1, dec!(200000))));
+    assert!(in_account(&s, w.sub).contains(&(w.b1, dec!(100000))));
+    assert!(in_account(&s, w.main).contains(&(w.b1, dec!(100000))));
     assert!(s.categories.is_empty());
     assert_eq!(s.applied, dec!(400000));
     assert_eq!(s.total_after, dec!(1300000));

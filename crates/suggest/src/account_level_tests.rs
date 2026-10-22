@@ -35,15 +35,7 @@ fn hold(p: &mut Portfolio, account: AccountId, product: ProductId, value: Decima
 
 fn weigh(p: &mut Portfolio, product: ProductId, account: Option<AccountId>, weight: Decimal) {
     for mode in SuggestionMode::ALL {
-        apply(
-            p,
-            Edit::SetProductShare {
-                mode,
-                product,
-                account,
-                weight,
-            },
-        );
+        crate::tests::share_on(p, mode, product, account, weight);
     }
 }
 

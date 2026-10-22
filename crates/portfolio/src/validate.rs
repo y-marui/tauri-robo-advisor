@@ -235,17 +235,30 @@ impl Portfolio {
 
         let mut shared = HashSet::new();
         for entry in &self.product_shares {
-            if !self.products.iter().any(|p| p.id == entry.product) {
-                return corrupt("a product setting refers to a missing product");
-            }
             if entry
-                .account
+                .tab
                 .is_some_and(|id| !self.accounts.iter().any(|a| a.id == id))
             {
-                return corrupt("a product setting refers to a missing account");
+                return corrupt("a product weight refers to a missing account");
             }
-            if !shared.insert((entry.mode, entry.product, entry.account)) {
-                return corrupt("a product has two settings for the same mode and tab");
+            if entry.tab.is_some_and(|id| id != entry.account) {
+                return corrupt("a product weight is outside the scope of its tab");
+            }
+            if !self.holdings.iter().any(|h| {
+                h.account == entry.account
+                    && h.product == entry.product
+                    && h.account_type == entry.account_type
+            }) {
+                return corrupt("a product weight refers to a missing record");
+            }
+            if !shared.insert((
+                entry.mode,
+                entry.tab,
+                entry.account,
+                entry.product,
+                entry.account_type.as_deref(),
+            )) {
+                return corrupt("a record has two weights for the same mode and tab");
             }
             positive(entry.weight, "weight").map_err(into_corrupt)?;
             if entry.weight > MAX_PRODUCT_WEIGHT {

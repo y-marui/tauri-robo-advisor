@@ -156,17 +156,27 @@ export function rebalancePanel(ctx: Context): Panel {
       ),
     );
 
-  // The weight of a product for the mode chosen in the suggestion form: one setting per mode and
-  // product for each tab: an account's tab has its own, and "All" has its own.
-  function shareCell(view: PortfolioView, product: number): HTMLElement {
+  // The weight of a record (account, product, type) for the mode chosen in the suggestion form: one
+  // setting per mode and record for each tab: an account's tab has its own, and "All" has its own.
+  // A product's weight on the tab is the sum of the weights of its records.
+  function shareCell(
+    view: PortfolioView,
+    account: Account,
+    product: number,
+    accountType: string | null,
+  ): HTMLElement {
     const mode = box.mode();
-    const saved = weightOf(view, mode, product, accountNow());
+    const saved = weightOf(view, mode, accountNow(), account.id, product, accountType);
+    const typeNote = accountType ? ` (${typeLabel(accountType, view.portfolio.custom_types)})` : "";
     const weight = h("input", {
       type: "text",
       inputmode: "decimal",
       class: "number",
       autocomplete: "off",
-      "aria-label": t("{product}: weight ({mode})", { product: productName(view, product), mode: modeLabel(mode) }),
+      "aria-label": t("{product}: weight ({mode})", {
+        product: `${productName(view, product)}${typeNote}`,
+        mode: modeLabel(mode),
+      }),
       value: saved,
     });
     weight.addEventListener("change", () => {
@@ -176,7 +186,15 @@ export function rebalancePanel(ctx: Context): Panel {
         weight.value = saved;
         return;
       }
-      void ctx.apply({ type: "set_product_share", mode, product, account: accountNow(), weight: value });
+      void ctx.apply({
+        type: "set_product_share",
+        mode,
+        tab: accountNow(),
+        account: account.id,
+        product,
+        account_type: accountType,
+        weight: value,
+      });
     });
     return h("td", { class: "share-cell" }, weight);
   }
@@ -209,28 +227,38 @@ export function rebalancePanel(ctx: Context): Panel {
       cell,
       withAccount ? h("td", {}, account.name) : "",
       h("th", { scope: "row" }, productName(view, row.product)),
-      withShare ? shareCell(view, row.product) : "",
+      withShare ? (row.types.length === 1 ? shareCell(view, account, row.product, row.types[0].account_type) : h("td", {})) : "",
       h("td", { class: "num" }, yen(row.current)),
       ...tradeCells(trade?.inline ?? null, trades !== null, (trade?.parts.length ?? 0) > 0, row),
     );
     // A sale taken from several record types: one sub-row per type, with that type's own figures.
-    const parts = (trade?.parts ?? []).map(({ line, current }) =>
+    // A product held in several record types gets one sub-row per record, which carries its weight.
+    const partOf = (type: string | null) => trade?.parts.find(({ line }) => (line.account_type ?? null) === type);
+    const records = row.types.length > 1;
+    const sub = (type: string | null, current: string, line: ProductLine | null, after: string | null): HTMLElement =>
       h(
         "tr",
         { class: "type-part" },
         withBox ? h("td", {}) : "",
         withAccount ? h("td", {}) : "",
-        h(
-          "td",
-          { class: "type-label" },
-          line.account_type ? typeLabel(line.account_type, view.portfolio.custom_types) : "",
-        ),
-        withShare ? h("td", {}) : "",
+        h("td", { class: "type-label" }, type ? typeLabel(type, view.portfolio.custom_types) : ""),
+        withShare ? (records ? shareCell(view, account, row.product, type) : h("td", {})) : "",
         h("td", { class: "num" }, yen(current)),
-        h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
-        h("td", { class: "num" }, yen(line.after)),
-      ),
-    );
+        ...(line
+          ? [
+              h("td", { class: `num ${deltaClass(line.delta)}` }, signed(line.delta)),
+              h("td", { class: "num" }, after === null ? "" : yen(after)),
+            ]
+          : trades !== null
+            ? [h("td", {}), h("td", {})]
+            : []),
+      );
+    const parts = records
+      ? row.types.map((group) => {
+          const part = partOf(group.account_type ?? null);
+          return sub(group.account_type ?? null, group.current, part?.line ?? null, part?.line.after ?? null);
+        })
+      : (trade?.parts ?? []).map(({ line, current }) => sub(line.account_type ?? null, current, line, line.after));
     return [first, ...parts];
   }
 

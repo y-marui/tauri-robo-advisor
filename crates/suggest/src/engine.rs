@@ -198,7 +198,8 @@ impl<'a> Book<'a> {
             .unwrap_or_default()
     }
 
-    /// The weight of a product on the tab being run: the account's own, or the All tab's.
+    /// The weight of a product on the tab being run: the sum of the weights of its records on
+    /// the tab (the account's own, or all accounts on the All tab).
     fn weight(&self, product: ProductId) -> Decimal {
         self.portfolio
             .product_weight(self.mode, product, self.request_account)
@@ -311,26 +312,43 @@ impl<'a> Book<'a> {
             .sum()
     }
 
-    /// Spreads each product's buy amount over the accounts that may buy it: the account holding
-    /// the least of it first (equal weights), like the products inside a category.
+    /// Spreads each product's buy amount over the accounts that may buy it, in proportion to the
+    /// weights of the account's records of the product on this tab. When none of the buyers has a
+    /// record, or the weights are no use, the account holding the least goes first (equal weights).
     fn place_buy(&self, flat: Vec<(ProductId, Decimal)>) -> Vec<(Slot, Decimal)> {
         let mut out = Vec::new();
         for (product, share) in flat {
             let buyers = self.buyers(product);
-            let items: Vec<Item> = buyers
+            let weights: Vec<Option<Decimal>> = buyers
                 .iter()
-                .map(|a| Item {
-                    weight: Decimal::ONE,
-                    current: self
-                        .held_here
-                        .get(&(a.id, product))
-                        .copied()
-                        .unwrap_or_default(),
-                    cap: None,
+                .map(|a| {
+                    self.portfolio.account_product_weight(
+                        self.mode,
+                        product,
+                        self.request_account,
+                        a.id,
+                    )
                 })
                 .collect();
-            let shares =
-                fill_up(&items, share).unwrap_or_else(|_| vec![Decimal::ZERO; items.len()]);
+            let shares = if weights.iter().any(Option::is_some) {
+                let weights: Vec<Decimal> = weights.iter().map(|w| w.unwrap_or_default()).collect();
+                let total: Decimal = weights.iter().copied().sum();
+                weights.iter().map(|w| share * *w / total).collect()
+            } else {
+                let items: Vec<Item> = buyers
+                    .iter()
+                    .map(|a| Item {
+                        weight: Decimal::ONE,
+                        current: self
+                            .held_here
+                            .get(&(a.id, product))
+                            .copied()
+                            .unwrap_or_default(),
+                        cap: None,
+                    })
+                    .collect();
+                fill_up(&items, share).unwrap_or_else(|_| vec![Decimal::ZERO; items.len()])
+            };
             out.extend(buyers.iter().map(|a| (a.id, product)).zip(shares));
         }
         out
