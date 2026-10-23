@@ -189,6 +189,9 @@ function insideLabels(slices: Slice[], radius: number): SVGElement[] {
     });
 }
 
+/** The labels stay within this distance of the center (the view is 76 high each way). */
+const LABEL_LIMIT = 72;
+
 /** Names outside the ring, each joined to its sector by a leader line. */
 function outsideLabels(slices: Slice[], radius: number): SVGElement[] {
   const gap = 8;
@@ -202,6 +205,14 @@ function outsideLabels(slices: Slice[], radius: number): SVGElement[] {
     // Keep neighbouring labels from overlapping.
     side.forEach((item, i) => {
       if (i > 0) item.y = Math.max(item.y, side[i - 1].y + gap);
+    });
+    // Pull a crowded cluster back up so the last label stays inside the view, then settle the top.
+    for (let i = side.length - 1; i >= 0; i--) {
+      const limit = i === side.length - 1 ? LABEL_LIMIT : side[i + 1].y - gap;
+      side[i].y = Math.min(side[i].y, limit);
+    }
+    side.forEach((item, i) => {
+      item.y = Math.max(item.y, i === 0 ? -LABEL_LIMIT : side[i - 1].y + gap);
     });
     for (const item of side) {
       const edge = point(radius + 1, item.mid);
