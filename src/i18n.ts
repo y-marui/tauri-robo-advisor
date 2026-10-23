@@ -235,7 +235,6 @@ export const MESSAGES = {
   "Current": { ja: "現在" },
   "No holdings yet.": { ja: "保有がまだありません。" },
   "Rebalance": { ja: "リバランス" },
-  "List": { ja: "一覧" },
   "This account has its own strategy (specified products with ratios). It takes no part in All; use its own tab.": {
     ja: "この口座は独自の戦略（商品と比率を指定）を持ちます。「すべて」には加わらないので、この口座のタブで提案してください。",
   },
@@ -257,7 +256,6 @@ export const MESSAGES = {
   "Select all": { ja: "すべて選択" },
   "Clear": { ja: "すべて解除" },
   "All": { ja: "すべて" },
-  "Holdings sections": { ja: "保有の区分" },
   "Suggestion mode": { ja: "提案の種類" },
   "Allocation method": { ja: "配り方" },
   "By product weights across categories": { ja: "商品の比率で配る（カテゴリをまたぐ）" },

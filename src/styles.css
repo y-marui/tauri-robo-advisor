@@ -285,7 +285,31 @@ button.danger.armed {
 }
 
 .chart.pie {
-  max-width: 11rem;
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.chart.pie path {
+  stroke: var(--bg);
+  stroke-width: 0.6;
+}
+
+.pie-inside {
+  fill: #ffffff;
+  font-size: 5.5px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.pie-outside {
+  fill: var(--text);
+  font-size: 6px;
+}
+
+.pie-leader {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 0.4;
 }
 
 .chart-label,
@@ -296,6 +320,10 @@ button.danger.armed {
 
 .chart-label {
   fill: var(--strong);
+}
+
+.chart-group {
+  font-weight: 700;
 }
 
 .bar-target {
@@ -741,6 +769,10 @@ table.records td.clip {
   align-items: start;
 }
 
+.holdings-layout > .overview {
+  grid-column: 1 / -1;
+}
+
 .holdings-layout .side {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -755,13 +787,9 @@ table.records td.clip {
   min-width: 0;
 }
 
-/* The wide area: the holdings table, the suggestions and the accounts, one at a time. */
+/* The wide area: the holdings table. */
 .holdings-main {
   min-width: 0;
-}
-
-.subpane[hidden] {
-  display: none;
 }
 
 /* The suggestion tables have the whole wide area; a long product name wraps in its cell

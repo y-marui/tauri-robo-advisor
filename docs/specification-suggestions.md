@@ -17,7 +17,7 @@
 
 ## Suggestion Modes
 
-保有タブの副タブ「リバランス」の「すべて」のタブと、口座ごとのタブの、どちらにも次の 4 つを出す。「すべて」は全口座をまたいで（All Tab。[specification-suggestions-accounts.md](specification-suggestions-accounts.md)）、口座のタブはそのタブの口座で計算する。
+「リバランス」タブの「すべて」のタブと、口座ごとのタブの、どちらにも次の 4 つを出す。「すべて」は全口座をまたいで（All Tab。[specification-suggestions-accounts.md](specification-suggestions-accounts.md)）、口座のタブはそのタブの口座で計算する。
 
 | モード | 内容 |
 |---|---|
