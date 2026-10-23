@@ -26,6 +26,8 @@ const shownValue = (view: PortfolioView, record: Holding): string =>
 export function holdingsTablePanel(ctx: Context): Panel {
   // Cells that show Rust's valuation, found again by key after each refresh.
   let holdingCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
+  // The rows of each category in "By category", so they can be ordered by value once the valuation arrives.
+  let categoryBlocks: { header: HTMLElement; records: { key: string; product: number; account: number; row: HTMLElement }[] }[] = [];
   let accountCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
   let categoryCells = new Map<number, { value: HTMLElement; share: HTMLElement }>();
   // The group subtotals; the key is the group id, or "none" for the ungrouped categories.
@@ -36,6 +38,8 @@ export function holdingsTablePanel(ctx: Context): Panel {
   // Show only the records of one type: a type id, "none" for the records without a type, "" for all.
   let typeFilter = "";
   let typeCells = new Map<string, { value: HTMLElement; share: HTMLElement }>();
+  // The total of the whole portfolio, the first row of the table.
+  let totalCell = h("td", { class: "num" });
   let lastView: PortfolioView | null = null;
   let lastOverview: Overview | null = null;
 
@@ -61,6 +65,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
       ].join("|"),
     (view, bind) => {
       holdingCells = new Map();
+      categoryBlocks = [];
       categoryCells = new Map();
       groupCells = new Map();
       accountCells = new Map();
@@ -92,12 +97,25 @@ export function holdingsTablePanel(ctx: Context): Panel {
         );
 
       const rows: HTMLElement[] = [];
+      totalCell = h("td", { class: "num" });
+      rows.push(
+        h(
+          "tr",
+          { class: "group group-main" },
+          h("th", { scope: "rowgroup", colspan: 4 }, t("Total")),
+          h("td", {}),
+          h("td", {}),
+          h("td", {}),
+          totalCell,
+          h("td", {}),
+        ),
+      );
 
-      const recordRow = (record: Holding): void => {
+      const recordRow = (record: Holding): HTMLElement | null => {
         const product = products.find((p) => p.id === record.product);
         const account = accounts.find((a) => a.id === record.account);
         if (!product || !account) {
-          return;
+          return null;
         }
         const cells = { value: h("td", { class: "num" }), share: h("td", { class: "num" }) };
         holdingCells.set(recordKey(record.account, record.product, record.account_type), cells);
@@ -111,10 +129,9 @@ export function holdingsTablePanel(ctx: Context): Panel {
         };
         showQuantityAndPrice();
         refreshers.push(showQuantityAndPrice);
-        rows.push(
-          h(
-            "tr",
-            {},
+        const row = h(
+          "tr",
+          {},
             h(
               "th",
               { scope: "row", class: "product-cell", title: product.name },
@@ -140,8 +157,9 @@ export function holdingsTablePanel(ctx: Context): Panel {
             ),
             cells.value,
             cells.share,
-          ),
         );
+        rows.push(row);
+        return row;
       };
 
       if (groupBy === "account") {
@@ -215,9 +233,19 @@ export function holdingsTablePanel(ctx: Context): Panel {
               subtotal.share,
             ),
           );
+          const block: (typeof categoryBlocks)[number] = { header: rows[rows.length - 1] as HTMLElement, records: [] };
           for (const record of records) {
-            recordRow(record);
+            const row = recordRow(record);
+            if (row) {
+              block.records.push({
+                key: recordKey(record.account, record.product, record.account_type),
+                product: record.product,
+                account: record.account,
+                row,
+              });
+            }
           }
+          categoryBlocks.push(block);
         };
         const entries = groupEntries(view);
         const groupRow = (id: number | null): void => {
@@ -337,8 +365,32 @@ export function holdingsTablePanel(ctx: Context): Panel {
       editButton(),
     );
 
+  /** In "By category", orders each category's rows by the product's share across all accounts, then by the account's share. */
+  function orderByValue(overview: Overview): void {
+    const share = new Map(overview.holdings.map((r) => [recordKey(r.account, r.product, r.account_type), Number(r.share)]));
+    for (const block of categoryBlocks) {
+      const own = (key: string) => share.get(key) ?? 0;
+      const byProduct = new Map<number, number>();
+      for (const r of block.records) {
+        byProduct.set(r.product, (byProduct.get(r.product) ?? 0) + own(r.key));
+      }
+      const sorted = [...block.records].sort(
+        (a, b) =>
+          (byProduct.get(b.product) ?? 0) - (byProduct.get(a.product) ?? 0) ||
+          a.product - b.product ||
+          own(b.key) - own(a.key),
+      );
+      let previous = block.header;
+      for (const r of sorted) {
+        previous.after(r.row);
+        previous = r.row;
+      }
+    }
+  }
+
   function showOverview(_view: PortfolioView, overview: Overview): void {
     lastOverview = overview;
+    totalCell.textContent = typeFilter === "" ? yen(overview.total) : "";
     note.textContent = "";
     note.classList.remove("error");
     for (const record of overview.holdings) {
@@ -348,6 +400,7 @@ export function holdingsTablePanel(ctx: Context): Panel {
         cells.share.textContent = percent(record.share);
       }
     }
+    orderByValue(overview);
     for (const type of overview.types) {
       const cells = typeCells.get(typeFilterKey(type.account_type));
       if (cells && typeFilter === "") {

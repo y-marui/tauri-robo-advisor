@@ -12,7 +12,7 @@ import type { Account, AccountBalance, PortfolioView, ProductLine } from "../typ
 import { typeLabel } from "./labels.ts";
 import { categoryName, deltaClass, modeLabel, signed, suggestionBox, yen } from "./suggestion.ts";
 
-// The "Rebalance" sub-tab of the holdings area: one tab per account, led by "All". Both kinds of tab
+// The "Rebalance" tab: one tab per account, led by "All". Both kinds of tab
 // have the suggestion form and its result on top. An account tab trades in its account; "All" trades
 // across every account. Below the form, an account tab shows the account's product list and "All"
 // shows one table of every account's list with an account column. A list holds only the products

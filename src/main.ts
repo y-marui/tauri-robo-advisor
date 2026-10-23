@@ -14,9 +14,8 @@ import { groupsPanel } from "./views/groups.ts";
 import { dataFolderPanel } from "./views/data-folder.ts";
 import { importStepsPanel } from "./views/import-steps.ts";
 import { holdingsTablePanel } from "./views/holdings-table.ts";
-import { overviewPanel } from "./views/overview.ts";
+import { overviewPanel, targetPanel } from "./views/overview.ts";
 import { rebalancePanel } from "./views/rebalance.ts";
-import { HOLDINGS_SUBTABS, pickSubTab, stepSubTab, type HoldingsSubTab } from "./subtabs.ts";
 import { dataNotes } from "./views/data-folder.ts";
 import { issuesList } from "./views/issues.ts";
 import { recordsPanel } from "./views/records.ts";
@@ -39,8 +38,8 @@ let status = h("p", { class: "status", role: "status" });
 let issues = h("div");
 let overviewRequest = 0;
 
-type TabName = "holdings" | "import" | "settings";
-const TAB_NAMES: TabName[] = ["holdings", "import", "settings"];
+type TabName = "holdings" | "rebalance" | "import" | "records" | "settings";
+const TAB_NAMES: TabName[] = ["holdings", "rebalance", "import", "records", "settings"];
 
 function readTab(): TabName {
   try {
@@ -54,22 +53,6 @@ function readTab(): TabName {
 function saveTab(tab: TabName): void {
   try {
     localStorage.setItem("tab", tab);
-  } catch {
-    // Only a convenience.
-  }
-}
-
-function readSubTab(): HoldingsSubTab {
-  try {
-    return pickSubTab(localStorage.getItem("holdings-subtab"));
-  } catch {
-    return pickSubTab(null);
-  }
-}
-
-function saveSubTab(tab: HoldingsSubTab): void {
-  try {
-    localStorage.setItem("holdings-subtab", tab);
   } catch {
     // Only a convenience.
   }
@@ -208,6 +191,7 @@ function build(): void {
   status = h("p", { class: "status", role: "status" });
   issues = h("div");
   const overview = overviewPanel(context);
+  const target = targetPanel(context);
   const holdingsTable = holdingsTablePanel(context);
   const rebalance = rebalancePanel(context);
   const importSteps = importStepsPanel(context);
@@ -226,6 +210,7 @@ function build(): void {
   const dataFolder = dataFolderPanel(context);
   panels = [
     overview,
+    target,
     holdingsTable,
     rebalance,
     importSteps,
@@ -244,50 +229,16 @@ function build(): void {
     dataFolder,
   ];
 
-  // The wide area beside the balance: the holdings table and the rebalance tabs. They only show and hide, like the main tabs; the choice is remembered.
-  const subPanes: Record<HoldingsSubTab, HTMLElement> = {
-    holdings: h("div", { class: "subpane", role: "tabpanel" }, holdingsTable.el),
-    rebalance: h("div", { class: "subpane", role: "tabpanel" }, rebalance.el),
-  };
-  const subLabels: Record<HoldingsSubTab, string> = {
-    holdings: t("List"),
-    rebalance: t("Rebalance"),
-  };
-  const subButtons = new Map<HoldingsSubTab, HTMLButtonElement>();
-  const selectSub = (tab: HoldingsSubTab): void => {
-    for (const name of HOLDINGS_SUBTABS) {
-      const active = name === tab;
-      subPanes[name].hidden = !active;
-      const button = subButtons.get(name);
-      button?.setAttribute("aria-selected", String(active));
-      button?.setAttribute("tabindex", active ? "0" : "-1");
-    }
-    saveSubTab(tab);
-  };
-  for (const name of HOLDINGS_SUBTABS) {
-    const button = h("button", { type: "button", class: "tab", role: "tab" }, subLabels[name]);
-    button.addEventListener("click", () => selectSub(name));
-    button.addEventListener("keydown", (event) => {
-      const next = stepSubTab(name, event.key);
-      if (next !== null) {
-        selectSub(next);
-        subButtons.get(next)?.focus();
-        event.preventDefault();
-      }
-    });
-    subButtons.set(name, button);
-  }
-  const subTabStrip = h("div", { class: "tabs sub-tabs", role: "tablist", "aria-label": t("Holdings sections") }, ...subButtons.values());
-  selectSub(readSubTab());
-
   // The tabs only show and hide: every panel keeps rendering, so switching loses no input.
   const panes: Record<TabName, HTMLElement> = {
     holdings: h(
       "div",
       { class: "pane holdings-layout", role: "tabpanel", id: "pane-holdings" },
-      h("div", { class: "side" }, overview.el),
-      h("div", { class: "holdings-main" }, subTabStrip, ...HOLDINGS_SUBTABS.map((n) => subPanes[n])),
+      overview.el,
+      h("div", { class: "side" }, target.el),
+      h("div", { class: "holdings-main" }, holdingsTable.el),
     ),
+    rebalance: h("div", { class: "pane", role: "tabpanel", id: "pane-rebalance" }, rebalance.el),
     import: h(
       "div",
       { class: "pane grid", role: "tabpanel", id: "pane-import" },
@@ -299,6 +250,7 @@ function build(): void {
       gmocoin.el,
       binance.el,
     ),
+    records: h("div", { class: "pane grid", role: "tabpanel", id: "pane-records" }, records.el),
     settings: h(
       "div",
       { class: "pane grid", role: "tabpanel", id: "pane-settings" },
@@ -306,14 +258,15 @@ function build(): void {
       categories.el,
       accounts.el,
       accountTypes.el,
-      records.el,
       settings.el,
       dataFolder.el,
     ),
   };
   const labels: Record<TabName, string> = {
     holdings: t("Holdings"),
+    rebalance: t("Rebalance"),
     import: t("Import"),
+    records: t("Records"),
     settings: t("Settings"),
   };
   const buttons = new Map<TabName, HTMLButtonElement>();
@@ -342,7 +295,7 @@ function build(): void {
   }
   select(readTab());
   openRecords = () => {
-    select("settings");
+    select("records");
     records.reveal?.();
   };
   app.replaceChildren(
