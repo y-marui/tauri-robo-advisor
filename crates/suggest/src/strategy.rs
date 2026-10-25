@@ -211,7 +211,7 @@ impl<'a> Plan<'a> {
         notes: Vec<Note>,
     ) -> Suggestion {
         lines.retain(|line| !line.delta.is_zero());
-        let mut lines = crate::split::split_sales(self.portfolio, lines);
+        let mut lines = crate::split::split_trades(self.portfolio, lines, None);
         lines.sort_by_key(|line| line.product);
         let total_after = self.portfolio_total + lines.iter().map(|l| l.delta).sum::<Decimal>();
         Suggestion {
@@ -430,6 +430,8 @@ pub(crate) fn balance(portfolio: &Portfolio, account: &Account) -> Result<Strate
             product: row.product,
             current: row.held,
             types: types.remove(&(account.id, row.product)).unwrap_or_default(),
+            own_tab_weights: Default::default(),
+            all_tab_weights: Default::default(),
         })
         .collect();
     Ok(StrategyBalance {

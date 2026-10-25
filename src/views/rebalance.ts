@@ -199,6 +199,12 @@ export function rebalancePanel(ctx: Context): Panel {
     return h("td", { class: "share-cell" }, weight);
   }
 
+  // The weight of a product held in several record types: the sum of its records' weights, which
+  // Rust returns with the balance; read-only.
+  function weightSum(row: ProductRow): string {
+    return (selected === "all" ? row.allTabWeights : row.ownTabWeights)?.[box.mode()] ?? "";
+  }
+
   function productRow(
     view: PortfolioView,
     account: Account,
@@ -227,7 +233,11 @@ export function rebalancePanel(ctx: Context): Panel {
       cell,
       withAccount ? h("td", {}, account.name) : "",
       h("th", { scope: "row" }, productName(view, row.product)),
-      withShare ? (row.types.length === 1 ? shareCell(view, account, row.product, row.types[0].account_type) : h("td", {})) : "",
+      withShare
+        ? row.types.length === 1
+          ? shareCell(view, account, row.product, row.types[0].account_type)
+          : h("td", { class: "num" }, weightSum(row))
+        : "",
       h("td", { class: "num" }, yen(row.current)),
       ...tradeCells(trade?.inline ?? null, trades !== null, (trade?.parts.length ?? 0) > 0, row),
     );

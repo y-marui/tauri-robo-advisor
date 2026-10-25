@@ -432,14 +432,14 @@ export interface ProductLine {
   product: number;
   delta: string;
   /**
-   * What is held after the trade (from Rust). For a purchase: what the account holds of the
-   * product plus the change. For a sale (`by_type`): what the records of `account_type` hold
-   * minus the sale.
+   * What is held after the trade (from Rust). For a trade not split by type: what the
+   * account holds of the product plus the change. For a line split over record types (`by_type`):
+   * what the records of `account_type` hold plus the change.
    */
   after: string;
-  /** Set on a sale line: the record type it takes from; absent means records without a type. */
+  /** Set on a `by_type` line: the record type it sells from or buys into; absent means records without a type. */
   account_type?: AccountTypeId | null;
-  /** True on a sale line, which is one record type's share of a sale. */
+  /** True on a line that is one record type's share of a sale or a purchase. */
   by_type?: boolean;
 }
 
@@ -475,6 +475,12 @@ export interface ProductBalance {
   current: string;
   /** `current` by record type, in the order a sale takes them. Absent when nothing is held. */
   types?: TypeValue[];
+  /**
+   * For a product held in several types: the sum of the account's record weights per mode, on the
+   * account's own tab and on All (from Rust). Absent otherwise.
+   */
+  own_tab_weights?: Partial<Record<SuggestionMode, string>>;
+  all_tab_weights?: Partial<Record<SuggestionMode, string>>;
 }
 
 export interface CategoryBalance {
