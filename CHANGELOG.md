@@ -4,6 +4,7 @@
 
 ### Added
 
+- A purchase of a product held in several record types of one account is split over those types in proportion to the record weights, in whole rounding units, as one line per type (`ProductLine::by_type`, #163); the Rebalance table shows the sum of a product's record weights on its parent row (#164).
 - Rebalance remembers, per tab (All and each account), the last chosen allocation method and the "Show all" / "Tradable only" switch of the product list, between tab switches and restarts (`localStorage`).
 - Account types can be sold or not per type, built-in types included (`Portfolio::type_sellable_overrides`, edit `SetTypeSellable`, "Account types" card in Settings); the NISA family stays off by default. Sales of a product held in several types of one account now take from the other types first and from the NISA types last, and the Rebalance table shows such a sale per type (`ProductLine::account_type` / `by_type`, `ProductBalance::types`). Schema version 23; an older app refuses the file.
 - Allocation method in the suggestion form: "Follow the portfolio" (category targets, then product weights inside a category) or "By product weights across categories" (category targets ignored; all candidate products share the money by weight, across categories). `suggest::Request.method`.
