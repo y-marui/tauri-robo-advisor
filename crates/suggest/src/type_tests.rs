@@ -441,3 +441,14 @@ fn a_purchase_stays_one_line_when_the_product_has_one_type() {
     assert!(!s.products[0].by_type && s.products[0].account_type.is_none());
     assert_eq!(s.products[0].after, dec!(310000));
 }
+
+#[test]
+fn the_balance_sums_the_record_weights_of_a_product_held_in_several_types() {
+    let mut f = fixture(dec!(300000), dec!(500000));
+    weigh(&mut f, "nisa", dec!(3));
+    let balance = account_balance(&f.portfolio, f.main).unwrap();
+    let product = &balance.categories[0].products[0];
+    let mode = portfolio::SuggestionMode::FixedAdd;
+    assert_eq!(product.own_tab_weights[&mode], dec!(4));
+    assert_eq!(product.all_tab_weights[&mode], dec!(2));
+}

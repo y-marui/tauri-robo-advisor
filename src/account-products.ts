@@ -11,6 +11,9 @@ export interface ProductRow {
   current: string;
   /** `current` by record type, in the order a sale takes them. */
   types: TypeValue[];
+  /** The sum of the record weights per mode on the account's own tab and on All; from Rust. */
+  ownTabWeights: ProductBalance["own_tab_weights"];
+  allTabWeights: ProductBalance["all_tab_weights"];
   /** False when the account leaves the product out of trading. */
   takesPart: boolean;
 }
@@ -44,6 +47,8 @@ export function productGroups(
     product,
     current: figures?.current ?? "0",
     types: figures?.types ?? [],
+    ownTabWeights: figures?.own_tab_weights,
+    allTabWeights: figures?.all_tab_weights,
     takesPart: !excluded.has(product),
   });
   const wanted = (r: ProductRow): boolean => showAll || r.takesPart;

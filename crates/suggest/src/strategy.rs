@@ -430,6 +430,8 @@ pub(crate) fn balance(portfolio: &Portfolio, account: &Account) -> Result<Strate
             product: row.product,
             current: row.held,
             types: types.remove(&(account.id, row.product)).unwrap_or_default(),
+            own_tab_weights: Default::default(),
+            all_tab_weights: Default::default(),
         })
         .collect();
     Ok(StrategyBalance {

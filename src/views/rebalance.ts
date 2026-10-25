@@ -1,7 +1,7 @@
 import { productGroups, slotKey, slotTrade, tradesBySlot, unlistedTrades, type ProductRow } from "../account-products.ts";
 import { getAccountBalance } from "../api.ts";
 import { h } from "../dom.ts";
-import { cleanDecimal, sumDecimals } from "../decimal.ts";
+import { cleanDecimal } from "../decimal.ts";
 import { amountField, checkboxField } from "../fields.ts";
 import { t } from "../i18n.ts";
 import type { Bind, Context, Panel } from "../panel.ts";
@@ -199,13 +199,10 @@ export function rebalancePanel(ctx: Context): Panel {
     return h("td", { class: "share-cell" }, weight);
   }
 
-  // The weight of a product held in several record types: the sum of its records' weights, read-only.
-  function weightSum(view: PortfolioView, account: Account, row: ProductRow): string {
-    const mode = box.mode();
-    const sum = sumDecimals(
-      row.types.map((group) => weightOf(view, mode, accountNow(), account.id, row.product, group.account_type ?? null)),
-    );
-    return sum === null ? "" : sum;
+  // The weight of a product held in several record types: the sum of its records' weights, which
+  // Rust returns with the balance; read-only.
+  function weightSum(row: ProductRow): string {
+    return (selected === "all" ? row.allTabWeights : row.ownTabWeights)?.[box.mode()] ?? "";
   }
 
   function productRow(
@@ -239,7 +236,7 @@ export function rebalancePanel(ctx: Context): Panel {
       withShare
         ? row.types.length === 1
           ? shareCell(view, account, row.product, row.types[0].account_type)
-          : h("td", { class: "num" }, weightSum(view, account, row))
+          : h("td", { class: "num" }, weightSum(row))
         : "",
       h("td", { class: "num" }, yen(row.current)),
       ...tradeCells(trade?.inline ?? null, trades !== null, (trade?.parts.length ?? 0) > 0, row),

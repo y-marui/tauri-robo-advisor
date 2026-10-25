@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use portfolio::{AccountId, CategoryId, Portfolio, ProductId};
+use portfolio::{AccountId, CategoryId, Portfolio, ProductId, SuggestionMode};
 use rust_decimal::Decimal;
 use serde::Serialize;
 
@@ -21,6 +21,35 @@ pub struct ProductBalance {
     /// without a type first, the NISA family last). Empty when the account does not hold it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub types: Vec<TypeValue>,
+    /// For a product held in several types: the sum of the weights of the account's records per
+    /// mode on the account's own tab. Empty otherwise.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub own_tab_weights: BTreeMap<SuggestionMode, Decimal>,
+    /// The same on the All tab.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub all_tab_weights: BTreeMap<SuggestionMode, Decimal>,
+}
+
+/// The sums of an account's record weights of a product per mode on the given tab; empty unless
+/// the account holds the product in several types.
+pub(crate) fn weight_sums(
+    portfolio: &Portfolio,
+    account: AccountId,
+    product: ProductId,
+    tab: Option<AccountId>,
+    types: &[TypeValue],
+) -> BTreeMap<SuggestionMode, Decimal> {
+    if types.len() < 2 {
+        return BTreeMap::new();
+    }
+    SuggestionMode::ALL
+        .iter()
+        .filter_map(|mode| {
+            portfolio
+                .account_product_weight(*mode, product, tab, account)
+                .map(|sum| (*mode, sum))
+        })
+        .collect()
 }
 
 /// The account's holdings in one category.
@@ -102,10 +131,19 @@ pub fn account_balance(portfolio: &Portfolio, account: AccountId) -> Result<Acco
                 .iter()
                 .map(|product| {
                     let current = held.get(&product.id).copied().unwrap_or_default();
+                    let own = types.remove(&(account.id, product.id)).unwrap_or_default();
                     ProductBalance {
                         product: product.id,
                         current,
-                        types: types.remove(&(account.id, product.id)).unwrap_or_default(),
+                        own_tab_weights: weight_sums(
+                            portfolio,
+                            account.id,
+                            product.id,
+                            Some(account.id),
+                            &own,
+                        ),
+                        all_tab_weights: weight_sums(portfolio, account.id, product.id, None, &own),
+                        types: own,
                     }
                 })
                 .collect();

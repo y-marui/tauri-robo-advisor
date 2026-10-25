@@ -8,7 +8,6 @@ import {
   fractionToPercent,
   percentToFraction,
   shiftDecimal,
-  sumDecimals,
 } from "./decimal.ts";
 
 test("percentToFraction moves the point two places left without rounding", () => {
@@ -65,15 +64,4 @@ test("formatAmount groups digits by locale and keeps exact digits", () => {
   assert.equal(formatAmount("-1000.00", "ja"), "-1,000.00");
   assert.doesNotThrow(() => formatAmount("1.1234567890123456789012345", "en"));
   assert.equal(formatAmount("not a number", "en"), "not a number");
-});
-
-test("sumDecimals adds exactly and refuses what is not a non-negative decimal", () => {
-  assert.equal(sumDecimals(["1", "2"]), "3");
-  assert.equal(sumDecimals(["0.1", "0.2"]), "0.3");
-  assert.equal(sumDecimals(["1.5", "1.5"]), "3");
-  assert.equal(sumDecimals(["0.0000009", "1"]), "1.0000009");
-  assert.equal(sumDecimals(["0.4"]), "0.4");
-  assert.equal(sumDecimals([]), null);
-  assert.equal(sumDecimals(["1", "x"]), null);
-  assert.equal(sumDecimals(["1", "-1"]), null);
 });

@@ -475,6 +475,12 @@ export interface ProductBalance {
   current: string;
   /** `current` by record type, in the order a sale takes them. Absent when nothing is held. */
   types?: TypeValue[];
+  /**
+   * For a product held in several types: the sum of the account's record weights per mode, on the
+   * account's own tab and on All (from Rust). Absent otherwise.
+   */
+  own_tab_weights?: Partial<Record<SuggestionMode, string>>;
+  all_tab_weights?: Partial<Record<SuggestionMode, string>>;
 }
 
 export interface CategoryBalance {
