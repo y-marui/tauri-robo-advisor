@@ -74,3 +74,22 @@ export function formatAmount(amount: string, locale: string): string {
     clean as unknown as number,
   );
 }
+
+/**
+ * Adds plain decimal strings exactly (no floating point), for showing a total of weights.
+ * Returns `null` when any of them is not a non-negative decimal or the list is empty.
+ */
+export function sumDecimals(values: string[]): string | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const parts = values.map((v) => (cleanDecimal(v) ?? "").split("."));
+  if (values.some((v) => cleanDecimal(v) === null || v.trim().startsWith("-"))) {
+    return null;
+  }
+  const scale = Math.max(...parts.map(([, f]) => f?.length ?? 0));
+  const total = parts.reduce((sum, [w, f]) => sum + BigInt((w || "0") + (f ?? "").padEnd(scale, "0")), 0n);
+  const digits = total.toString().padStart(scale + 1, "0");
+  const whole = digits.slice(0, digits.length - scale);
+  return cleanDecimal(scale === 0 ? whole : `${whole}.${digits.slice(digits.length - scale)}`);
+}

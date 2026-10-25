@@ -4326,3 +4326,40 @@ fn a_product_weight_is_split_over_the_records_by_value_when_the_file_is_converte
     assert!(p.product_shares.iter().all(|e| e.product != ProductId(3)));
     assert_eq!(p.product_weight(mode, ProductId(3), None), dec!(1));
 }
+
+#[test]
+fn a_tiny_product_weight_stays_positive_on_every_record_when_the_file_is_converted() {
+    let old = r#"{"schema_version": 24, "next_id": 40,
+      "categories": [{"id": 5, "name": "W", "target_weight": "1"}],
+      "products": [
+        {"id": 1, "name": "A", "category": 5, "currency": "JPY"},
+        {"id": 2, "name": "B", "category": 5, "currency": "JPY"}],
+      "accounts": [
+        {"id": 10, "name": "M", "sellable": true, "rounding_unit": "1"},
+        {"id": 11, "name": "N", "sellable": true, "rounding_unit": "1"}],
+      "holdings": [
+        {"account": 10, "product": 1, "value": "1000000"},
+        {"account": 11, "product": 1, "value": "1", "account_type": "nisa"},
+        {"account": 10, "product": 2, "value": "0"},
+        {"account": 11, "product": 2, "value": "0"}],
+      "product_shares": [
+        {"mode": "fixed_add", "product": 1, "weight": "0.0000009"},
+        {"mode": "fixed_add", "product": 2, "weight": "0.0000009"}]}"#;
+    let mut p = parse(old.as_bytes()).unwrap();
+    p.schema_version = SCHEMA_VERSION;
+    p.validate_integrity().unwrap();
+    let mode = SuggestionMode::FixedAdd;
+    for product in [ProductId(1), ProductId(2)] {
+        assert_eq!(p.product_weight(mode, product, None), dec!(0.0000009));
+        assert!(
+            p.account_product_weight(mode, product, None, AccountId(10))
+                .unwrap()
+                > dec!(0)
+        );
+        assert!(
+            p.account_product_weight(mode, product, None, AccountId(11))
+                .unwrap()
+                > dec!(0)
+        );
+    }
+}

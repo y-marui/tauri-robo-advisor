@@ -347,22 +347,97 @@ fn the_balance_lists_the_value_per_type_in_sale_order() {
     );
 }
 
-#[test]
-fn a_purchase_stays_one_line_without_a_type() {
-    let f = fixture(dec!(300000), dec!(500000));
-    let s = suggest(
+fn buy(f: &Fixture, amount: Decimal) -> Suggestion {
+    suggest(
         &f.portfolio,
         &Request {
             account: Some(f.main),
-            mode: Mode::FixedAdd {
-                amount: dec!(10000),
-            },
+            mode: Mode::FixedAdd { amount },
             held_only: false,
             method: Method::FollowPortfolio,
         },
     )
-    .unwrap();
+    .unwrap()
+}
+
+fn weigh(f: &mut Fixture, kind: &str, weight: Decimal) {
+    f.portfolio
+        .apply(Edit::SetProductShare {
+            mode: portfolio::SuggestionMode::FixedAdd,
+            tab: Some(f.main),
+            account: f.main,
+            product: f.product,
+            account_type: Some(kind.to_owned()),
+            weight,
+        })
+        .unwrap();
+}
+
+fn bought(s: &Suggestion) -> Vec<(Option<String>, Decimal, Decimal)> {
+    s.products
+        .iter()
+        .map(|l| (l.account_type.clone(), l.delta, l.after))
+        .collect()
+}
+
+#[test]
+fn a_purchase_is_split_over_the_types_by_equal_weights_by_default() {
+    let f = fixture(dec!(300000), dec!(500000));
+    let s = buy(&f, dec!(10000));
+    assert!(s.products.iter().all(|l| l.by_type));
+    // NISA is not sellable, but it can be bought into.
+    assert_eq!(
+        bought(&s),
+        vec![
+            (Some("general".to_owned()), dec!(5000), dec!(305000)),
+            (Some("nisa".to_owned()), dec!(5000), dec!(505000)),
+        ]
+    );
+}
+
+#[test]
+fn a_purchase_follows_the_record_weights_in_whole_units() {
+    let mut f = fixture(dec!(300000), dec!(500000));
+    weigh(&mut f, "nisa", dec!(3));
+    // 10,000 in 1,000 units: 2,500 and 7,500 in shares; the extra unit goes to the larger remainder.
+    let s = buy(&f, dec!(10000));
+    let parts = bought(&s);
+    assert_eq!(parts[0].1 + parts[1].1, dec!(10000));
+    assert_eq!(parts[0].1 % dec!(1000), dec!(0));
+    assert_eq!(parts[1].1 % dec!(1000), dec!(0));
+    assert_eq!(parts[0].1, dec!(3000));
+    assert_eq!(parts[1].1, dec!(7000));
+    // A purchase of 4,000: 1,000 and 3,000.
+    let s = buy(&f, dec!(4000));
+    assert_eq!(bought(&s)[0].1, dec!(1000));
+    assert_eq!(bought(&s)[1].1, dec!(3000));
+}
+
+#[test]
+fn a_type_whose_share_is_below_a_unit_is_left_out() {
+    let mut f = fixture(dec!(300000), dec!(500000));
+    weigh(&mut f, "general", dec!(0.01));
+    let s = buy(&f, dec!(2000));
+    assert_eq!(
+        s.products.iter().map(|l| l.delta).sum::<Decimal>(),
+        dec!(2000)
+    );
+    assert!(s.products.iter().all(|l| l.delta > dec!(0)));
+}
+
+#[test]
+fn a_purchase_stays_one_line_when_the_product_has_one_type() {
+    let f = fixture(dec!(300000), dec!(0));
+    let mut f = f;
+    f.portfolio
+        .apply(Edit::RemoveHolding {
+            account_type: Some("nisa".to_owned()),
+            account: f.main,
+            product: f.product,
+        })
+        .unwrap();
+    let s = buy(&f, dec!(10000));
     assert_eq!(s.products.len(), 1);
     assert!(!s.products[0].by_type && s.products[0].account_type.is_none());
-    assert_eq!(s.products[0].after, dec!(810000));
+    assert_eq!(s.products[0].after, dec!(310000));
 }

@@ -211,7 +211,7 @@ impl<'a> Plan<'a> {
         notes: Vec<Note>,
     ) -> Suggestion {
         lines.retain(|line| !line.delta.is_zero());
-        let mut lines = crate::split::split_sales(self.portfolio, lines);
+        let mut lines = crate::split::split_trades(self.portfolio, lines, None);
         lines.sort_by_key(|line| line.product);
         let total_after = self.portfolio_total + lines.iter().map(|l| l.delta).sum::<Decimal>();
         Suggestion {

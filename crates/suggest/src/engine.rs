@@ -1113,8 +1113,13 @@ impl<'a> Book<'a> {
         }
         let mut lines: Vec<ProductLine> = merged.into_values().collect();
         lines.retain(|line| !line.delta.is_zero());
-        // The last step: a sale is taken from the record types in order (NISA last).
-        let mut lines = crate::split::split_sales(self.portfolio, lines);
+        // The last step: a sale is taken from the record types in order (NISA last), a purchase is
+        // spread over them by the record weights.
+        let mut lines = crate::split::split_trades(
+            self.portfolio,
+            lines,
+            Some((self.mode, self.request_account)),
+        );
         lines.sort_by_key(|line| (line.account, line.product));
         let deltas = self.category_deltas(&lines);
         let total_after = self.total + lines.iter().map(|l| l.delta).sum::<Decimal>();

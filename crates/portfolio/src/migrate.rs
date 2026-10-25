@@ -423,11 +423,20 @@ fn split_weight(weight: Decimal, values: &[Decimal]) -> Vec<Decimal> {
         return Vec::new();
     }
     let total: Decimal = values.iter().copied().sum();
+    // Equal parts rounded to 6 decimals; unrounded when that leaves a part of 0 or less (a tiny
+    // weight), so that every part stays positive.
     let equal = |n: usize| {
-        let part = (weight / Decimal::from(n)).round_dp(6);
-        let mut parts = vec![part; n];
-        parts[n - 1] = weight - part * Decimal::from(n - 1);
-        parts
+        let share = |part: Decimal| {
+            let mut parts = vec![part; n];
+            parts[n - 1] = weight - part * Decimal::from(n - 1);
+            parts
+        };
+        let parts = share((weight / Decimal::from(n)).round_dp(6));
+        if parts.iter().all(|p| *p > Decimal::ZERO) {
+            parts
+        } else {
+            share(weight / Decimal::from(n))
+        }
     };
     if n == 1 {
         return vec![weight];
