@@ -20,7 +20,8 @@ On Linux, Tauri also needs system libraries (for Debian/Ubuntu: `libwebkit2gtk-4
 | `make format` | `cargo fmt` |
 | `make test` | `npm test` (frontend unit tests) and `cargo test` |
 | `make build` | Build the app without bundling |
-| `make deploy` | Build the `.app` and install it into `/Applications/My Tauri` (override with `DEPLOY_DIR`, on the command line or in `.env`; `DEPLOY_DIR=/Applications` installs directly under `/Applications`; `DEPLOY_OPEN=false` skips launching it; `DEPLOY_DMG=true` also runs `make dmg` afterwards, like the `swift-*` repositories; it waits for a running copy to quit); macOS only |
+| `make deploy` | Build the `.app` and install it into `/Applications/My Tauri` (override with `DEPLOY_DIR`, on the command line or in `.env`; `DEPLOY_DIR=/Applications` installs directly under `/Applications`; `DEPLOY_OPEN=false` skips launching it; `DEPLOY_DMG=true` builds and publishes the DMG first and installs from it (`scripts/install-app.sh`), like the `swift-*` repositories, so `install-my-apps` sees the installed app as up to date; it waits for a running copy to quit); macOS only |
+| `make unlock-keychain` | Unlock the login keychain (asks for the password); run it when signing fails with `errSecInternalComponent`; macOS only |
 | `make bundle-app` | Build the `.app` and verify its signature (used by `deploy` and `dmg`); see Code signing below; macOS only |
 | `make dmg` | Build the DMG; when `DMG_DEST` is set (in `.env`, see `.env.example`), publish it there as `<app>.dmg` for `install-my-apps`, normally the iCloud `Build/Tauri` folder; macOS only |
 | `make all` | `lint` and `test` |

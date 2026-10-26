@@ -1,4 +1,4 @@
-.PHONY: bundle-app install dev lint format test build all deploy dmg update-charter
+.PHONY: bundle-app install dev lint format test build all deploy dmg unlock-keychain update-charter
 
 # Local settings (not committed): for example DEPLOY_DIR=/Applications in .env installs the app
 # directly under /Applications instead of /Applications/My Tauri.
@@ -14,8 +14,10 @@ PROCESS_NAME ?= tauri-robo-advisor
 DEPLOY_DIR ?= /Applications/My Tauri
 BUNDLE_DIR ?= target/release/bundle
 DEPLOY_OPEN ?= true
-# Like the swift-* repositories: set DEPLOY_DMG=true and DMG_DEST in .env to also publish the DMG
-# for `install-my-apps` after `make deploy` (see .env.example). A leading ~/ in DMG_DEST is expanded.
+# Where the DMG is mounted while `make deploy` installs from it.
+DEPLOY_MOUNT ?= /tmp/robo-advisor-deploy
+# Like the swift-* repositories: set DEPLOY_DMG=true and DMG_DEST in .env to publish the DMG for
+# `install-my-apps` and install from it in `make deploy` (see .env.example). A leading ~/ in DMG_DEST is expanded.
 DEPLOY_DMG ?= false
 DMG_DEST ?=
 DMG_DIR = $(patsubst ~/%,$(HOME)/%,$(DMG_DEST))
@@ -58,19 +60,29 @@ bundle-app:
 	bash scripts/verify-signature.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app"
 
 # Build the .app and install it into $(DEPLOY_DIR) (macOS only).
+# With DEPLOY_DMG=true the app is installed from the DMG that `make dmg` just built (like the swift-*
+# repositories), so the installed .app has the same timestamp as the one in the published DMG and
+# `install-my-apps` sees it as already up to date instead of reinstalling it.
 deploy:
 	@test "$$(uname)" = "Darwin" || { echo "deploy is for macOS only."; exit 1; }
+ifeq ($(DEPLOY_DMG),true)
+	$(MAKE) -s dmg
+else
 	$(MAKE) bundle-app
+endif
 	@if pgrep -x "$(PROCESS_NAME)" >/dev/null; then \
 	  osascript -e 'tell application "$(APP_NAME)" to quit'; \
 	  i=0; while pgrep -x "$(PROCESS_NAME)" >/dev/null && [ $$i -lt 20 ]; do sleep 0.5; i=$$((i+1)); done; \
 	fi
-	mkdir -p "$(DEPLOY_DIR)"
-	rm -rf "$(DEPLOY_DIR)/$(APP_NAME).app"
-	ditto "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(DEPLOY_DIR)/$(APP_NAME).app"
-	@echo "Installed: $(DEPLOY_DIR)/$(APP_NAME).app"
+ifeq ($(DEPLOY_DMG),true)
+	@if mount | grep -Fq "on $(DEPLOY_MOUNT) "; then hdiutil detach "$(DEPLOY_MOUNT)" -quiet; fi
+	hdiutil attach "$(BUNDLE_DIR)/dmg/$(APP_NAME).dmg" -mountpoint "$(DEPLOY_MOUNT)" -quiet -nobrowse
+	bash scripts/install-app.sh "$(DEPLOY_MOUNT)/$(APP_NAME).app" "$(DEPLOY_DIR)" "$(APP_NAME)"; \
+	status=$$?; hdiutil detach "$(DEPLOY_MOUNT)" -quiet; exit $$status
+else
+	bash scripts/install-app.sh "$(BUNDLE_DIR)/macos/$(APP_NAME).app" "$(DEPLOY_DIR)" "$(APP_NAME)"
+endif
 	@if [ "$(DEPLOY_OPEN)" = "true" ]; then open "$(DEPLOY_DIR)/$(APP_NAME).app"; fi
-	@if [ "$(DEPLOY_DMG)" = "true" ]; then $(MAKE) -s dmg; fi
 
 # Build the DMG (scripts/build-dmg.sh: hdiutil, no Finder scripting). When DMG_DEST is set, publish
 # it as $(DMG_DEST)/$(APP_NAME).dmg for install-my-apps.
@@ -83,6 +95,10 @@ dmg:
 	else \
 	  echo "DMG_DEST is not set, so the DMG was not published (set it in .env)."; \
 	fi
+
+# Unlock the login keychain so codesign can use the signing key (errSecInternalComponent means it is locked).
+unlock-keychain:
+	security unlock-keychain ~/Library/Keychains/login.keychain-db
 
 update-charter:
 	curl -fsSL https://raw.githubusercontent.com/y-marui/dev-charter/main/scripts/install.sh | CHARTER_UPDATE_ONLY=1 bash
