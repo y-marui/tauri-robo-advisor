@@ -1,4 +1,4 @@
-.PHONY: bundle-app install dev lint format test build all deploy dmg update-charter
+.PHONY: bundle-app install dev lint format test build all deploy dmg unlock-keychain update-charter
 
 # Local settings (not committed): for example DEPLOY_DIR=/Applications in .env installs the app
 # directly under /Applications instead of /Applications/My Tauri.
@@ -95,6 +95,10 @@ dmg:
 	else \
 	  echo "DMG_DEST is not set, so the DMG was not published (set it in .env)."; \
 	fi
+
+# Unlock the login keychain so codesign can use the signing key (errSecInternalComponent means it is locked).
+unlock-keychain:
+	security unlock-keychain ~/Library/Keychains/login.keychain-db
 
 update-charter:
 	curl -fsSL https://raw.githubusercontent.com/y-marui/dev-charter/main/scripts/install.sh | CHARTER_UPDATE_ONLY=1 bash

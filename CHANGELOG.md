@@ -18,6 +18,7 @@
 
 ### Changed
 
+- New `make unlock-keychain` (as in the `swift-*` repositories) for when signing fails with `errSecInternalComponent` because the login keychain is locked.
 - `make deploy` with `DEPLOY_DMG=true` now builds the DMG first and installs the app from it (`scripts/install-app.sh`), like the `swift-*` repositories. Before, the app was copied from the build and the DMG built afterwards, so `install-my-apps` reinstalled it right after a deploy.
 - Share weights are set per record (account, product, account type) instead of per product (#161, schema 25): a product's weight on a tab is the sum of its records' weights, and its amount is split over the accounts in proportion to them. The weight input moves to the record row; `product_targets.csv` gains `tab_account_id` and `account_type`. Older files are converted on load.
 - The account balance (`get_account_balance`) no longer computes a target or shortfall per product (the Rebalance table stopped showing them): `ProductBalance` keeps `product`, `current` and `types`. Suggestions are unchanged.
