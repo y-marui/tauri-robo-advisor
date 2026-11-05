@@ -33,14 +33,24 @@ AI はタスク開始時に以下の順で参照する:
 
 ## Applied Charter Principles
 
+### Charter Lookup
+
 憲章参照: `docs/dev-charter/CHARTER_INDEX.md` でトピックを特定してから該当ファイルのみ読む。
+
+作業の着手前に、次のいずれかに該当するか確認する。該当する場合は、編集の前に手順に従う。
+- UI・ローカライズ・CI/ワークフロー・リリース・依存関係・ライセンス・PR/ブランチ運用を変更する
+- 判断に迷う、または憲章に関係する不明点がある
+
+1. `docs/dev-charter/CHARTER_INDEX.md` を読み、該当トピックのファイルを特定する
+2. 特定したファイル（原則 1〜2 件）のみを読む
+3. 参照後にユーザーへ提案・確認を行う
 
 | 原則 | 要点 | 参照先 |
 |---|---|---|
 | 設計哲学 | 小さなツール・ローカルファースト・最小依存・オフライン優先 | `docs/dev-charter/topics/SOFTWARE_DESIGN_PRINCIPLES.md` |
 | 変更設計 | 変更は必要最小限・YAGNI・既存パターン踏襲 | `docs/dev-charter/PRINCIPLES.md` |
 | Git ワークフロー | Conventional Commits・`main` への直接 push 禁止・短命ブランチから PR | `docs/dev-charter/PROJECT_LIFECYCLE.md` |
-| CI | `gate` job が必須チェック（`CI` / `Dev Charter`）・Draft PR は CI スキップ | `docs/dev-charter/topics/CI_POLICY.md` |
+| CI | `gate` job が必須チェック（`CI` / `Dev Charter`）・Draft PR は実処理の job をスキップし `gate` を意図的に失敗させる | `docs/dev-charter/topics/CI_POLICY.md` |
 | セキュリティ | シークレット非コミット・pre-commit 二層構成 | `docs/dev-charter/SECURITY_POLICY.md` |
 | 言語 | OSS のため公開面は英語、`README-jp.md` が日本語正本 | `docs/dev-charter/LANGUAGE_POLICY.md` |
 | ライセンス | AGPL v3。将来の商用ライセンス提供のため準 CLA で運用する。著作権者名はフルネーム | `docs/dev-charter/LEGAL_POLICY.md`、`docs/dev-charter/topics/GITHUB_CONTRIBUTING.md` |
@@ -104,7 +114,7 @@ AI はタスク開始時に以下の順で参照する:
 
 ## AI Tool Assignments
 
-- **使用ツール**：Claude Code、Codex、GitHub Copilot、Gemini CLI
+- **使用ツール**：Claude Code、Codex、GitHub Copilot
 - **標準担当の正本**：`docs/dev-charter/AI_COLLABORATION_RULES.md` の「AI Tool Responsibilities」と「Rules for Multi-AI Usage」
 - **プロジェクト固有の上書き**：なし
 

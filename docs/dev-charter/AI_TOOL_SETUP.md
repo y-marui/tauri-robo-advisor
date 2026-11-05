@@ -17,12 +17,26 @@ dev-charter を導入したプロジェクトで AI コンテキストファイ�
 このプロジェクトの開発・運用フローに直接影響する原則とルール。
 憲章の参照先パスも記載する（AI が効率的に参照できるよう）。
 
+一行の参照だけでは、作業中に索引が読まれないことが多い。次のように、手順と読む時機を
+具体的に書く。
+
 例：
 ```
+### Charter Lookup
+
 憲章参照: docs/dev-charter/CHARTER_INDEX.md でトピックを特定してから該当ファイルのみ読む
+
+作業の着手前に、次のいずれかに該当するか確認する。該当する場合は、編集の前に手順に従う。
+- UI・ローカライズ・CI/ワークフロー・リリース・依存関係・ライセンス・PR/ブランチ運用を変更する
+- 判断に迷う、または憲章に関係する不明点がある
+
+1. docs/dev-charter/CHARTER_INDEX.md を読み、該当トピックのファイルを特定する
+2. 特定したファイル（原則 1〜2 件）のみを読む
+3. 参照後にユーザーへ提案・確認を行う
 ```
 
-（`docs/dev-charter/` は実際の subtree パスに合わせて変更する）
+（`docs/dev-charter/` は実際の subtree パスに合わせて変更する。該当トピックの一覧は
+`CHARTER_INDEX.md` に合わせ、プロジェクトに関係しない項目は省いてよい）
 
 ### Document Sync Rule
 
@@ -44,7 +58,7 @@ dev-charter を導入したプロジェクトで AI コンテキストファイ�
 以下の形式で記載する：
 
 ```
-- **使用ツール**：Claude Code、Codex、GitHub Copilot、Gemini CLI、ローカル LLM（Ollama）
+- **使用ツール**：Claude Code、Codex、GitHub Copilot、ローカル LLM（Ollama）
 - **標準担当の正本**：`docs/dev-charter/AI_COLLABORATION_RULES.md` の「AI Tool Responsibilities」と「Rules for Multi-AI Usage」
 - **プロジェクト固有の上書き**：なし
 ```
@@ -63,12 +77,6 @@ AI ツールごとの設定ファイルは `AI_CONTEXT.md` への参照のみを
 ツール固有の設定がない場合は、以下の最小構成だけを記載する。
 
 ### CLAUDE.md
-
-```
-@AI_CONTEXT.md
-```
-
-### GEMINI.md
 
 ```
 @AI_CONTEXT.md
