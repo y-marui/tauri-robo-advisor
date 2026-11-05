@@ -50,7 +50,7 @@ jobs:
               - '!.github/workflows/auto-assign-self.yml'
               # Files distributed by dev-charter (brought in by git subtree update PRs)
               - '!.pre-commit-config.yaml'
-              - '!scripts/{check-ai-context-reference,check-charter-ci-template,check-charter-doc-links,check-charter-subtree-edit,check-conventional-commit,check-dotenv-gitignore,check-language-pair-footer,check-language-pair-sync,check-license-exists,check-local-charter-version,check-markdown-heading-language,check-not-on-default-branch,check-powershell-lint,check-python-package-management,check-readme-placeholders,check-version-date,new-branch}.{sh,ps1}'
+              - '!scripts/{check-ai-context-reference,check-charter-ci-template,check-charter-doc-links,check-charter-subtree-edit,check-conventional-commit,check-dotenv-gitignore,check-hook-scripts,check-language-pair-footer,check-language-pair-sync,check-license-exists,check-local-charter-version,check-markdown-heading-language,check-not-on-default-branch,check-powershell-lint,check-python-package-management,check-readme-placeholders,check-update-checklist,check-version-date,new-branch}.{sh,ps1}'
               - '!scripts/PSScriptAnalyzerSettings.psd1'
 
   security:
@@ -136,10 +136,17 @@ jobs:
   gate:
     name: CI
     needs: [changes, security, lint, test, build]
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    # Run on draft PRs too (do not skip): a skipped required check counts as
+    # passing, so a stale draft run must fail instead (CI_POLICY "Draft PRs").
+    if: always()
     runs-on: ${{ vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork && vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
+      - name: Fail on draft PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo "::error::draft PR: tests were not run. Mark the PR ready for review."
+          exit 1
       - name: Verify required jobs succeeded
         run: |
           if [ "${{ needs.security.result }}" != "success" ]; then
